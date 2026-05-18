@@ -89,11 +89,15 @@
 - **FR-003**: Users MUST be able to [key interaction, e.g., "reset their password"]
 - **FR-004**: System MUST [data requirement, e.g., "persist user preferences"]
 - **FR-005**: System MUST [behavior, e.g., "log all security events"]
+- **FR-006**: System MUST define UX consistency requirements, including reuse of existing
+  interaction/content patterns and accessibility expectations.
+- **FR-007**: System MUST define measurable performance requirements with explicit budgets
+  for relevant metrics (for example latency, throughput, memory, startup, or render time).
 
 *Example of marking unclear requirements:*
 
-- **FR-006**: System MUST authenticate users via [NEEDS CLARIFICATION: auth method not specified - email/password, SSO, OAuth?]
-- **FR-007**: System MUST retain user data for [NEEDS CLARIFICATION: retention period not specified]
+- **FR-008**: System MUST authenticate users via [NEEDS CLARIFICATION: auth method not specified - email/password, SSO, OAuth?]
+- **FR-009**: System MUST retain user data for [NEEDS CLARIFICATION: retention period not specified]
 
 ### Key Entities *(include if feature involves data)*
 
@@ -113,6 +117,8 @@
 - **SC-002**: [Measurable metric, e.g., "System handles 1000 concurrent users without degradation"]
 - **SC-003**: [User satisfaction metric, e.g., "90% of users successfully complete primary task on first attempt"]
 - **SC-004**: [Business metric, e.g., "Reduce support tickets related to [X] by 50%"]
+- **SC-005**: [UX consistency metric, e.g., "100% of new UI states pass design/accessibility checklist"]
+- **SC-006**: [Performance budget metric, e.g., "P95 response time remains under 200ms under expected load"]
 
 ## Assumptions
 
