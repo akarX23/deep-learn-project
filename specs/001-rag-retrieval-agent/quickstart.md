@@ -70,3 +70,9 @@ Set relevance_threshold to 1.0 in sample_input.json and rerun:
 
 - Planner Agent and Teaching Agent runtime are not required for standalone execution.
 - OCR is intentionally out of scope for this version.
+
+## 8. Validation Snapshot
+
+- Validated on 2026-05-27 using `sample_input.json`
+- Runtime baseline: 4.53 seconds
+- Observed output: `status=complete`, `total_pages_processed=6`, `total_pages_included=4`

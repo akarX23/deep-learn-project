@@ -17,10 +17,10 @@
 
 **Purpose**: Create package structure and baseline tooling for the RAG agent module.
 
-- [ ] T001 Create package directories and init files in project/__init__.py and rag_agent/__init__.py
-- [ ] T002 Create test directory structure in rag_agent/tests/__init__.py and rag_agent/tests/inputs/.gitkeep
-- [ ] T003 [P] Add Python dependency manifest for pydantic, pymupdf, sentence-transformers, litellm, langgraph, and pytest in requirements.txt
-- [ ] T004 [P] Add pytest configuration for rag_agent tests in pytest.ini
+- [X] T001 Create package directories and init files in project/__init__.py and rag_agent/__init__.py
+- [X] T002 Create test directory structure in rag_agent/tests/__init__.py and rag_agent/tests/inputs/.gitkeep
+- [X] T003 [P] Add Python dependency manifest for pydantic, pymupdf, sentence-transformers, litellm, langgraph, and pytest in requirements.txt
+- [X] T004 [P] Add pytest configuration for rag_agent tests in pytest.ini
 
 ---
 
@@ -30,12 +30,12 @@
 
 **⚠️ CRITICAL**: No user story implementation starts before this phase completes.
 
-- [ ] T005 Implement PageExtractionStatus enum and shared schemas in project/schemas.py
-- [ ] T006 Implement LLMConfig dataclass and environment-variable loaders in rag_agent/config.py
-- [ ] T007 Implement unified LiteLLM call wrapper call_llm(messages, config) in rag_agent/llm_client.py
-- [ ] T008 [P] Define IMAGE_DESCRIPTION_PROMPT and MATERIAL_COMPILATION_PROMPT constants in rag_agent/prompts.py
-- [ ] T009 [P] Implement helper utilities serialize_table_to_markdown, assemble_page_content, and build_compilation_context in rag_agent/helpers.py
-- [ ] T010 Wire rag_agent module exports for agent and tool entry points in rag_agent/__init__.py
+- [X] T005 Implement PageExtractionStatus enum and shared schemas in project/schemas.py
+- [X] T006 Implement LLMConfig dataclass and environment-variable loaders in rag_agent/config.py
+- [X] T007 Implement unified LiteLLM call wrapper call_llm(messages, config) in rag_agent/llm_client.py
+- [X] T008 [P] Define IMAGE_DESCRIPTION_PROMPT and MATERIAL_COMPILATION_PROMPT constants in rag_agent/prompts.py
+- [X] T009 [P] Implement helper utilities serialize_table_to_markdown, assemble_page_content, and build_compilation_context in rag_agent/helpers.py
+- [X] T010 Wire rag_agent module exports for agent and tool entry points in rag_agent/__init__.py
 
 **Checkpoint**: Shared schemas, config, llm abstraction, and helper utilities are ready for story work.
 
@@ -49,26 +49,26 @@
 
 ### Tests for User Story 1 (REQUIRED)
 
-- [ ] T011 [P] [US1] Add fixture loader for sample input and sample PDF paths in rag_agent/tests/test_rag_agent.py
-- [ ] T012 [P] [US1] Implement test_get_page_count in rag_agent/tests/test_rag_agent.py
-- [ ] T013 [P] [US1] Implement test_extract_text_from_page in rag_agent/tests/test_rag_agent.py
-- [ ] T014 [P] [US1] Implement test_extract_tables_from_page in rag_agent/tests/test_rag_agent.py
-- [ ] T015 [P] [US1] Implement test_extract_images_from_page in rag_agent/tests/test_rag_agent.py
-- [ ] T016 [US1] Implement test_serialize_table_to_markdown in rag_agent/tests/test_rag_agent.py
-- [ ] T017 [P] [US1] Implement test_score_page_relevance_high in rag_agent/tests/test_rag_agent.py
-- [ ] T018 [P] [US1] Implement test_score_page_relevance_low in rag_agent/tests/test_rag_agent.py
+- [X] T011 [P] [US1] Add fixture loader for sample input and sample PDF paths in rag_agent/tests/test_rag_agent.py
+- [X] T012 [P] [US1] Implement test_get_page_count in rag_agent/tests/test_rag_agent.py
+- [X] T013 [P] [US1] Implement test_extract_text_from_page in rag_agent/tests/test_rag_agent.py
+- [X] T014 [P] [US1] Implement test_extract_tables_from_page in rag_agent/tests/test_rag_agent.py
+- [X] T015 [P] [US1] Implement test_extract_images_from_page in rag_agent/tests/test_rag_agent.py
+- [X] T016 [US1] Implement test_serialize_table_to_markdown in rag_agent/tests/test_rag_agent.py
+- [X] T017 [P] [US1] Implement test_score_page_relevance_high in rag_agent/tests/test_rag_agent.py
+- [X] T018 [P] [US1] Implement test_score_page_relevance_low in rag_agent/tests/test_rag_agent.py
 
 ### Implementation for User Story 1
 
-- [ ] T019 [US1] Implement get_page_count and extract_text_from_page in rag_agent/tools.py
-- [ ] T020 [P] [US1] Implement extract_tables_from_page using PyMuPDF table extraction in rag_agent/tools.py
-- [ ] T021 [P] [US1] Implement extract_images_from_page using PyMuPDF image extraction in rag_agent/tools.py
-- [ ] T022 [US1] Implement score_page_relevance with sentence-transformers cosine similarity in rag_agent/tools.py
-- [ ] T023 [US1] Implement describe_image_with_vlm via llm_client.call_llm in rag_agent/tools.py
-- [ ] T024 [US1] Implement LangGraph page-processing state model and tool-node orchestration in rag_agent/agent.py
-- [ ] T025 [US1] Integrate per-page extraction, relevance threshold filtering, and ExtractedPage auditing in rag_agent/agent.py
-- [ ] T026 [US1] Add sample PDF fixture with text/table/image coverage in rag_agent/tests/inputs/sample.pdf
-- [ ] T027 [US1] Add valid serialized request fixture in rag_agent/tests/inputs/sample_input.json
+- [X] T019 [US1] Implement get_page_count and extract_text_from_page in rag_agent/tools.py
+- [X] T020 [P] [US1] Implement extract_tables_from_page using PyMuPDF table extraction in rag_agent/tools.py
+- [X] T021 [P] [US1] Implement extract_images_from_page using PyMuPDF image extraction in rag_agent/tools.py
+- [X] T022 [US1] Implement score_page_relevance with sentence-transformers cosine similarity in rag_agent/tools.py
+- [X] T023 [US1] Implement describe_image_with_vlm via llm_client.call_llm in rag_agent/tools.py
+- [X] T024 [US1] Implement LangGraph page-processing state model and tool-node orchestration in rag_agent/agent.py
+- [X] T025 [US1] Integrate per-page extraction, relevance threshold filtering, and ExtractedPage auditing in rag_agent/agent.py
+- [X] T026 [US1] Add sample PDF fixture with text/table/image coverage in rag_agent/tests/inputs/sample.pdf
+- [X] T027 [US1] Add valid serialized request fixture in rag_agent/tests/inputs/sample_input.json
 
 **Checkpoint**: Page extraction, relevance filtering, and per-page audit flow are working independently.
 
@@ -82,13 +82,13 @@
 
 ### Tests for User Story 2 (REQUIRED)
 
-- [ ] T028 [US2] Implement test_rag_agent_output_schema for full-run validation in rag_agent/tests/test_rag_agent.py
+- [X] T028 [US2] Implement test_rag_agent_output_schema for full-run validation in rag_agent/tests/test_rag_agent.py
 
 ### Implementation for User Story 2
 
-- [ ] T029 [US2] Build retained-page compilation context assembly in rag_agent/agent.py
-- [ ] T030 [US2] Implement final single-shot material compilation LLM call using MATERIAL_COMPILATION_PROMPT in rag_agent/agent.py
-- [ ] T031 [US2] Ensure Markdown output consistency and fallback behavior when retained context is minimal in rag_agent/agent.py
+- [X] T029 [US2] Build retained-page compilation context assembly in rag_agent/agent.py
+- [X] T030 [US2] Implement final single-shot material compilation LLM call using MATERIAL_COMPILATION_PROMPT in rag_agent/agent.py
+- [X] T031 [US2] Ensure Markdown output consistency and fallback behavior when retained context is minimal in rag_agent/agent.py
 
 **Checkpoint**: Final compiled Markdown output is generated from retained content and schema output remains valid.
 
@@ -102,15 +102,15 @@
 
 ### Tests for User Story 3 (REQUIRED)
 
-- [ ] T032 [US3] Implement test_rag_agent_partial_failure in rag_agent/tests/test_rag_agent.py
-- [ ] T033 [US3] Implement test_relevance_threshold_filtering in rag_agent/tests/test_rag_agent.py
+- [X] T032 [US3] Implement test_rag_agent_partial_failure in rag_agent/tests/test_rag_agent.py
+- [X] T033 [US3] Implement test_relevance_threshold_filtering in rag_agent/tests/test_rag_agent.py
 
 ### Implementation for User Story 3
 
-- [ ] T034 [US3] Implement request-level error aggregation and non-fatal file/page failure handling in rag_agent/agent.py
-- [ ] T035 [US3] Implement deterministic status derivation logic (complete|partial|failed) in rag_agent/agent.py
-- [ ] T036 [US3] Ensure mirrored request metadata and aggregate counters in RAGAgentOutput creation in rag_agent/agent.py
-- [ ] T037 [US3] Add synchronous CLI entrypoint for local standalone invocation in rag_agent/agent.py
+- [X] T034 [US3] Implement request-level error aggregation and non-fatal file/page failure handling in rag_agent/agent.py
+- [X] T035 [US3] Implement deterministic status derivation logic (complete|partial|failed) in rag_agent/agent.py
+- [X] T036 [US3] Ensure mirrored request metadata and aggregate counters in RAGAgentOutput creation in rag_agent/agent.py
+- [X] T037 [US3] Add synchronous CLI entrypoint for local standalone invocation in rag_agent/agent.py
 
 **Checkpoint**: Contract-safe status semantics and partial-failure handling are complete.
 
@@ -120,10 +120,10 @@
 
 **Purpose**: Final quality pass across all user stories.
 
-- [ ] T038 [P] Document environment variables and execution workflow in rag_agent/README.md
-- [ ] T039 Validate quickstart commands and expected outputs in specs/001-rag-retrieval-agent/quickstart.md
-- [ ] T040 [P] Add regression test notes and fixture assumptions in rag_agent/tests/inputs/README.md
-- [ ] T041 Run full test suite and capture baseline runtime metrics for sample input in rag_agent/tests/test_rag_agent.py
+- [X] T038 [P] Document environment variables and execution workflow in rag_agent/README.md
+- [X] T039 Validate quickstart commands and expected outputs in specs/001-rag-retrieval-agent/quickstart.md
+- [X] T040 [P] Add regression test notes and fixture assumptions in rag_agent/tests/inputs/README.md
+- [X] T041 Run full test suite and capture baseline runtime metrics for sample input in rag_agent/tests/test_rag_agent.py
 
 ---
 
