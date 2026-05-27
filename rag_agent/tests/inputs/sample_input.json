@@ -1,0 +1,11 @@
+{
+  "request_id": "8d9fbfbc-a62b-4ae7-a2eb-d40db8f71543",
+  "user_prompt": "Create study notes on gradient descent optimization and learning rate behavior.",
+  "file_paths": [
+    "rag_agent/tests/inputs/sample.pdf"
+  ],
+  "include_tables": true,
+  "include_images": true,
+  "relevance_threshold": 0.6,
+  "schema_version": "1.0"
+}
