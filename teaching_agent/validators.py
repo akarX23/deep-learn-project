@@ -27,7 +27,8 @@ def validate_mermaid(diagram: str) -> bool:
     if not diagram or not diagram.strip():
         return False
 
-    lines = [line for line in diagram.splitlines() if line.strip()]
+    # lines = [line for line in diagram.splitlines() if line.strip()]
+    lines = [seg for seg in re.split(r"[\n;]", diagram) if seg.strip()]
     if len(lines) < 2:
         return False
 

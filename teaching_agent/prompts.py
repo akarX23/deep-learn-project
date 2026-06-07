@@ -23,7 +23,7 @@ Return ONLY a JSON object with exactly these fields:
 }}
 
 Rules:
-- Output valid JSON only. No markdown code fences. No text before or after the JSON.
+- Output valid JSON only. No markdown code fences. No text before or after the JSON. Escape all newlines as \\n within string values — do not use literal newlines inside JSON strings.
 - The diagram field must contain valid Mermaid syntax starting with 'graph TD' or 'sequenceDiagram'.
 - Keep total output within the token budget — be concise but complete.
 - If prior session context is provided, briefly connect it to the new topic."""
@@ -45,7 +45,7 @@ Return ONLY a JSON object with exactly these fields:
 }}
 
 Rules:
-- Output valid JSON only. No markdown code fences. No text before or after the JSON.
+- Output valid JSON only. No markdown code fences. No text before or after the JSON. Escape all newlines as \\n within string values — do not use literal newlines inside JSON strings.
 - If diagram is not applicable, set it to null (JSON null, not the string 'null').
 - Keep total output within the token budget — prioritise depth over breadth.
 - If prior session context is provided, build on it explicitly."""
@@ -67,7 +67,7 @@ Return ONLY a JSON object with exactly these fields:
 }}
 
 Rules:
-- Output valid JSON only. No markdown code fences. No text before or after the JSON.
+- Output valid JSON only. No markdown code fences. No text before or after the JSON. Escape all newlines as \\n within string values — do not use literal newlines inside JSON strings.
 - If diagram is not applicable, set it to null (JSON null, not the string 'null').
 - Assume the reader is comfortable with complexity notation, design patterns, and low-level behaviour.
 - If prior session context is provided, reference it where directly relevant."""
