@@ -109,6 +109,70 @@ teaching_agent/
 Schemas in `project/schemas.py` (shared contract location). No new top-level directories.
 No LangGraph — the linear pipeline requires only a plain class.
 
+## Behavior Rules and Requirement Clarifications
+
+These clarifications resolve interpretation questions left open by the Technical Context
+section. They are binding design decisions, traceable to the listed spec requirements.
+
+### Token-Ceiling Semantics (FR-008, SC-005)
+
+- The per-mode ceiling (512 / 1024 / 2048) governs **generated completion tokens**, enforced
+  as `max_tokens` at the LiteLLM call boundary in `config.py`'s per-mode map. This is the
+  value reported as `metadata.tokens_used` (the `completion_tokens` field of the LLM usage
+  response).
+- Prompt + `context` tokens are **not** counted against the completion ceiling, but are
+  bounded separately: `agent.py` enforces an input guard that truncates/rejects an oversized
+  `context` before dispatch, so total request size stays within the model window and a long
+  prior-session summary cannot crowd out the generated answer.
+- Rationale: `max_tokens` only caps completion, not prompt+completion. SC-005 is measured
+  against completion tokens; defining the ceiling this way makes enforcement deterministic at
+  the call boundary and keeps `tokens_used` reporting unambiguous for downstream consumers.
+
+### Mermaid Validation Depth (FR-007)
+
+- `validators.py::validate_mermaid` performs a **structural (regex-based) check**, not a full
+  Mermaid parse. It verifies: a recognized diagram header (`graph TD|LR`, `flowchart`,
+  `sequenceDiagram`), at least one node/edge token, and balanced brackets/parentheses.
+- This is an accepted v1 limitation: a structurally valid but semantically broken diagram may
+  pass. A true Mermaid parser is deferred; the structural check is sufficient to prevent the
+  common malformed-output failure modes from reaching the renderer.
+- Beginner-mode fallback (required non-null diagram per FR-005): on validation failure the
+  agent retries generation once; if the retry also fails validation, it substitutes a minimal
+  valid template diagram rather than returning null or erroring. Intermediate/advanced simply
+  set `diagram` to null on failure.
+
+### Output-Mode Authority (FR-003)
+
+- `output_mode` is treated as **authoritative and opaque**. The agent selects the prompt
+  template and token ceiling strictly from the input value and never infers, overrides, or
+  re-derives the mode from `topic` or `context`.
+- The response mirrors the input `output_mode` exactly in all cases, including errors.
+- An `output_mode` outside the three enum values fails input validation and returns
+  `status: "error"` before any LLM call (no default/fallback mode).
+
+### Per-Mode Diagram Rules (FR-005, FR-006)
+
+| output_mode  | diagram field behavior                                                    |
+|--------------|---------------------------------------------------------------------------|
+| beginner     | Always non-null; `graph TD` or `sequenceDiagram`; required (see fallback) |
+| intermediate | Non-null only when the topic has structural/sequential complexity; else null |
+| advanced     | Non-null only when visualization communicates more than prose; else null  |
+
+The mode-specific rule is enforced in `agent.py` after diagram validation; full field-level
+validation rules live in `data-model.md` and `contracts/teaching-agent-contract.md`.
+
+### Edge-Case Handling (spec "Edge Cases", FR-010)
+
+| Edge case                                   | Handling                                                        |
+|---------------------------------------------|-----------------------------------------------------------------|
+| Single-word vs multi-word topic             | No special handling; passed verbatim to the prompt              |
+| Empty `context`                             | Valid input; full response produced without prior-session context |
+| Lengthy `context` summary                   | Input guard bounds context tokens (see Token-Ceiling Semantics) so the completion ceiling is unaffected |
+| Same topic, different modes                 | Distinct prompt templates yield structurally distinct output (FR-004) |
+| Ambiguous / out-of-scope topic              | Prompts instruct a structured best-effort response; never an error solely for ambiguity |
+| LLM call fails or returns empty             | `status: "error"`, `tokens_used: 0`, no unhandled exception (FR-010) |
+| Invalid generated Mermaid                   | Diagram set to null (intermediate/advanced) or retried/fallback (beginner); never returned invalid |
+
 ## Complexity Tracking
 
 No constitution violations identified. Complexity is justified by the per-mode prompt
