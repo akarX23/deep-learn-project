@@ -1,7 +1,7 @@
 # Contract: RAG Agent Planner Interface
 
 ## Purpose
-Defines the request and response contract between Planner and RAG Retrieval Agent.
+Defines the request and response contract between Planner and the RAG Retrieval Agent, plus runtime configuration expectations for LiteLLM routing.
 
 ## Request Schema: RAGAgentInput
 
@@ -22,7 +22,7 @@ Defines the request and response contract between Planner and RAG Retrieval Agen
 ### Field constraints
 - request_id: required UUID string.
 - user_prompt: required non-empty string.
-- file_paths: required array of PDF paths.
+- file_paths: required non-empty array of PDF paths.
 - include_tables/include_images: optional booleans, default true.
 - relevance_threshold: optional float in [0.0, 1.0], default 0.6.
 - schema_version: optional string, default "1.0".
@@ -57,7 +57,7 @@ Defines the request and response contract between Planner and RAG Retrieval Agen
 - page_number is 1-based.
 - relevance_score is normalized to [0.0, 1.0].
 - ocr_used is always false in v1.
-- retained_content is intentionally absent; compiled_material is the only assembled text in the response.
+- retained_content is intentionally excluded from the response.
 
 ## Status semantics
 - complete: all reachable files/pages processed with usable output and no blocking errors.
@@ -66,8 +66,26 @@ Defines the request and response contract between Planner and RAG Retrieval Agen
 
 ## Error handling contract
 - Non-fatal issues are accumulated in response.errors and/or per-page errors.
-- Fatal runtime errors raise exceptions and may produce failed status when captured by caller boundary.
+- Fatal runtime errors raise exceptions and may be translated to failed status by caller boundary.
+
+## Runtime Configuration Contract (LiteLLM)
+
+### Provider and model routing
+- Text routing model: `<RAG_TEXT_PROVIDER>/<RAG_TEXT_MODEL>`
+- VLM routing model: `<RAG_VLM_PROVIDER>/<RAG_VLM_MODEL>`
+- Embedding routing model: `<RAG_EMBEDDING_PROVIDER>/<RAG_EMBEDDING_MODEL>`
+
+### Provider defaults
+- `RAG_TEXT_PROVIDER` default: `hosted_vllm`
+- `RAG_VLM_PROVIDER` default: `hosted_vllm`
+- `RAG_EMBEDDING_PROVIDER` default: `hosted_vllm`
+
+### Required env groups
+- Text: `RAG_TEXT_PROVIDER`, `RAG_TEXT_MODEL`, `RAG_TEXT_API_BASE`, `RAG_TEXT_API_KEY`
+- Vision: `RAG_VLM_PROVIDER`, `RAG_VLM_MODEL`, `RAG_VLM_API_BASE`, `RAG_VLM_API_KEY`
+- Embedding: `RAG_EMBEDDING_PROVIDER`, `RAG_EMBEDDING_MODEL`, `RAG_EMBEDDING_API_BASE`, `RAG_EMBEDDING_API_KEY`, `RAG_EMBEDDING_MAX_TOKENS`
 
 ## Determinism and ordering
-- Tool call order is LLM-driven (non-deterministic) under LangGraph orchestration.
-- Output schema and field semantics remain deterministic regardless of call order.
+- Processing and extraction audit semantics are deterministic at schema level.
+- Internal tool scheduling may vary but must preserve response contract guarantees.
+- Image-description calls are batched per page via `VLM_BATCH_SIZE`; batching does not alter output schema.

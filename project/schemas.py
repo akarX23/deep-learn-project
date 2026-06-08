@@ -58,7 +58,6 @@ class ExtractedPage(BaseModel):
     status: PageExtractionStatus
     ocr_used: bool = False
     errors: List[str] = Field(default_factory=list)
-    retained_content: Optional[str] = None
 
 
 class RAGAgentOutput(BaseModel):

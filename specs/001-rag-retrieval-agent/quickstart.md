@@ -2,57 +2,69 @@
 
 ## 1. Install dependencies
 
-Use your project environment manager, then install required packages:
+Install project dependencies from repository root:
 
+```bash
+pip install -r requirements.txt
+```
+
+Core runtime dependencies for this feature include:
 - pydantic>=2
 - pymupdf
-- sentence-transformers
 - litellm
 - langgraph
 - pytest
 
 ## 2. Configure environment variables
 
-Set model/provider values before running the agent:
+Use one project-level `.env.local` and place RAG settings in the RAG section.
 
-- RAG_TEXT_MODEL
-- RAG_TEXT_API_BASE (optional, for local vLLM such as http://localhost:8000/v1)
-- RAG_TEXT_API_KEY (optional if local endpoint does not require key)
-- RAG_TEXT_TEMPERATURE (optional)
-- RAG_TEXT_MAX_TOKENS (optional)
-- RAG_VLM_MODEL
-- RAG_VLM_API_BASE (optional)
-- RAG_VLM_API_KEY (optional)
-- RAG_VLM_TEMPERATURE (optional)
-- RAG_VLM_MAX_TOKENS (optional)
+### Text model
+- `RAG_TEXT_PROVIDER` (default: `hosted_vllm`)
+- `RAG_TEXT_MODEL`
+- `RAG_TEXT_API_BASE` (optional for local endpoints)
+- `RAG_TEXT_API_KEY` (optional for unauthenticated local endpoints)
+- `RAG_TEXT_TEMPERATURE` (optional)
+- `RAG_TEXT_MAX_TOKENS` (optional)
 
-Embedding model:
+### Vision model
+- `RAG_VLM_PROVIDER` (default: `hosted_vllm`)
+- `RAG_VLM_MODEL`
+- `RAG_VLM_API_BASE` (optional)
+- `RAG_VLM_API_KEY` (optional)
+- `RAG_VLM_TEMPERATURE` (optional)
+- `RAG_VLM_MAX_TOKENS` (optional)
+- `RAG_VLM_BATCH_SIZE` (optional, default from config)
 
-- RAG_EMBEDDING_MODEL_NAME (default: all-MiniLM-L6-v2)
-- RAG_VLM_BATCH_SIZE (optional, default 4 — controls how many images per page are sent to the VLM in a single call)
+### Embedding model
+- `RAG_EMBEDDING_PROVIDER` (default: `hosted_vllm`)
+- `RAG_EMBEDDING_MODEL`
+- `RAG_EMBEDDING_API_BASE` (optional)
+- `RAG_EMBEDDING_API_KEY` (optional)
+- `RAG_EMBEDDING_MAX_TOKENS` (optional)
+
+LiteLLM routing composes each call model as `<provider>/<model>`.
 
 ## 3. Prepare sample input
 
-Use:
+Use fixture input from:
+- `rag_agent/tests/inputs/sample_input.json`
+- `rag_agent/tests/inputs/sample.pdf`
 
-- rag_agent/tests/inputs/sample.pdf
-- rag_agent/tests/inputs/sample_input.json
+Verify `file_paths` in JSON point to valid files in your checkout.
 
-Ensure sample_input.json points to the sample PDF path available in your checkout.
+## 4. Run the agent
 
-## 4. Run the agent end-to-end
-
-Example (from repository root):
+From repository root:
 
 ```bash
 python -m rag_agent.agent --input rag_agent/tests/inputs/sample_input.json
 ```
 
-Expected result:
-
-- A schema-valid RAGAgentOutput payload
-- status of complete or partial
-- non-empty compiled_material when at least one page is retained
+Expected outcome:
+- Schema-valid `RAGAgentOutput`
+- `status` in `{complete, partial}` for non-fatal mixed outcomes
+- Non-empty `compiled_material` when at least one relevant page is retained
 
 ## 5. Run tests
 
@@ -60,22 +72,23 @@ Expected result:
 pytest rag_agent/tests/test_rag_agent.py -q
 ```
 
-## 6. Verify threshold filtering behavior
+## 6. Verify strict threshold behavior
 
-Set relevance_threshold to 1.0 in sample_input.json and rerun:
+Set `relevance_threshold` to `1.0` in sample input and run again.
 
-- total_pages_included should be 0
-- all extracted_pages statuses should be SKIPPED_IRRELEVANT
+Expected:
+- `total_pages_included == 0`
+- all page statuses are `SKIPPED_IRRELEVANT`
 
-## 7. Notes
+## 7. Operational notes
 
-- Planner Agent and Teaching Agent runtime are not required for standalone execution.
-- OCR is intentionally out of scope for this version.
+- Source PDFs are opened once per request and reused via request-scoped `fitz.Document` handles.
+- `extracted_pages` contains audit metadata only; assembled text is returned only in `compiled_material`.
+- OCR remains out of scope for this feature iteration.
+- Ensure embedding env vars are set before running (`RAG_EMBEDDING_PROVIDER`, `RAG_EMBEDDING_MODEL`, and either `RAG_EMBEDDING_API_BASE` or `RAG_EMBEDDING_API_KEY`).
 
-## 8. Validation Snapshot
+## 8. Validation snapshot
 
-- Validated on 2026-05-27 using `sample_input.json`
-- Runtime baseline: 4.53 seconds
-- Observed output: `status=complete`, `total_pages_processed=6`, `total_pages_included=4`
-
-> **v2 note**: After clarification updates (2026-06-08), `extracted_pages` no longer includes `retained_content`. The `compiled_material` field remains the sole assembled text output.
+- Validated on 2026-06-08 with `rag_agent/tests/inputs/sample_input.json`
+- Runtime baseline: 1.93 seconds
+- Observed output: `status=complete`, `total_pages_processed=6`, `total_pages_included=5`

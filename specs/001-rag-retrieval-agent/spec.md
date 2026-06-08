@@ -14,6 +14,13 @@
 - Q: How should requirements be structured across agents? → A: Use one requirements.txt with comment-based sections for shared dependencies and each agent (RAG, Planner, Teaching).
 - Q: What should be the batching scope for vision model image-description calls? → A: Batch images per page, preserve image order, and keep page association; apply VLM_BATCH_SIZE within each page.
 - Q: How should retained_content be handled in extracted_pages output? → A: Exclude retained_content from output payloads to avoid bloating extracted_pages; keep compiled_material as the only final assembled text output.
+- Q: How should LiteLLM provider keys be configured for text, VLM, and embedding models? → A: Use separate provider env vars for each modality and default each provider to hosted_vllm.
+
+### Session 2026-06-08 (Post-Implementation Refinement)
+
+- Q: How should fitz document handles be typed for type-safety? → A: Import fitz.Document type and use it in type hints (e.g., dict[str, fitz.Document]) for explicit type safety in agent state management.
+- Q: Should the embedding model be local or remote? → A: Use remote LiteLLM-backed embedding API as primary path for consistency with existing text/VLM LiteLLM configuration pattern.
+- Q: What environment variables should configure remote embedding? → A: Use RAG_EMBEDDING_MODEL, RAG_EMBEDDING_API_BASE, RAG_EMBEDDING_API_KEY, and RAG_EMBEDDING_MAX_TOKENS to parallel the text and VLM configuration structure.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -105,6 +112,11 @@ As the Planner Agent integration point, I need schema-valid output with completi
 - **FR-024**: The system MUST support a configurable image-description instruction prompt that combines a general image-analysis directive with the request user_prompt context.
 - **FR-025**: The system MUST omit retained_content from extracted_pages in RAGAgentOutput; compiled_material is the only final text artifact returned in the response payload.
 - **FR-026**: The system MUST organize imports at the top of each file in grouped blocks with line breaks separating standard-library imports, third-party library imports, and project-local imports.
+- **FR-027**: The system MUST define fitz.Document type hints explicitly (e.g., dict[str, fitz.Document]) for document handle storage to ensure type-safety in static analysis and IDE support.
+- **FR-028**: The system MUST support remote embedding via LiteLLM API calls as the primary embedding source, replacing local sentence-transformers for consistency with text and vision model configuration patterns.
+- **FR-029**: The system MUST provide separate provider environment variables `RAG_TEXT_PROVIDER`, `RAG_VLM_PROVIDER`, and `RAG_EMBEDDING_PROVIDER` in .env.local, each defaulting to `hosted_vllm`.
+- **FR-030**: The system MUST include provider values in LiteLLM configuration so model routing uses `<provider>/<model>` composition for text, VLM, and embedding calls.
+- **FR-031**: The system MUST provide `RAG_TEXT_MODEL`, `RAG_TEXT_API_BASE`, `RAG_TEXT_API_KEY`, `RAG_VLM_MODEL`, `RAG_VLM_API_BASE`, `RAG_VLM_API_KEY`, `RAG_EMBEDDING_MODEL`, `RAG_EMBEDDING_API_BASE`, `RAG_EMBEDDING_API_KEY`, and `RAG_EMBEDDING_MAX_TOKENS` in .env.local to configure modality-specific LiteLLM endpoints and credentials.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -113,6 +125,7 @@ As the Planner Agent integration point, I need schema-valid output with completi
 - **ExtractedPage**: Per-page audit record with source file reference, page number, relevance score, extraction status, OCR usage flag, and page-specific errors; excludes retained page text content in output.
 - **PageExtractionStatus**: Enum defining SUCCESS, SKIPPED_IRRELEVANT, and FAILED_EXTRACTION.
 - **Retained Page Content (Internal)**: Assembled page-level textual representation (text, table content, image descriptions) used internally for compilation but not returned in extracted_pages.
+- **Document Handle (fitz.Document)**: Opened PyMuPDF document instance with explicit fitz.Document type hint for type-safety; stored in dict[str, fitz.Document] and reused across page-level extraction within a single request lifecycle.
 
 ## Success Criteria *(mandatory)*
 
@@ -133,3 +146,6 @@ As the Planner Agent integration point, I need schema-valid output with completi
 - Planner Agent and Teaching Agent behavior, orchestration, and prompt logic are out of scope.
 - Output artifact format is always Markdown.
 - The current branch remains unchanged for this specification task per user instruction.
+- The remote embedding API (configured via RAG_EMBEDDING_API_BASE and RAG_EMBEDDING_API_KEY) is available and operational at runtime; no local fallback model is required.
+- LiteLLM provider defaults are `hosted_vllm` for text, VLM, and embedding unless explicitly overridden via modality-specific provider environment variables.
+- fitz.Document type is available from the pymupdf package and can be imported directly for type annotations.

@@ -31,3 +31,5 @@ Thumbs.db
 *.swp
 .vscode/
 .idea/
+
+chat_logs

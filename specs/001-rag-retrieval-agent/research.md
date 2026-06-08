@@ -1,73 +1,65 @@
 # Research: RAG Retrieval Agent
 
 ## Decision 1: PDF Extraction Library
-- Decision: Use PyMuPDF for all PDF-related operations (page count, text extraction, table detection, image extraction).
-- Rationale: PyMuPDF supports all required per-page primitives in one dependency and has performant random-access page APIs that fit synchronous processing.
-- Alternatives considered: pdfplumber (table support is useful but weaker image handling integration), pypdf (lightweight but lacks robust table extraction), OCR-first stacks (out of scope for v1 assumptions).
+- Decision: Use PyMuPDF (`fitz`) for page count, text extraction, table extraction, and image extraction.
+- Rationale: One dependency covers all required per-page operations with good performance and direct page access.
+- Alternatives considered: `pdfplumber` (good tables but weaker image flow integration), `pypdf` (lighter but insufficient extraction coverage).
 
-## Decision 2: LLM/VLM Invocation Layer
-- Decision: Route all model calls through LiteLLM via a single call_llm(messages, config) abstraction in rag_agent/llm_client.py.
-- Rationale: A single call path reduces provider lock-in and keeps the agent independent from vendor-specific SDKs.
-- Alternatives considered: Direct provider SDKs (higher lock-in, duplicated logic), LangChain model wrappers as primary call layer (unnecessary extra abstraction for this scope).
+## Decision 2: Orchestration Runtime
+- Decision: Use LangGraph for deterministic page-processing flow with explicit state transitions.
+- Rationale: StateGraph provides clear control over page iteration, conditional continuation, and final compilation.
+- Alternatives considered: Hand-rolled loops (less structured), generic agent executors (less explicit state control).
 
-## Decision 3: Runtime Configuration Source
-- Decision: Load model configuration from environment variables (model name, api_base, api_key, temperature, max_tokens), with defaults centralized in rag_agent/config.py.
-- Rationale: Environment variables are deployment-friendly, avoid secrets in code, and allow local vLLM and hosted APIs without code changes.
-- Alternatives considered: Hard-coded config constants (not portable), static JSON config file only (less secure for key management), CLI flag-only configuration (harder for orchestration environments).
+## Decision 3: LLM Invocation Layer
+- Decision: Route text, VLM, and embedding calls through a unified LiteLLM client abstraction.
+- Rationale: Keeps provider integration consistent and reduces SDK-specific branching.
+- Alternatives considered: Provider-specific SDKs (more lock-in, duplicated code paths).
 
-## Decision 4: Agent Reasoning Loop Runtime
-- Decision: Implement the page-processing reasoning loop with LangGraph state transitions and tool nodes.
-- Rationale: LangGraph provides explicit stateful orchestration and deterministic control surfaces around non-deterministic LLM decisions.
-- Alternatives considered: Hand-rolled while loop with ad-hoc tool dispatch (less observable and harder to extend), LangChain AgentExecutor only (less explicit state graph control).
+## Decision 4: Embedding Source
+- Decision: Use remote LiteLLM-backed embedding API as the primary relevance scoring source.
+- Rationale: Aligns embedding configuration and operational model with text/VLM flows and avoids local model distribution overhead.
+- Alternatives considered: Local sentence-transformers as primary path (extra model management), hybrid dual-path fallback (higher complexity).
 
-## Decision 5: Relevance Scoring Strategy
-- Decision: Use sentence-transformers all-MiniLM-L6-v2 loaded once at RAGAgent initialization; score page_content against user_prompt by cosine similarity.
-- Rationale: Lightweight embeddings with good semantic quality for educational-topic retrieval, minimizing repeated model load overhead.
-- Alternatives considered: Larger embedding models (higher latency/memory), keyword-only scoring (insufficient semantic match quality).
+## Decision 5: Provider Key Strategy
+- Decision: Define separate provider environment variables for each modality:
+  - `RAG_TEXT_PROVIDER`
+  - `RAG_VLM_PROVIDER`
+  - `RAG_EMBEDDING_PROVIDER`
+- Rationale: Allows independent routing across providers per modality while preserving a uniform call interface.
+- Alternatives considered: Single global provider variable (insufficient flexibility), mandatory explicit provider with no default (higher setup friction).
 
-## Decision 6: Table Serialization Approach
-- Decision: Convert extracted 2D table matrices into Markdown tables in helpers.serialize_table_to_markdown.
-- Rationale: Markdown is the final output format and keeps table content directly usable in compilation context.
-- Alternatives considered: HTML tables (less consistent with output requirement), CSV serialization (loses contextual readability in compiled material).
+## Decision 6: Provider Default Value
+- Decision: Default each modality provider to `hosted_vllm` when not explicitly set.
+- Rationale: Provides a predictable baseline configuration and keeps existing setups working without extra env edits.
+- Alternatives considered: No default (fail-fast but less ergonomic), defaulting to provider-specific names tied to one vendor.
 
-## Decision 7: Failure Handling and Status Derivation
-- Decision: Treat per-page and per-file extraction failures as non-fatal where possible; collect errors and derive output status as complete, partial, or failed.
-- Rationale: Planner requires actionable partial outputs when at least one file/page succeeds.
-- Alternatives considered: Fail-fast on first error (reduces usable output), silent skip without error list (breaks auditability).
+## Decision 7: Model Routing Composition
+- Decision: Compose LiteLLM model identifiers as `<provider>/<model>` for text, VLM, and embedding calls.
+- Rationale: Explicit composition preserves compatibility with provider-routed LiteLLM backends and avoids ambiguous model resolution.
+- Alternatives considered: Passing raw model name only (insufficient for provider-keyed routing).
 
-## Decision 8: Additional Libraries
-- Decision: Do not introduce additional external libraries beyond requested dependencies and pytest for testing.
-- Rationale: Current requirements are satisfiable with the selected stack; avoiding new dependencies keeps implementation risk low.
-- Alternatives considered: Adding PDF fixture-generation tooling; rejected for now because static sample assets satisfy testing requirements.
+## Decision 8: Document Handle Lifecycle
+- Decision: Open each source PDF once per request and cache handles as `dict[str, fitz.Document]` on `RAGAgent`, outside serializable LangGraph state.
+- Rationale: `fitz.Document` is non-serializable; request-scoped cache avoids repeated open overhead and prevents graph state serialization issues.
+- Alternatives considered: Re-open per page (performance penalty), placing handles in graph state (serialization risk).
 
----
+## Decision 9: Image Description Batching
+- Decision: Batch image description calls per page using `VLM_BATCH_SIZE`, preserving image order and page association.
+- Rationale: Reduces API round trips while maintaining deterministic provenance at page granularity.
+- Alternatives considered: One call per image (higher latency), cross-page batching (context/provenance ambiguity).
 
-## Decision 9 (v2): fitz Document Lifecycle — One-Time Load Per Request
-- Decision: Store open `fitz.Document` handles in a `dict[str, fitz.Document]` on the `RAGAgent` instance, populated before `graph.invoke()` and released in a `finally` block after it returns.
-- Rationale: `fitz.Document` is a native C object that cannot be pickled; placing it in LangGraph `AgentState` breaks checkpointing and graph portability. Instance-level storage is the standard approach for non-serializable resources in LangGraph pipelines.
-- Alternatives considered: fitz.Document in AgentState (breaks checkpointing), pre-built list of fitz.Page objects (loses document metadata access), thread-local context (unnecessary for single-threaded synchronous processing).
+## Decision 10: Output Payload Shape
+- Decision: Exclude retained page content from `extracted_pages`; return compiled text only in `compiled_material`.
+- Rationale: Prevents payload bloat while preserving the audit record required by Planner.
+- Alternatives considered: Retaining page text in response (larger payload, redundant content).
 
-## Decision 10 (v2): VLM Image Batching Per Page
-- Decision: Chunk images per page into batches of `RAG_VLM_BATCH_SIZE` (default 4); send each batch as a multi-image LiteLLM content message; concatenate descriptions in order.
-- Rationale: Modern VLMs accept multi-image content arrays in a single API call. Batching per page reduces round-trips while preserving page-level provenance. Cross-page batching would blur context association.
-- Alternatives considered: One call per image (O(N) round-trips), batch across pages (provenance ambiguity), batch per file (same provenance issue).
+## Implementation Outcomes (2026-06-08)
+- Provider-aware routing is now applied across text, VLM, and embedding calls via `<provider>/<model>` composition.
+- Default provider value `hosted_vllm` is active for all three modalities when provider env vars are unset.
+- Request execution now loads runtime model configs once per run and reuses open `fitz.Document` handles for page processing.
+- Full regression suite passes (`pytest -q`: 21 passed).
+- Representative runtime validation completed on sample input: 1.93s, `status=complete`, 6 pages processed, 5 included.
 
-## Decision 11 (v2): Image Description Prompt — General + Contextual
-- Decision: `IMAGE_DESCRIPTION_PROMPT` combines a general educational-content analyst instruction with a context line embedding the user's study prompt.
-- Rationale: Anchoring to the user prompt biases VLM output toward topic-relevant visual content (diagrams, equations) and away from decorative noise.
-- Alternatives considered: Generic description-only prompt (topic-agnostic output), long multi-paragraph instruction (wastes VLM token budget).
-
-## Decision 12 (v2): retained_content Removed from Output Schema
-- Decision: Remove `ExtractedPage.retained_content` from the Pydantic schema entirely. Internally assembled page text is kept as plain strings in the agent during `_compile_material`, never written to `ExtractedPage`.
-- Rationale: Per-page full text in output multiplies payload size linearly. Downstream consumers need only `compiled_material`. Audit metadata (status, score, errors) suffices for diagnostics.
-- Alternatives considered: Strip at serialization time (misleading schema), keep as `Optional[str] = None` (semantically ambiguous), keep field (payload bloat).
-
-## Decision 13 (v2): Import Grouping Convention
-- Decision: Enforce three grouped import blocks (stdlib → third-party → project-local) separated by blank lines across all modules in `rag_agent/` and `project/`.
-- Rationale: Matches PEP 8 and isort conventions; improves dependency scanability and future linting enforcement via `ruff I` rules.
-- Alternatives considered: Flat alphabetical imports (mixes stdlib/third-party), ad-hoc ordering (inconsistent across files).
-
-## Decision 14 (v2): .env.local and requirements.txt Sectioning
-- Decision: Single `.env.local` with comment-based section headers (`# === Shared ===`, `# === RAG Agent ===`, placeholder sections for Planner/Teaching). Single `requirements.txt` with comment-based sections (`# --- Shared ---`, `# --- RAG Agent ---`, placeholder sections, `# --- Development / Testing ---`).
-- Rationale: All standard dotenv parsers and pip ignore `#` comments. Sections improve discoverability without breaking existing tooling.
-- Alternatives considered: Separate `.env.<agent>` files (multiple files to source), separate requirements files (install complexity).
+## Tradeoffs Observed
+- Requiring explicit embedding model configuration improves correctness but introduces startup failure when env is missing.
+- Embedding and LLM calls remain network/service dependent; fallback logic keeps pipeline non-fatal for per-page relevance when embedding calls fail.

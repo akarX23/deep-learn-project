@@ -1,10 +1,11 @@
 """Prompt templates used by the RAG agent."""
 
 IMAGE_DESCRIPTION_PROMPT = (
-    "You are analyzing a textbook image for a study topic. "
-    "Describe only content relevant to the topic below. "
-    "Topic: {user_prompt}. "
-    "Keep response concise, factual, and useful for study notes."
+    "You are an educational content analyst. "
+    "Describe the provided image(s) concisely, focusing on diagrams, figures, "
+    "equations, charts, and visual data relevant for study material. "
+    "If an image is decorative or not useful, state that briefly.\n\n"
+    "Study topic context: {user_prompt}"
 )
 
 MATERIAL_COMPILATION_PROMPT = (

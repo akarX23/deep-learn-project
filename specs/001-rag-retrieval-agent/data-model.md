@@ -26,7 +26,7 @@
   - FAILED_EXTRACTION
 
 ### ExtractedPage
-- Description: Audit record for one processed page. Does NOT contain assembled page text; that is internal-only.
+- Description: Audit record for one processed page. Does not contain assembled page text; that is internal-only.
 - Fields:
   - file_name: str
   - page_number: int (1-based)
@@ -38,12 +38,38 @@
   - page_number must be >= 1.
   - relevance_score must be in [0.0, 1.0].
 
-### RetainedPageContent (Internal — not in output)
-- Description: Assembled per-page text used internally during compilation. Held by the agent; never serialized to output.
+### RetainedPageContent (Internal, not in output)
+- Description: Assembled per-page text used internally for final compilation only.
 - Fields:
-  - page_number: int
   - file_name: str
+  - page_number: int
   - content: str
+
+### ModalityLLMConfig (Runtime Config)
+- Description: Modality-specific LiteLLM configuration object used for text, VLM, and embedding calls.
+- Fields:
+  - provider: str (default `hosted_vllm`)
+  - model: str
+  - api_base: str | None
+  - api_key: str | None
+  - temperature: float | None
+  - max_tokens: int | None
+- Derived field:
+  - routed_model: str = `<provider>/<model>`
+- Validation rules:
+  - provider must be non-empty.
+  - model must be non-empty.
+
+### RAGRuntimeConfig
+- Description: Aggregated runtime config for all model modalities.
+- Fields:
+  - text: ModalityLLMConfig
+  - vlm: ModalityLLMConfig
+  - embedding: ModalityLLMConfig
+- Env mapping:
+  - text.provider <- RAG_TEXT_PROVIDER (default hosted_vllm)
+  - vlm.provider <- RAG_VLM_PROVIDER (default hosted_vllm)
+  - embedding.provider <- RAG_EMBEDDING_PROVIDER (default hosted_vllm)
 
 ### RAGAgentOutput
 - Description: Agent response contract returned to Planner.
@@ -59,7 +85,7 @@
   - status: str (complete | partial | failed)
 - Validation rules:
   - total_pages_processed >= total_pages_included >= 0.
-  - status is complete only if no unrecoverable extraction gap and at least one included page.
+  - status is complete when successful extraction/compilation occurs without blocking errors.
   - status is partial when mixed success/failure occurs with usable output.
   - status is failed when no usable output can be produced.
 
@@ -67,23 +93,28 @@
 - One RAGAgentInput maps to one RAGAgentOutput.
 - One RAGAgentOutput contains zero or more ExtractedPage records.
 - Each ExtractedPage has exactly one PageExtractionStatus.
+- One request execution uses one RAGRuntimeConfig containing three modality configs.
 
 ## State Transitions
 
 ### Request-level state
 1. received -> processing_pages
 2. processing_pages -> compiling_material (if retained pages > 0)
-3. processing_pages -> failed (if no pages can be processed and no usable content)
-4. compiling_material -> complete (all target files/pages processed with usable output and no blocking errors)
-5. compiling_material -> partial (usable output with non-fatal errors)
+3. processing_pages -> failed (if no usable page content exists)
+4. compiling_material -> complete (usable compiled output with no blocking error)
+5. compiling_material -> partial (usable output plus non-fatal errors)
 6. any state -> failed (fatal exception path)
 
 ### Page-level state
-1. started -> FAILED_EXTRACTION (if extraction returns empty/invalid content and no recoverable content path)
-2. started -> SKIPPED_IRRELEVANT (if relevance score < threshold)
-3. started -> SUCCESS (if assembled content is valid and relevance score >= threshold)
+1. started -> FAILED_EXTRACTION (missing or unusable extraction)
+2. started -> SKIPPED_IRRELEVANT (score < threshold)
+3. started -> SUCCESS (score >= threshold and retained content available)
 
 ## Derived Fields
-- total_pages_processed: count of all attempted page records.
-- total_pages_included: count of ExtractedPage where status == SUCCESS.
-- compiled_material context: built from internal RetainedPageContent records across SUCCESS pages only.
+- total_pages_processed: count of all attempted pages.
+- total_pages_included: count of pages with SUCCESS status.
+- compiled_material context: built from internal RetainedPageContent records for SUCCESS pages only.
+- routed model IDs:
+  - text_routed_model = `<RAG_TEXT_PROVIDER>/<RAG_TEXT_MODEL>`
+  - vlm_routed_model = `<RAG_VLM_PROVIDER>/<RAG_VLM_MODEL>`
+  - embedding_routed_model = `<RAG_EMBEDDING_PROVIDER>/<RAG_EMBEDDING_MODEL>`
