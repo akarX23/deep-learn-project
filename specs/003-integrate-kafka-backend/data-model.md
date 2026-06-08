@@ -52,6 +52,16 @@
   - status must be one of allowed values.
   - message must be non-empty.
 
+### ApiErrorResponse
+- Description: Standardized error envelope returned by global FastAPI exception handlers.
+- Fields:
+  - topic_name: str | None
+  - status: str (fixed `error`)
+  - message: str
+- Validation rules:
+  - status must equal `error`.
+  - message must be non-empty.
+
 ### ComposeServiceConfig
 - Description: Local docker compose service configuration for developer bootstrap.
 - Fields:
@@ -77,6 +87,7 @@
 1. pending -> connected (successful Kafka admin initialization)
 2. pending -> pending (retryable failure and attempts remaining)
 3. pending -> failed (attempt limit reached)
+4. connected -> closed (shutdown lifecycle event triggers admin cleanup)
 
 ### TopicCreateResult
 1. request_valid -> created (topic created)

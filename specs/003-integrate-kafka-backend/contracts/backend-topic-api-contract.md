@@ -61,17 +61,24 @@ Existing topic response (200 OK):
 Validation/runtime failure response (4xx/5xx):
 ```json
 {
-  "topic_name": "agent-events",
+  "topic_name": null,
   "status": "error",
   "message": "Validation failed: topic_name is required"
 }
 ```
+
+Global exception handling contract:
+- Validation exceptions (`422`) MUST return the structured error envelope.
+- HTTP exceptions (`4xx/5xx`) MUST return the structured error envelope.
+- Unhandled exceptions (`500`) MUST return the structured error envelope.
 
 ## Startup Behavior Contract
 
 - Service MUST attempt Kafka admin initialization during startup.
 - Service MUST retry on connection failure using configured retry count and timeout.
 - Service MUST fail startup if retry limit is exhausted.
+- Service SHOULD emit diagnostics per startup connection attempt and final failure reason.
+- Service MUST release Kafka admin resources during FastAPI shutdown lifecycle handling.
 
 ## Local Infrastructure Contract (Docker Compose)
 

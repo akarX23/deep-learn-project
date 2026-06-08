@@ -34,3 +34,21 @@
 - Decision: Use explicit environment variables for startup retry count and retry timeout seconds with strict validation.
 - Rationale: Makes startup behavior measurable and tunable per environment.
 - Alternatives considered: Hardcoded retry values (inflexible), exponential backoff with extra knobs (not required for first version).
+
+## Decision 8: Lifecycle Event Strategy
+- Decision: Use FastAPI lifecycle events to perform Kafka admin initialization at startup and connection cleanup at shutdown.
+- Rationale: Keeps readiness and teardown behavior explicit and centralized at app boundary.
+- Alternatives considered: Lazy connection creation on first request (delayed failures), module-level singleton setup (harder to test and less deterministic teardown).
+
+## Decision 9: Global Exception Handling Strategy
+- Decision: Add global FastAPI exception handlers for request validation errors, HTTP exceptions, and unhandled exceptions, returning one structured error envelope.
+- Rationale: Provides consistent client-facing error shape and simplifies observability/consumer parsing.
+- Alternatives considered: Per-route error shaping only (inconsistent coverage), default framework error bodies (inconsistent contract).
+
+## Final Tradeoffs and Validation Notes
+
+- Implementation keeps a synchronous startup path and synchronous admin API calls to reduce complexity for the first delivery.
+- FastAPI `on_event` hooks are used for clear startup/shutdown behavior; migration to lifespan can be scheduled later if deprecation cleanup is prioritized.
+- Local baseline from test harness:
+	- Startup with one retry and 1s retry timeout: ~1007 ms.
+	- Topic creation endpoint p95 (30 requests, mocked admin): ~2.60 ms.

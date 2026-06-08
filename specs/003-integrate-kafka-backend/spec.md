@@ -11,6 +11,7 @@
 
 - Q: How should Kafka environment variables be loaded at runtime? → A: Load from `.env.local` when present, then allow already-initialized process environment variables to override.
 - Q: What additional local infrastructure should docker-compose include? → A: Include Kafka UI using `provectuslabs/kafka-ui:latest` and connect it to the Kafka container.
+- Q: How should FastAPI exceptions be handled? → A: Add global exception handlers for validation errors, HTTP exceptions, and unhandled exceptions that always return one structured error payload shape.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -87,6 +88,8 @@ As a developer, I need a root-level Docker Compose file that runs Kafka plus Kaf
 - **FR-011**: The environment documentation MUST define all required Kafka connectivity and retry variables used by the backend service and include `.env.local` examples.
 - **FR-012**: The system MUST define UX consistency requirements, including predictable API response structure and clear error messaging for startup and topic creation flows.
 - **FR-013**: The system MUST define measurable performance requirements for startup retry handling and topic-creation response latency under expected local-development load.
+- **FR-014**: The backend service MUST use FastAPI lifecycle events to manage startup Kafka-admin initialization and shutdown resource cleanup.
+- **FR-015**: The backend service MUST implement global FastAPI exception handlers for request validation errors (422), HTTP exceptions (4xx/5xx), and unhandled exceptions (500), and MUST return a single structured error response shape across these paths.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -105,6 +108,7 @@ As a developer, I need a root-level Docker Compose file that runs Kafka plus Kaf
 - **SC-004**: 100% of invalid topic-creation requests return structured validation errors without service termination.
 - **SC-005**: 100% of duplicate topic-creation requests return deterministic already-exists outcomes.
 - **SC-006**: Developers can start local Kafka and Kafka UI infrastructure from the root `docker-compose.yaml` in a single command, reach running Kafka in under 2 minutes, and access Kafka UI connected to the Kafka service.
+- **SC-007**: 100% of request-validation, HTTP, and unhandled API failures return the documented structured error payload shape without crashing the service.
 
 ## Assumptions
 

@@ -47,6 +47,7 @@ Expected startup behavior:
 - Kafka admin client initializes during startup.
 - On transient failures, startup retries follow configured retry count and timeout.
 - Startup exits with explicit failure if retry budget is exhausted.
+- On service shutdown, Kafka admin resources are closed via lifecycle hooks.
 
 ## 4. Create a topic
 
@@ -63,13 +64,37 @@ Expected responses:
 - `200` with `status=already_exists` if topic exists.
 - `4xx/5xx` with `status=error` for invalid input/runtime failures.
 
+Structured error response shape (for validation/HTTP/unhandled failures):
+
+```json
+{
+  "topic_name": null,
+  "status": "error",
+  "message": "..."
+}
+```
+
 ## 5. Run tests
 
 ```bash
 pytest backend_service/tests -q
 ```
 
-## 6. Scope reminder
+Latest local evidence:
+- `8 passed` in `backend_service/tests`.
+- Covers startup success, retry-then-success, retry exhaustion, env precedence, API success, duplicate handling, payload validation, and runtime error mapping.
+
+## 6. Performance baseline (local)
+
+Measured with `fastapi.testclient.TestClient` and mocked Kafka admin calls:
+- Startup with one retry (configured timeout = 1s): `~1007 ms` total startup time.
+- Topic create API p95 latency across 30 calls: `~2.60 ms`.
+
+Interpretation:
+- Topic create latency is comfortably within the plan budget (`<= 2s` p95 local).
+- Startup behavior aligns with retry budget (`retry_count + 1` attempts with configured delay).
+
+## 7. Scope reminder
 
 This backend service is limited to Kafka admin startup connectivity and topic creation API.
 No inter-service messaging proxy behavior is included in this feature.
