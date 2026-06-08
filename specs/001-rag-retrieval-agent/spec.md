@@ -5,6 +5,16 @@
 **Status**: Draft  
 **Input**: User description: "Implement the RAG/Retrieval Agent for a multi-agent AI Tutor application, scoped to this agent only."
 
+## Clarifications
+
+### Session 2026-06-08
+
+- Q: How should the fitz document lifecycle be modeled for one-time initialization across page processing? → A: Keep an in-memory dict of file path to fitz.Document on the RAGAgent instance for a single invocation, outside serializable graph state.
+- Q: How should .env.local be structured across agents? → A: Use one global .env.local with comment-based section headers per agent plus a shared section for variables used by all agents.
+- Q: How should requirements be structured across agents? → A: Use one requirements.txt with comment-based sections for shared dependencies and each agent (RAG, Planner, Teaching).
+- Q: What should be the batching scope for vision model image-description calls? → A: Batch images per page, preserve image order, and keep page association; apply VLM_BATCH_SIZE within each page.
+- Q: How should retained_content be handled in extracted_pages output? → A: Exclude retained_content from output payloads to avoid bloating extracted_pages; keep compiled_material as the only final assembled text output.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Extract Relevant PDF Content (Priority: P1)
@@ -51,6 +61,7 @@ As the Planner Agent integration point, I need schema-valid output with completi
 1. **Given** one valid PDF and one missing path, **When** processing completes, **Then** status is partial and non-fatal errors are reported.
 2. **Given** all files are unreadable, **When** processing cannot produce any successful extraction, **Then** status is failed and a fatal exception or failed-state behavior is raised consistently.
 3. **Given** a successful request, **When** output is returned, **Then** request_id, user_prompt, and schema_version are mirrored from input.
+4. **Given** successful page extraction, **When** output is returned, **Then** extracted_pages includes audit metadata only and omits retained page text content.
 
 ---
 
@@ -80,20 +91,28 @@ As the Planner Agent integration point, I need schema-valid output with completi
 - **FR-010**: The system MUST return aggregate counters for total pages processed and total pages included.
 - **FR-011**: The system MUST report non-fatal errors in an errors list and continue processing remaining files/pages when possible.
 - **FR-012**: The system MUST return status as complete, partial, or failed, where partial indicates mixed success and failed indicates no usable completion path.
-- **FR-013**: The system MUST perform image understanding calls per extracted image and exactly one final compilation call after all pages have been processed.
+- **FR-013**: The system MUST perform image understanding calls in one or more batches per page (bounded by VLM_BATCH_SIZE) and exactly one final compilation call after all pages have been processed.
 - **FR-014**: The system MUST expose extraction, assembly, scoring, prompt, configuration, and LLM client responsibilities through the requested module/file structure.
 - **FR-015**: The system MUST provide standalone test inputs including at least one sample PDF and a valid serialized sample input payload.
 - **FR-016**: The system MUST include automated tests that cover page counting, text/table/image extraction behavior, table serialization, relevance scoring high/low cases, schema-valid full-run output, partial failure handling, and strict relevance-threshold filtering.
 - **FR-017**: The system MUST define UX consistency requirements, including stable Markdown formatting conventions, predictable section organization, and clear labeling of retained study content.
 - **FR-018**: The system MUST define measurable performance requirements for synchronous processing, including per-request completion and graceful handling under expected document sizes.
+- **FR-019**: The system MUST load each source PDF document once per request and reuse that in-memory document handle across page-level extraction to avoid repeated document re-open operations.
+- **FR-020**: The system MUST keep runtime-only document handles outside serializable LangGraph state and manage their lifecycle within the request execution boundary.
+- **FR-021**: The system MUST define one project-level .env.local that includes a shared section and distinct agent-specific sections for configuration variables.
+- **FR-022**: The system MUST define one project-level requirements.txt with comment-based sections for shared dependencies and agent-specific dependencies (RAG, Planner, Teaching).
+- **FR-023**: The system MUST support batched image-description calls with batch size controlled by VLM_BATCH_SIZE and process batches within page boundaries while preserving image order.
+- **FR-024**: The system MUST support a configurable image-description instruction prompt that combines a general image-analysis directive with the request user_prompt context.
+- **FR-025**: The system MUST omit retained_content from extracted_pages in RAGAgentOutput; compiled_material is the only final text artifact returned in the response payload.
+- **FR-026**: The system MUST organize imports at the top of each file in grouped blocks with line breaks separating standard-library imports, third-party library imports, and project-local imports.
 
 ### Key Entities *(include if feature involves data)*
 
 - **RAGAgentInput**: Request contract containing request_id, user_prompt, file_paths, include_tables, include_images, relevance_threshold, and schema_version.
 - **RAGAgentOutput**: Response contract containing mirrored metadata, compiled_material, extracted_pages audit list, aggregate counters, errors, and final status.
-- **ExtractedPage**: Per-page audit record with source file reference, page number, relevance score, extraction status, OCR usage flag, and page-specific errors.
+- **ExtractedPage**: Per-page audit record with source file reference, page number, relevance score, extraction status, OCR usage flag, and page-specific errors; excludes retained page text content in output.
 - **PageExtractionStatus**: Enum defining SUCCESS, SKIPPED_IRRELEVANT, and FAILED_EXTRACTION.
-- **Retained Page Content**: Assembled page-level textual representation (text, table content, image descriptions) eligible for final compilation.
+- **Retained Page Content (Internal)**: Assembled page-level textual representation (text, table content, image descriptions) used internally for compilation but not returned in extracted_pages.
 
 ## Success Criteria *(mandatory)*
 
