@@ -5,34 +5,38 @@
 
 ## Summary
 
-Implement a synchronous Planner Agent that receives a natural language user query, classifies its
-intent using LLM-based reasoning over a configurable agent registry, and routes the request to the
-correct downstream specialized agent (RAG Agent, Teaching Agent, Quiz & Eval Agent) by constructing
-a fully-typed, schema-valid input payload.
+Implement the Planner Agent as the **central async orchestrator** of the AI Tutor multi-agent system.
+The Planner runs as a long-lived Kafka consumer process. It receives user queries from the
+`init-planner` topic, assesses the learner's proficiency level (naive / intermediate / advanced)
+using LLM reasoning, optionally engages the learner in a single-turn clarification via
+`clarify-user-level`, decomposes the task into a `LearningPlan`, and dispatches RAG / Teaching /
+Quiz agents in parallel by producing typed JSON messages to their respective Kafka topics.
 
-The pipeline uses LangGraph StateGraph for explicit, observable orchestration. A query complexity
-gate routes simple queries through a fast classification path and complex/short queries through
-query rewriting, optional HyDE augmentation (for RAG routing), and guardrail validation. A retry
-loop (up to 3 attempts) handles payload construction failures gracefully. New agents are registered
-in a single `AgentRegistry` entry without modifying core pipeline logic.
+After dispatch, the Planner consumes agent responses from `rag-complete`, `material-compiled`, and
+`quiz-complete`, validates each response for completeness and quality, retries invalid responses
+up to MAX_RETRIES, and synthesizes a coherent final answer calibrated to the learner's level.
+The synthesized `PlannerResponse` is published to the `planner-response` topic.
 
-LiteLLM provides the unified model call interface. All configuration is environment-variable-driven,
-consistent with the RAG Agent pattern.
+The LangGraph StateGraph orchestrates the internal pipeline. LiteLLM provides the unified LLM
+interface. All configuration (Kafka brokers, model names, thresholds, timeouts) is
+environment-variable-driven, consistent with the RAG Agent pattern.
 
 ## Technical Context
 
 **Language/Version**: Python 3.11
-**Primary Dependencies**: pydantic v2, LangGraph, LiteLLM, pytest
-**Storage**: N/A (stateless per-request; no persistence)
-**Testing**: pytest
+**Primary Dependencies**: pydantic v2, LangGraph, LiteLLM, confluent-kafka-python, pytest
+**Storage**: N/A (stateless per-request; no persistence in v1; Redis session store planned for v2)
+**Testing**: pytest (with Kafka mock via testcontainers or in-memory mock producer/consumer)
 **Target Platform**: Linux runtime (local dev and container-ready execution)
-**Project Type**: Agent module/library within a multi-agent backend
-**Performance Goals**: Single query classification and routing completes within ≤10 seconds on
-developer hardware under standard LLM API latency; fast path (SIMPLE queries) targets ≤5 seconds
-**Constraints**: Synchronous execution only; no external vector DB; environment-variable LLM config;
-LangGraph node execution order is code-defined (not LLM-driven); max 3 retry attempts
-**Scale/Scope**: Single request per invocation; initial registry supports 3 agent types; designed
-for O(N) registry lookup where N is number of registered agents (expected < 20)
+**Project Type**: Long-lived async consumer/producer agent within a Kafka-based multi-agent backend
+**Performance Goals**: End-to-end orchestration (consume `init-planner` → produce `planner-response`)
+within ≤60 seconds under standard LLM and Kafka latency; SIMPLE path (no clarification, 2 agents)
+targets ≤30 seconds
+**Constraints**: Async Kafka I/O; synchronous LangGraph node execution within each processing cycle;
+environment-variable LLM and Kafka config; MAX_RETRIES=3 per agent; agent response timeout=120s;
+MIN_CONTENT_LENGTH=100 chars
+**Scale/Scope**: One Planner process handles one request at a time per consumer group partition;
+horizontal scaling via Kafka consumer group for concurrency; initial registry supports 3 agent types
 
 ## Constitution Check
 
@@ -90,27 +94,44 @@ specs/000-planner-agent/
 
 ```text
 project/
-└── schemas.py           ← shared; add PlannerInput, PlannerOutput, RoutingDecision,
-                            IntentCandidate, AgentType, QueryComplexity, GuardrailResult
+└── schemas.py           ← shared; PlannerMessage, PlannerResponse, LearnerLevel,
+                            LearningPlan, LearnerProfile, RAGAgentInput, RAGAgentOutput,
+                            TeachingAgentInput, TeachingAgentOutput,
+                            QuizAgentInput, QuizAgentOutput,
+                            ClarifyUserLevelMessage, UserClarificationResponse
 
 planner_agent/
 ├── __init__.py
-├── agent.py             ← LangGraph StateGraph definition; run_planner(input) entrypoint
-├── registry.py          ← AgentRegistry class, AgentRegistryEntry, default registrations
-├── classifier.py        ← detect_complexity(), classify_intent() LLM call
+├── agent.py             ← LangGraph StateGraph; main consumer loop run_planner()
+├── registry.py          ← AgentRegistry, AgentRegistryEntry, default registrations
+│                           (each entry: agent_type, produce_topic, consume_topic,
+│                            intent_description, supports_hyde, input_contract_builder)
+├── classifier.py        ← detect_complexity(), classify_intent(), assess_learner_level()
 ├── rewriter.py          ← rewrite_query() LLM call
 ├── hyde.py              ← generate_hyde_doc() LLM call
-├── guardrails.py        ← check_guardrails() LLM call; returns GuardrailResult
-├── payload_builder.py   ← build_payload(entry, planner_input, state) per agent type
+├── guardrails.py        ← check_guardrails() → ALLOWED | WARN | BLOCKED
+├── payload_builder.py   ← build_payload(entry, planner_state) per agent type
+├── validator.py         ← validate_query(), validate_agent_response()
+│                           checks: non-empty, MIN_CONTENT_LENGTH, request_id match,
+│                           schema conformance, malformed JSON detection
+├── synthesizer.py       ← synthesize_response() — combines agent outputs, calibrates
+│                           to learner_level, produces synthesized_content
+├── kafka_client.py      ← KafkaProducer / KafkaConsumer wrappers (confluent-kafka)
+│                           produce(topic, message), consume(topics, timeout)
+│                           deduplication by request_id + agent_type
 ├── llm_client.py        ← call_llm(messages, config) — same pattern as rag_agent
-├── prompts.py           ← INTENT_CLASSIFICATION_PROMPT, QUERY_REWRITE_PROMPT,
-│                           GUARDRAIL_PROMPT, HYDE_PROMPT
-├── config.py            ← PlannerConfig dataclass; env var loaders
+├── prompts.py           ← LEARNER_LEVEL_PROMPT, INTENT_CLASSIFICATION_PROMPT,
+│                           QUERY_REWRITE_PROMPT, GUARDRAIL_PROMPT, HYDE_PROMPT,
+│                           LEARNING_PLAN_PROMPT, SYNTHESIS_PROMPT
+├── config.py            ← PlannerConfig; env var loaders for LLM + Kafka
 └── tests/
     ├── __init__.py
     ├── inputs/
-    │   ├── sample_input.json     ← valid PlannerInput fixture
-    │   └── sample_queries.json   ← labeled queries for routing accuracy (SC-002)
+    │   ├── sample_input.json           ← valid PlannerMessage fixture
+    │   ├── sample_queries.json         ← labeled queries for level + routing accuracy
+    │   ├── mock_rag_response.json      ← valid RAGAgentOutput fixture
+    │   ├── mock_teaching_response.json ← valid TeachingAgentOutput fixture
+    │   └── mock_quiz_response.json     ← valid QuizAgentOutput fixture
     └── test_planner_agent.py
 ```
 
@@ -118,69 +139,354 @@ planner_agent/
 Shared schemas at repository root (`project/schemas.py`). Each responsibility is an independent
 module file to support parallel development across team members.
 
+## Kafka Topics Architecture
+
+### Topic Map
+
+| Topic | Direction | Producer | Consumer | Message Schema |
+|-------|-----------|----------|----------|---------------|
+| `init-planner` | → Planner | Application / UI layer | Planner Agent | `PlannerMessage` |
+| `clarify-user-level` | ← Planner | Planner Agent | UI / session layer | `ClarifyUserLevelMessage` |
+| `user-clarification-response` | → Planner | UI / session layer | Planner Agent | `UserClarificationResponse` |
+| `rag` | ← Planner | Planner Agent | RAG Agent | `RAGAgentInput` |
+| `teaching` | ← Planner | Planner Agent | Teaching Agent | `TeachingAgentInput` |
+| `quiz` | ← Planner | Planner Agent | Quiz Agent | `QuizAgentInput` |
+| `rag-complete` | → Planner | RAG Agent | Planner Agent | `RAGAgentOutput` |
+| `material-compiled` | → Planner | Teaching Agent | Planner Agent | `TeachingAgentOutput` |
+| `quiz-complete` | → Planner | Quiz Agent | Planner Agent | `QuizAgentOutput` |
+| `planner-response` | ← Planner | Planner Agent | Application / UI layer | `PlannerResponse` |
+
+### Kafka Configuration (environment variables)
+
+```bash
+KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+KAFKA_CONSUMER_GROUP_ID=planner-agent-group
+KAFKA_AUTO_OFFSET_RESET=earliest
+KAFKA_ENABLE_AUTO_COMMIT=false          # manual commit after successful processing
+KAFKA_SESSION_TIMEOUT_MS=45000
+KAFKA_MAX_POLL_INTERVAL_MS=300000
+AGENT_RESPONSE_TIMEOUT_SEC=120          # per-agent wait timeout
+```
+
+### Message Correlation and Deduplication
+
+- Every produced message carries the originating `request_id`.
+- `kafka_client.py` maintains an in-memory `seen_messages: set[tuple[str,str]]` of
+  `(request_id, agent_type)` to deduplicate duplicate Kafka deliveries within a session.
+- Stale messages whose `request_id` does not match any active request are logged and discarded.
+
+---
+
 ## LangGraph Pipeline Design
 
 ### Node Responsibilities
 
-| Node | Inputs from State | Outputs to State | Conditional? |
-|------|------------------|-----------------|--------------|
-| `validate_input` | `input` | `errors` | No |
-| `detect_complexity` | `input.user_query` | `complexity` | No |
-| `rewrite_query` | `input.user_query`, `attempt_count` | `query_rewritten` | Yes: COMPLEX or word_count < 5 |
-| `classify_intent` | `query_rewritten` or `user_query`, registry | `candidates` | No |
-| `check_guardrails` | `query_rewritten`, `complexity` | `guardrail_result` | Yes: COMPLEX only |
-| `generate_hyde_doc` | `query_rewritten`, top candidate | `hyde_doc` | Yes: RAG_AGENT + (short or conf < 0.85) |
-| `build_payload` | top candidate, `input`, `hyde_doc` | `routing_decision` | No |
-| `validate_and_retry` | `routing_decision`, `attempt_count` | `attempt_count`, back to rewrite | Yes: payload invalid AND retries remain |
-| `emit_result` | `routing_decision`, `errors`, `input` | `output` | Terminal |
-
-### LLM Call Budget per Path
-
-| Path | Nodes making LLM calls | Max calls |
-|------|------------------------|-----------|
-| SIMPLE, clear RAG query | classify_intent | 1 |
-| SIMPLE, RAG + HyDE | classify_intent, generate_hyde_doc | 2 |
-| COMPLEX, non-RAG | rewrite_query, check_guardrails, classify_intent | 3 |
-| COMPLEX, RAG + HyDE | rewrite_query, check_guardrails, classify_intent, generate_hyde_doc | 4 |
-| COMPLEX + 1 retry | + rewrite_query, classify_intent | +2 per retry |
+| Node | Trigger condition | LLM call? | Kafka I/O |
+|------|------------------|-----------|----------|
+| `validate_query` | Always | No | Consume: `init-planner` |
+| `assess_learner_level` | Valid query | Yes (LEARNER_LEVEL_PROMPT) | — |
+| `produce_clarification` | level_confidence < 0.65 AND not already clarified | No | Produce: `clarify-user-level` |
+| `wait_for_clarification` | Clarification produced | No | Consume: `user-clarification-response` (timeout 120s) |
+| `check_guardrails` | After level known | Yes (GUARDRAIL_PROMPT) | — |
+| `rewrite_query` | COMPLEX or word_count < 5 | Yes (QUERY_REWRITE_PROMPT) | — |
+| `plan_learning_path` | After rewrite/level | Yes (LEARNING_PLAN_PROMPT) | — |
+| `generate_hyde_doc` | RAG in plan AND (short query OR conf < 0.85) | Yes (HYDE_PROMPT) | — |
+| `dispatch_agents` | Learning plan ready | No | Produce: `rag`, `teaching`, `quiz` (parallel) |
+| `collect_responses` | After dispatch | No | Consume: `rag-complete`, `material-compiled`, `quiz-complete` |
+| `validate_responses` | Responses collected | No | — |
+| `retry_agent` | Response invalid AND retries < MAX_RETRIES | No | Re-produce to agent topic |
+| `synthesize_response` | All valid responses collected | Yes (SYNTHESIS_PROMPT) | — |
+| `emit_result` | Synthesis complete | No | Produce: `planner-response` |
 
 ### Conditional Edge Logic
 
 ```
-validate_input  → emit_result       [if errors non-empty]
-                → detect_complexity [if valid]
+validate_query
+  → emit_result[failed]          if schema invalid / empty query / bad UUID
+  → assess_learner_level         if valid
 
-detect_complexity → rewrite_query   [if COMPLEX or word_count < 5]
-                  → classify_intent [if SIMPLE]
+assess_learner_level
+  → produce_clarification        if confidence < 0.65 AND first time in session
+  → check_guardrails             if confidence ≥ 0.65 OR already clarified
 
-rewrite_query → classify_intent [always after rewriting]
+produce_clarification → wait_for_clarification
 
-classify_intent → check_guardrails  [if COMPLEX]
-                → generate_hyde_doc [if SIMPLE AND top=RAG_AGENT AND (short OR conf<0.85)]
-                → build_payload     [if SIMPLE AND top≠RAG_AGENT]
-                → emit_result       [if all candidates < threshold]
+wait_for_clarification
+  → check_guardrails             after response received (level updated)
+  → check_guardrails             after timeout (level defaults to intermediate)
 
-check_guardrails → emit_result      [if BLOCKED]
-                 → generate_hyde_doc [if ALLOWED/WARN AND top=RAG_AGENT AND (short OR conf<0.85)]
-                 → build_payload    [if ALLOWED/WARN AND top≠RAG_AGENT]
+check_guardrails
+  → emit_result[failed]          if BLOCKED
+  → rewrite_query                if ALLOWED/WARN AND (COMPLEX or short)
+  → plan_learning_path           if ALLOWED/WARN AND SIMPLE
 
-generate_hyde_doc → build_payload [always]
+rewrite_query → plan_learning_path
 
-build_payload → validate_and_retry [if payload invalid]
-              → emit_result        [if payload valid]
+plan_learning_path
+  → generate_hyde_doc            if RAG_AGENT in plan AND (short OR conf < 0.85)
+  → dispatch_agents              otherwise
 
-validate_and_retry → rewrite_query [if attempt_count < MAX_RETRIES]
-                   → emit_result   [if attempt_count ≥ MAX_RETRIES → ambiguous]
+generate_hyde_doc → dispatch_agents
+
+dispatch_agents → collect_responses
+
+collect_responses
+  → validate_responses           when all expected responses received OR timeout
+
+validate_responses
+  → retry_agent                  for each invalid response (if retries < MAX_RETRIES)
+  → synthesize_response          when all valid OR max retries exhausted
+
+retry_agent → dispatch_agents[single agent re-dispatch] → collect_responses
+
+synthesize_response → emit_result[complete | partial]
 ```
+
+### LLM Call Budget per Path
+
+| Path | Nodes with LLM calls | Max calls |
+|------|---------------------|-----------|
+| SIMPLE, 1 agent, clear level | assess_level, plan | 2 |
+| SIMPLE, 2 agents, clear level | assess_level, plan, synthesize | 3 |
+| COMPLEX, RAG + Teaching + HyDE | assess_level, guardrail, rewrite, plan, hyde, synthesize | 6 |
+| With clarification round-trip | + clarification question gen | +1 |
+| With 1 agent retry (re-plan) | + rewrite, synthesize | +2 |
+
+---
+
+## Response Validation Design
+
+Every agent response is validated in `validator.py` before reaching synthesis:
+
+| Check | Rule | On failure |
+|-------|------|-----------|
+| Schema conformance | Response parses against pydantic model | Retry dispatch |
+| Non-empty primary field | `compiled_material` / `teaching_content` / `questions` not empty/null | Retry dispatch |
+| MIN_CONTENT_LENGTH | Primary field ≥ 100 characters | Flag `vague`, retry with augmented prompt |
+| request_id match | Response `request_id` == dispatched `request_id` | Discard (stale/misrouted) |
+| Status check | `status` != `failed` | Mark agent as failed; no retry |
+| JSON integrity | Valid UTF-8 JSON, no truncation markers | Retry dispatch |
+
+Retry prompt augmentation adds to the original prompt:
+```
+[RETRY {n}/{MAX}] Previous response was rejected: {reason}.
+Please provide a more complete and detailed response (minimum 100 characters).
+```
+
+---
 
 ## System Architecture Overview
 
-End-to-end architecture from user query to downstream agents, data stores, and external tooling.
+End-to-end architecture: user query → Kafka → Planner Orchestrator → parallel agent dispatch → response collection → synthesis → Kafka.
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════════════╗
 ║                              AI TUTOR SYSTEM                                         ║
 ╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │                            USER / APPLICATION LAYER                      │
+  │                                                                          │
+  │   Learner types a natural language query                                 │
+  │   e.g. "Explain gradient descent from chapter 3"  (naive learner)        │
+  │         "Derive backprop equations for MLP"        (advanced learner)    │
+  │         "neural nets?"                             (ambiguous → clarify) │
+  └──────────────────────┬───────────────────────────────────┬───────────────┘
+                         │ produce                           ▲ consume
+                         ▼                                   │
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │                         KAFKA  MESSAGE  BROKER                           │
+  │                                                                          │
+  │   ──────────────────────────────────────────────────────────────────     │
+  │   Topic: init-planner          ◄── User / App Layer produces here        │
+  │   Topic: user-clarification-response ◄── Learner answers clarification   │
+  │   Topic: planner-response      ──► App Layer consumes final answer       │
+  │   Topic: clarify-user-level    ──► App Layer asks learner a question     │
+  │   ──────────────────────────────────────────────────────────────────     │
+  │   Topic: rag                   ──► RAG Agent consumes                    │
+  │   Topic: teaching              ──► Teaching Agent consumes               │
+  │   Topic: quiz                  ──► Quiz Agent consumes                   │
+  │   Topic: rag-complete          ◄── RAG Agent produces results            │
+  │   Topic: material-compiled     ◄── Teaching Agent produces results       │
+  │   Topic: quiz-complete         ◄── Quiz Agent produces results           │
+  └──────────┬───────────────────────────────────────────────┬───────────────┘
+   consume   │  init-planner                                 │  produce
+   ─────────────────────────────                            ─│──────────────
+             ▼                                               │ planner-response
+╔════════════════════════════════════════════════════════════╪══════════════╗
+║           PLANNER AGENT  (Orchestrator)                    │              ║
+║           planner_agent/agent.py  ─  LangGraph StateGraph  │              ║
+║                                                            │              ║
+║  ┌─────────────────────────────────────────────────────────│────────────┐ ║
+║  │  [1] validate_query                                      │            │ ║
+║  │       schema check │ UUID │ non-empty │ version check    │            │ ║
+║  │       guardrail: prompt injection detection              │            │ ║
+║  │            │ invalid ──────────────────────────────────► emit_result  │ ║
+║  │            │ valid                                       │            │ ║
+║  │            ▼                                             │            │ ║
+║  │  [2] assess_learner_level  ◄──── LiteLLM                │            │ ║
+║  │       LEARNER_LEVEL_PROMPT                               │            │ ║
+║  │       naive │ intermediate │ advanced  +  confidence     │            │ ║
+║  │            │ conf ≥ 0.65                                 │            │ ║
+║  │            │                     conf < 0.65             │            │ ║
+║  │            │           ┌─────────────────────────────┐   │            │ ║
+║  │            │           │ [3] produce_clarification    │   │            │ ║
+║  │            │           │  Kafka → clarify-user-level  │   │            │ ║
+║  │            │           │ [4] wait_for_clarification   │   │            │ ║
+║  │            │           │  Kafka ← user-clarification  │   │            │ ║
+║  │            │           │  (timeout 120s → intermediate│   │            │ ║
+║  │            │           └─────────────┬───────────────┘   │            │ ║
+║  │            └────────────────────────►│                   │            │ ║
+║  │                                      ▼                   │            │ ║
+║  │  [5] check_guardrails  ◄──── LiteLLM (COMPLEX only)      │            │ ║
+║  │       GUARDRAIL_PROMPT                                    │            │ ║
+║  │       ALLOWED │ WARN │ BLOCKED                            │            │ ║
+║  │            │ BLOCKED ──────────────────────────────────► emit_result  │ ║
+║  │            │ ALLOWED/WARN                                 │            │ ║
+║  │            ▼                                             │            │ ║
+║  │  [6] rewrite_query  ◄──── LiteLLM  (if COMPLEX/short)   │            │ ║
+║  │       QUERY_REWRITE_PROMPT                               │            │ ║
+║  │       "neural nets?" → "Can you quiz me on the           │            │ ║
+║  │        fundamentals of neural networks?"                 │            │ ║
+║  │            │                                             │            │ ║
+║  │            ▼                                             │            │ ║
+║  │  [7] plan_learning_path  ◄──── LiteLLM                  │            │ ║
+║  │       LEARNING_PLAN_PROMPT                               │            │ ║
+║  │       → LearningPlan { required_agents,                  │            │ ║
+║  │           parallel_groups, depth, objective }            │            │ ║
+║  │            │                                             │            │ ║
+║  │            │ if RAG + short/conf<0.85                    │            │ ║
+║  │            ├──► [8] generate_hyde_doc ◄── LiteLLM        │            │ ║
+║  │            │         HYDE_PROMPT                         │            │ ║
+║  │            │         hypothetical passage prepended       │            │ ║
+║  │            │         to RAGAgentInput.user_prompt         │            │ ║
+║  │            ▼                                             │            │ ║
+║  │  [9] dispatch_agents  (PARALLEL)                        │            │ ║
+║  │    Kafka produce → rag       (RAGAgentInput)             │            │ ║
+║  │    Kafka produce → teaching  (TeachingAgentInput)        │            │ ║
+║  │    Kafka produce → quiz      (QuizAgentInput) [optional] │            │ ║
+║  │            │                                             │            │ ║
+║  │            ▼                                             │            │ ║
+║  │  [10] collect_responses                                  │            │ ║
+║  │    Kafka consume ← rag-complete       (RAGAgentOutput)   │            │ ║
+║  │    Kafka consume ← material-compiled  (TeachingOutput)   │            │ ║
+║  │    Kafka consume ← quiz-complete      (QuizAgentOutput)  │            │ ║
+║  │    dedup by (request_id, agent_type)                     │            │ ║
+║  │    timeout: 120s per agent                               │            │ ║
+║  │            │                                             │            │ ║
+║  │            ▼                                             │            │ ║
+║  │  [11] validate_responses  (validator.py)                 │            │ ║
+║  │    ✓ schema conformance (pydantic)                       │            │ ║
+║  │    ✓ non-empty primary content field                     │            │ ║
+║  │    ✓ content ≥ MIN_CONTENT_LENGTH (100 chars)            │            │ ║
+║  │    ✓ request_id match                                    │            │ ║
+║  │    ✓ status != failed                                    │            │ ║
+║  │    ✓ valid UTF-8 JSON                                    │            │ ║
+║  │    invalid + retries left ──► retry_agent ──► [9]        │            │ ║
+║  │    invalid + max retries  ──► mark partial               │            │ ║
+║  │            │                                             │            │ ║
+║  │            ▼                                             │            │ ║
+║  │  [12] synthesize_response  ◄──── LiteLLM                │            │ ║
+║  │       SYNTHESIS_PROMPT                                   │            │ ║
+║  │       calibrated to learner_level                        │            │ ║
+║  │       combines: study_material + teaching_content + quiz │            │ ║
+║  │            │                                             │            │ ║
+║  │            ▼                                             │            │ ║
+║  │  [13] emit_result                                        │            │ ║
+║  │       PlannerResponse { complete │ partial │ failed }    │            │ ║
+║  └──────────────────────────────────────────────────────────┼────────────┘ ║
+║                                                             │              ║
+║    AgentRegistry  (registry.py)                             │              ║
+║    ┌────────────────────────────────────────────────────┐   │              ║
+║    │ RAG_AGENT       produce:rag       consume:rag-complete  │              ║
+║    │ TEACHING_AGENT  produce:teaching  consume:material-compiled            ║
+║    │ QUIZ_EVAL_AGENT produce:quiz      consume:quiz-complete  │              ║
+║    │ [FUTURE_AGENT]  produce:X         consume:X-complete    │              ║
+║    └────────────────────────────────────────────────────┘   │              ║
+╚═════════════════════════════════════════════════════════════╪══════════════╝
+                           parallel dispatch                  │
+          ┌─────────────────────┬──────────────────┐         │
+          ▼                     ▼                  ▼         │
+  ╔═══════════════╗   ╔══════════════════╗  ╔════════════════╗│
+  ║   RAG AGENT   ║   ║  TEACHING AGENT  ║  ║ QUIZ & EVAL    ║│
+  ║ rag_agent/    ║   ║ teaching_agent/  ║  ║ AGENT          ║│
+  ║               ║   ║                  ║  ║ quiz_agent/    ║│
+  ║ consumes:rag  ║   ║ consumes:teaching║  ║ consumes:quiz  ║│
+  ║               ║   ║                  ║  ║                ║│
+  ║ LangGraph     ║   ║  LangGraph       ║  ║  LangGraph     ║│
+  ║ PDF extract   ║   ║  explanation     ║  ║  question gen  ║│
+  ║ relevance     ║   ║  calibrated to   ║  ║  + answer eval ║│
+  ║ scoring       ║   ║  learner_level   ║  ║                ║│
+  ║               ║   ║                  ║  ║                ║│
+  ║ produces:     ║   ║ produces:        ║  ║ produces:      ║│
+  ║ rag-complete  ║   ║ material-compiled║  ║ quiz-complete  ║│
+  ╚═══════╦═══════╝   ╚════════╦═════════╝  ╚═══════╦════════╝│
+          │                    │                    │         │
+          └──────────┬─────────┘                    │         │
+                     ▼                              ▼         │
+  ┌────────────────────────────────────────────────────────────│──────────┐
+  │                       DATA & TOOL LAYER                    │          │
+  │                                                            │          │
+  │  ┌──────────────┐  ┌─────────────────┐  ┌────────────────────────┐   │
+  │  │ PDF / File   │  │  LLM Providers  │  │   MCP Servers          │   │
+  │  │ System       │  │  (via LiteLLM)  │  │  (Model Context Proto) │   │
+  │  │              │  │                 │  │                        │   │
+  │  │ *.pdf files  │  │ OpenAI GPT-4o   │  │  filesystem MCP        │   │
+  │  │ PyMuPDF      │  │ Anthropic Claude │  │  → file read/write     │   │
+  │  │ extract      │  │ local Ollama    │  │                        │   │
+  │  │ (RAG Agent)  │  │ vLLM endpoint   │  │  web-search MCP        │   │
+  │  │              │  │                 │  │  → live web results    │   │
+  │  │              │  │ env vars:       │  │                        │   │
+  │  │              │  │ *_LLM_MODEL     │  │  memory MCP            │   │
+  │  │              │  │ *_API_BASE      │  │  → cross-session store │   │
+  │  │              │  │ *_API_KEY       │  │                        │   │
+  │  └──────────────┘  └─────────────────┘  │  future custom tools   │   │
+  │                                         └────────────────────────┘   │
+  │  ┌──────────────┐  ┌─────────────────┐  ┌────────────────────────┐   │
+  │  │ Vector Store │  │ Session / State │  │  Kafka Broker          │   │
+  │  │ (future v2)  │  │ Store           │  │  (confluent-kafka)     │   │
+  │  │              │  │                 │  │                        │   │
+  │  │ ChromaDB /   │  │ Redis (v2):     │  │  All agent topics      │   │
+  │  │ FAISS        │  │ learner profile │  │  Consumer groups       │   │
+  │  │ pre-indexed  │  │ session history │  │  Manual offset commit  │   │
+  │  │ retrieval    │  │ level cache     │  │  Dedup by request_id   │   │
+  │  └──────────────┘  └─────────────────┘  └────────────────────────┘   │
+  └───────────────────────────────────────────────────────────────────────┘
+
+  ┌───────────────────────────────────────────────────────────────────────┐
+  │                    SHARED INFRASTRUCTURE                              │
+  │                                                                       │
+  │  project/schemas.py   ← ALL agent input/output pydantic models        │
+  │                          single source of truth for Kafka contracts    │
+  │                                                                       │
+  │  */kafka_client.py    ← KafkaProducer/Consumer wrapper per agent      │
+  │  */llm_client.py      ← call_llm(messages, config) same pattern       │
+  │  */config.py          ← env-var loaders (LLM + Kafka) per module      │
+  └───────────────────────────────────────────────────────────────────────┘
+```
+
+### Data Flow Summary
+
+```
+Learner Query
+    │
+    ▼ Kafka: init-planner
+Planner Agent (LangGraph Orchestrator)
+    ├── [1]  validate_query          (schema, UUID, injection guard)
+    ├── [2]  assess_learner_level    (1 LLM call)
+    ├── [3-4] clarify? ─────────────► Kafka: clarify-user-level
+    │                   ◄──────────── Kafka: user-clarification-response
+    ├── [5]  check_guardrails        (1 LLM call, COMPLEX only)
+    ├── [6]  rewrite_query           (1 LLM call, if COMPLEX/short)
+    ├── [7]  plan_learning_path      (1 LLM call)
+    ├── [8]  generate_hyde_doc       (1 LLM call, RAG + vague only)
+    ├── [9]  dispatch_agents ────────► Kafka: rag | teaching | quiz (parallel)
+    │
+    ├── [10] collect_responses ◄───── Kafka: rag-complete | material-compiled | quiz-complete
+    ├── [11] validate_responses      (pydantic, length, id-match, retry loop)
+    ├── [12] synthesize_response     (1 LLM call, calibrated to learner_level)
+    └── [13] emit_result ────────────► Kafka: planner-response
+```
 
   ┌─────────────────────────────────────────────────────────────┐
   │                        USER LAYER                           │
@@ -371,18 +677,17 @@ PlannerInput ──► Planner Agent Pipeline (LangGraph)
                       ▼                             ▼
                LiteLLM (unified)           LiteLLM (unified)
                LLM Providers               LLM Providers
-               PDF File System             Session Store
-               [Vector DB v2]              [Quiz DB v2]
-               [MCP Tools]                 [MCP Tools]
-```
-
 ## Complexity Tracking
 
 No constitution violations identified. Complexity is justified:
 
 | Element | Why Needed |
 |---------|-----------|
-| LangGraph StateGraph (multi-node) | Explicit conditional branching (complexity gate, HyDE gate, guardrail gate, retry loop) cannot be cleanly expressed as linear function calls without sacrificing observability |
-| HyDE augmentation node | Measurably improves RAG routing precision for short queries; isolated to one module (`hyde.py`); adds ≤1 LLM call only when triggered |
-| Retry loop | Bounded (max 3); handles recoverable payload construction failures without propagating hard errors to callers |
-| Guardrails node | Educational-scope safety check; COMPLEX path only; isolated to `guardrails.py` |
+| Kafka async I/O | Decouples agent lifecycle; enables parallel dispatch without blocking; required for scalable multi-agent coordination |
+| LangGraph StateGraph (13 nodes) | Explicit conditional branching (level gate, clarification loop, guardrail, rewrite, HyDE, parallel dispatch, validation, retry, synthesis) cannot be cleanly expressed as linear functions without sacrificing observability and testability |
+| Learner level assessment | Core personalisation requirement; without it all responses are generic; isolated to `classifier.py` |
+| Multi-turn clarification (Kafka loop) | Required for ambiguous queries; bounded to 1 clarification per session; timeout prevents indefinite blocking |
+| HyDE augmentation node | Improves RAG precision for vague queries; isolated to `hyde.py`; ≤1 LLM call only when triggered |
+| Response validation + retry loop | Agent responses can be empty or malformed; bounded retries (max 3) with augmented prompt prevent garbage reaching synthesis |
+| Synthesis node | Combines outputs from heterogeneous agents into a coherent, level-calibrated response; cannot be avoided without degrading output quality |
+| Guardrails node | Educational-scope safety; COMPLEX path only; isolated to `guardrails.py` |

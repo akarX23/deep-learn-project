@@ -2,17 +2,31 @@
 
 ## Decision 1: Orchestration Runtime — LangGraph StateGraph
 
-- **Decision**: Implement the Planner pipeline as a LangGraph `StateGraph` with explicit named nodes
-  and conditional edges for simple vs. complex routing paths.
-- **Rationale**: LangGraph provides deterministic control over a multi-step pipeline that includes
-  conditional branching (complexity gate, HyDE gate, guardrail gate) and a retry loop. Each node is
-  independently testable. This is architecturally consistent with the RAG Agent, reducing onboarding
-  friction for team members already working on that module.
-- **Alternatives considered**: Hand-rolled sequential function calls (no retry/branch support without
-  ad-hoc logic); LangChain AgentExecutor (less explicit state control, harder to bound LLM iterations);
-  plain async pipeline (loses observability and state introspection).
+- **Decision**: Implement the Planner pipeline as a LangGraph `StateGraph` with 13 named nodes
+  and conditional edges covering: query validation, learner-level assessment, multi-turn
+  clarification, guardrails, query rewriting, learning-path planning, HyDE, parallel agent
+  dispatch, response collection, response validation, retry loop, synthesis, and result emission.
+- **Rationale**: LangGraph provides deterministic control over a complex conditional pipeline.
+  Each node is independently testable. Consistent with RAG Agent architecture.
+- **Alternatives considered**: Hand-rolled async pipeline (no retry/branch support without ad-hoc
+  logic); LangChain AgentExecutor (less explicit state control).
 
-## Decision 2: Intent Classification Strategy — LLM over Agent Registry Descriptions
+## Decision 2: Async Agent Coordination — Apache Kafka
+
+- **Decision**: Use Apache Kafka (via `confluent-kafka-python`) as the message bus for all
+  inter-agent communication. The Planner consumes from `init-planner` and `user-clarification-response`,
+  produces to `rag`, `teaching`, `quiz`, `clarify-user-level`, and `planner-response`, and consumes
+  agent results from `rag-complete`, `material-compiled`, and `quiz-complete`.
+- **Rationale**: Kafka decouples the Planner from agent lifecycle — agents can be restarted,
+  scaled, or swapped without modifying the Planner. Parallel dispatch is natural: produce to all
+  agent topics before waiting on any. Manual offset commit ensures at-least-once processing without
+  data loss. Message deduplication by `(request_id, agent_type)` guards against duplicate delivery.
+- **Alternatives considered**: Direct HTTP calls to agent services (tight coupling, synchronous
+  blocking, no parallel dispatch without async wrappers); gRPC streaming (higher complexity, less
+  ecosystem support for Python agent pattern); Redis pub/sub (no persistence, weaker delivery
+  guarantees, no consumer groups for horizontal scaling).
+
+## Decision 3: Intent Classification Strategy — LLM over Agent Registry Descriptions
 
 - **Decision**: Classify intent by prompting an LLM with all registered agents' `intent_description`
   strings and asking it to score relevance of the user query to each agent. Top score above threshold →
@@ -24,7 +38,18 @@
   model, sensitive to phrasing); rule-based keyword matching (breaks on paraphrases and synonyms);
   fine-tuned text classifier (too costly for a group project scope).
 
-## Decision 3: Query Complexity Detection — Lightweight Heuristic First
+## Decision 4: Learner Level Assessment — LLM with Confidence Threshold + Single-Turn Clarification
+
+- **Decision**: Assess learner proficiency (naive / intermediate / advanced) via a dedicated LLM call
+  with `LEARNER_LEVEL_PROMPT`. If confidence < 0.65, produce one clarification question to
+  `clarify-user-level` and wait (timeout 120s, default to `intermediate`). Once established per
+  session, level is not re-asked.
+- **Rationale**: A single dedicated assessment call gives cleaner signal than trying to infer level
+  from the routing classification call. Single-turn clarification balances personalisation against
+  friction — one question is acceptable; more would frustrate learners.
+- **Alternatives considered**: Always default to `intermediate` (loses personalisation); multi-turn
+  clarification (too much friction for a tutoring app); embedding-based level classifier (needs
+  training data the team doesn't have).
 
 - **Decision**: Classify a query as COMPLEX if any of the following apply: word count < 5, presence
   of multi-intent connectors ("also", "and then", "but also", "after that"), or the query is a single
