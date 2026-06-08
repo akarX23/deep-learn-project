@@ -22,7 +22,7 @@ htmlcov/
 
 # Environment files
 .env
-.env.*
+.env.local
 
 # OS/editor
 .DS_Store
