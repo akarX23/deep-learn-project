@@ -10,6 +10,7 @@
 ### Session 2026-06-08
 
 - Q: How should Kafka environment variables be loaded at runtime? → A: Load from `.env.local` when present, then allow already-initialized process environment variables to override.
+- Q: What additional local infrastructure should docker-compose include? → A: Include Kafka UI using `provectuslabs/kafka-ui:latest` and connect it to the Kafka container.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -47,15 +48,15 @@ As an internal operator or automation client, I need an API endpoint to create K
 
 ### User Story 3 - Provide Local Kafka Infrastructure Bootstrap (Priority: P3)
 
-As a developer, I need a root-level Docker Compose file that runs Kafka-only infrastructure and aligned environment examples so I can bring up local messaging dependencies consistently.
+As a developer, I need a root-level Docker Compose file that runs Kafka plus Kafka UI infrastructure and aligned environment examples so I can bring up and inspect local messaging dependencies consistently.
 
 **Why this priority**: Local infrastructure support improves onboarding and repeatability but can follow after service and API behavior are defined.
 
-**Independent Test**: Can be tested by running Docker Compose from project root and validating Kafka starts with the documented environment values.
+**Independent Test**: Can be tested by running Docker Compose from project root and validating both Kafka and Kafka UI start with documented environment values and connectivity.
 
 **Acceptance Scenarios**:
 
-1. **Given** Docker is available, **When** Docker Compose is run from project root, **Then** a Kafka service starts successfully with required runtime variables.
+1. **Given** Docker is available, **When** Docker Compose is run from project root, **Then** Kafka and Kafka UI services start successfully with required runtime variables and UI-to-Kafka connectivity.
 2. **Given** the environment example file, **When** a developer configures local values from it, **Then** the backend service can use those variables to attempt Kafka startup connectivity.
 
 ---
@@ -82,7 +83,7 @@ As a developer, I need a root-level Docker Compose file that runs Kafka-only inf
 - **FR-007**: The backend microservice MUST provide a single API endpoint to create Kafka topics.
 - **FR-008**: The topic-creation API MUST validate input and return structured errors for invalid requests.
 - **FR-009**: The topic-creation API MUST handle already-existing topics safely without crashing the service.
-- **FR-010**: The project root MUST contain a `docker-compose.yaml` defining a Kafka service only, including required Kafka runtime environment variables.
+- **FR-010**: The project root MUST contain a `docker-compose.yaml` defining Kafka and Kafka UI services, with Kafka UI using image `provectuslabs/kafka-ui:latest` and configured to connect to the Kafka service.
 - **FR-011**: The environment documentation MUST define all required Kafka connectivity and retry variables used by the backend service and include `.env.local` examples.
 - **FR-012**: The system MUST define UX consistency requirements, including predictable API response structure and clear error messaging for startup and topic creation flows.
 - **FR-013**: The system MUST define measurable performance requirements for startup retry handling and topic-creation response latency under expected local-development load.
@@ -103,7 +104,7 @@ As a developer, I need a root-level Docker Compose file that runs Kafka-only inf
 - **SC-003**: At least 95% of valid topic-creation API calls complete successfully within 2 seconds in local development conditions.
 - **SC-004**: 100% of invalid topic-creation requests return structured validation errors without service termination.
 - **SC-005**: 100% of duplicate topic-creation requests return deterministic already-exists outcomes.
-- **SC-006**: Developers can start local Kafka infrastructure from the root `docker-compose.yaml` in a single command and reach a running Kafka service in under 2 minutes on a standard development machine.
+- **SC-006**: Developers can start local Kafka and Kafka UI infrastructure from the root `docker-compose.yaml` in a single command, reach running Kafka in under 2 minutes, and access Kafka UI connected to the Kafka service.
 
 ## Assumptions
 
