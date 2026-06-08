@@ -44,10 +44,10 @@ python -m backend_service.app.main
 ```
 
 Expected startup behavior:
-- Kafka admin client initializes during startup.
+- Kafka admin client initializes during lifespan startup.
 - On transient failures, startup retries follow configured retry count and timeout.
 - Startup exits with explicit failure if retry budget is exhausted.
-- On service shutdown, Kafka admin resources are closed via lifecycle hooks.
+- On service shutdown, Kafka admin resources are closed via lifespan shutdown handling.
 
 ## 4. Create a topic
 
@@ -81,20 +81,52 @@ pytest backend_service/tests -q
 ```
 
 Latest local evidence:
-- `8 passed` in `backend_service/tests`.
-- Covers startup success, retry-then-success, retry exhaustion, env precedence, API success, duplicate handling, payload validation, and runtime error mapping.
+- `10 passed` in `backend_service/tests`.
+- Covers startup success, retry-then-success, retry exhaustion, shutdown cleanup, env precedence, API success, duplicate handling, payload validation, HTTP exception envelope, unhandled exception envelope, and runtime error mapping.
 
-## 6. Performance baseline (local)
+## 6. Run quality checks
+
+```bash
+ruff check backend_service
+ruff format --check backend_service
+python -m compileall backend_service
+```
+
+Latest local evidence:
+- `ruff check` passed.
+- `ruff format --check` passed.
+- `python -m compileall backend_service` completed successfully.
+
+## 7. Performance baseline (local)
 
 Measured with `fastapi.testclient.TestClient` and mocked Kafka admin calls:
-- Startup with one retry (configured timeout = 1s): `~1007 ms` total startup time.
-- Topic create API p95 latency across 30 calls: `~2.60 ms`.
+- Startup with one retry (configured timeout = 1s): `~1006.53 ms` total startup time.
+- Topic create API p95 latency across 30 calls: `~2.24 ms`.
 
 Interpretation:
 - Topic create latency is comfortably within the plan budget (`<= 2s` p95 local).
 - Startup behavior aligns with retry budget (`retry_count + 1` attempts with configured delay).
 
-## 7. Scope reminder
+## 8. Compose startup-time validation
+
+Target:
+- Bring up local Kafka + Kafka UI in under 2 minutes.
+
+Current environment result:
+- Blocked in this execution environment because compose commands are unavailable:
+  - `docker compose` subcommand is not present.
+  - `docker-compose` binary is not installed.
+
+Validation command to run in a compose-capable environment:
+
+```bash
+start=$(date +%s)
+docker compose up -d kafka kafka-ui
+end=$(date +%s)
+echo $((end-start))
+```
+
+## 9. Scope reminder
 
 This backend service is limited to Kafka admin startup connectivity and topic creation API.
 No inter-service messaging proxy behavior is included in this feature.

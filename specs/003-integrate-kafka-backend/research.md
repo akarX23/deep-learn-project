@@ -6,8 +6,8 @@
 - Alternatives considered: `confluent-kafka` admin API (high performance but heavier native dependency requirements), `aiokafka` (async-first, unnecessary for current sync admin scope).
 
 ## Decision 2: FastAPI Startup Connectivity Strategy
-- Decision: Initialize Kafka admin client in FastAPI startup event and retry connection according to env-driven retry count and retry timeout.
-- Rationale: Ensures service readiness semantics are explicit and predictable before serving API calls.
+- Decision: Initialize Kafka admin client during FastAPI lifespan startup and retry connection according to env-driven retry count and retry timeout.
+- Rationale: Ensures service readiness semantics are explicit and predictable before serving API calls while staying on non-deprecated framework APIs.
 - Alternatives considered: Lazy-initialize on first API call (delays failure and harms reliability), background retry after startup (unclear readiness state).
 
 ## Decision 3: Environment Loading Precedence
@@ -36,9 +36,9 @@
 - Alternatives considered: Hardcoded retry values (inflexible), exponential backoff with extra knobs (not required for first version).
 
 ## Decision 8: Lifecycle Event Strategy
-- Decision: Use FastAPI lifecycle events to perform Kafka admin initialization at startup and connection cleanup at shutdown.
-- Rationale: Keeps readiness and teardown behavior explicit and centralized at app boundary.
-- Alternatives considered: Lazy connection creation on first request (delayed failures), module-level singleton setup (harder to test and less deterministic teardown).
+- Decision: Use FastAPI lifespan events to perform Kafka admin initialization at startup and connection cleanup at shutdown; avoid deprecated `on_event` handlers.
+- Rationale: Keeps readiness and teardown behavior explicit, centralized at app boundary, and aligned with current framework guidance.
+- Alternatives considered: Deprecated `on_event` lifecycle handlers (rejected due to deprecation), lazy connection creation on first request (delayed failures), module-level singleton setup (harder to test and less deterministic teardown).
 
 ## Decision 9: Global Exception Handling Strategy
 - Decision: Add global FastAPI exception handlers for request validation errors, HTTP exceptions, and unhandled exceptions, returning one structured error envelope.
@@ -48,7 +48,7 @@
 ## Final Tradeoffs and Validation Notes
 
 - Implementation keeps a synchronous startup path and synchronous admin API calls to reduce complexity for the first delivery.
-- FastAPI `on_event` hooks are used for clear startup/shutdown behavior; migration to lifespan can be scheduled later if deprecation cleanup is prioritized.
+- Lifecycle management uses FastAPI lifespan events to avoid deprecated APIs and keep startup/shutdown orchestration in one place.
 - Local baseline from test harness:
 	- Startup with one retry and 1s retry timeout: ~1007 ms.
 	- Topic creation endpoint p95 (30 requests, mocked admin): ~2.60 ms.

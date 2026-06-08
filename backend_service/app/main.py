@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+from contextlib import asynccontextmanager
 from collections.abc import Callable
 
 import uvicorn
@@ -21,11 +22,40 @@ def create_app(
     settings: KafkaSettings | None = None,
     admin_factory: Callable[[KafkaSettings], KafkaAdminService] = KafkaAdminService,
 ) -> FastAPI:
-    app = FastAPI(title="Kafka Backend Service", version="0.1.0")
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        resolved_settings = settings or KafkaSettings.from_env()
+        app.state.kafka_settings = resolved_settings
+        app.state.kafka_admin = admin_factory(resolved_settings)
+
+        max_attempts = resolved_settings.startup_retry_count + 1
+        last_error: Exception | None = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                logger.info("Kafka admin connect attempt %s/%s", attempt, max_attempts)
+                app.state.kafka_admin.connect()
+                logger.info("Kafka admin connected")
+                break
+            except Exception as exc:  # pragma: no cover - defensive branch
+                last_error = exc
+                if attempt == max_attempts:
+                    raise RuntimeError(
+                        f"Kafka startup connection failed after {max_attempts} attempts: {last_error}"
+                    )
+                time.sleep(resolved_settings.startup_retry_timeout_seconds)
+
+        try:
+            yield
+        finally:
+            app.state.kafka_admin.close()
+
+    app = FastAPI(title="Kafka Backend Service", version="0.1.0", lifespan=lifespan)
     app.include_router(topics_router)
 
     @app.exception_handler(RequestValidationError)
-    async def handle_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+    async def handle_validation_error(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
         return JSONResponse(
             status_code=422,
             content={"topic_name": None, "status": "error", "message": str(exc)},
@@ -42,33 +72,17 @@ def create_app(
             },
         )
 
-    @app.on_event("startup")
-    async def startup() -> None:
-        resolved_settings = settings or KafkaSettings.from_env()
-        app.state.kafka_settings = resolved_settings
-        app.state.kafka_admin = admin_factory(resolved_settings)
-
-        max_attempts = resolved_settings.startup_retry_count + 1
-        last_error: Exception | None = None
-        for attempt in range(1, max_attempts + 1):
-            try:
-                logger.info("Kafka admin connect attempt %s/%s", attempt, max_attempts)
-                app.state.kafka_admin.connect()
-                logger.info("Kafka admin connected")
-                return
-            except Exception as exc:  # pragma: no cover - defensive branch
-                last_error = exc
-                if attempt == max_attempts:
-                    break
-                time.sleep(resolved_settings.startup_retry_timeout_seconds)
-
-        raise RuntimeError(
-            f"Kafka startup connection failed after {max_attempts} attempts: {last_error}"
+    @app.exception_handler(Exception)
+    async def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
+        logger.exception("Unhandled request error", exc_info=exc)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "topic_name": None,
+                "status": "error",
+                "message": "Internal server error",
+            },
         )
-
-    @app.on_event("shutdown")
-    async def shutdown() -> None:
-        app.state.kafka_admin.close()
 
     return app
 

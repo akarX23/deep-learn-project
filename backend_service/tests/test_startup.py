@@ -9,7 +9,9 @@ from backend_service.app.config import ComposeSettings, KafkaSettings
 from backend_service.app.main import create_app
 
 
-def test_settings_env_precedence_over_dotenv(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_settings_env_precedence_over_dotenv(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     env_file = tmp_path / ".env.local"
     env_file.write_text(
         "BACKEND_KAFKA_BOOTSTRAP_SERVERS=file-kafka:9092\n"
@@ -24,9 +26,13 @@ def test_settings_env_precedence_over_dotenv(tmp_path, monkeypatch: pytest.Monke
     assert settings.startup_retry_count == 7
 
 
-def test_settings_missing_bootstrap_servers_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_settings_missing_bootstrap_servers_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("BACKEND_KAFKA_BOOTSTRAP_SERVERS", raising=False)
-    with pytest.raises(RuntimeError, match="BACKEND_KAFKA_BOOTSTRAP_SERVERS is required"):
+    with pytest.raises(
+        RuntimeError, match="BACKEND_KAFKA_BOOTSTRAP_SERVERS is required"
+    ):
         KafkaSettings.from_env(dotenv_path=str(Path("/tmp/does-not-exist.env")))
 
 
@@ -58,6 +64,32 @@ def test_startup_retry_then_success(monkeypatch: pytest.MonkeyPatch) -> None:
         pass
 
     assert FakeAdmin.attempts == 3
+
+
+def test_shutdown_lifecycle_invokes_admin_close() -> None:
+    class CloseTrackingAdmin:
+        closed = False
+
+        def __init__(self, settings: KafkaSettings) -> None:
+            self.settings = settings
+
+        def connect(self) -> None:
+            return None
+
+        def close(self) -> None:
+            type(self).closed = True
+
+    settings = KafkaSettings(
+        bootstrap_servers="kafka:9092",
+        startup_retry_count=0,
+        startup_retry_timeout_seconds=1,
+    )
+    app = create_app(settings=settings, admin_factory=CloseTrackingAdmin)
+
+    with TestClient(app):
+        pass
+
+    assert CloseTrackingAdmin.closed is True
 
 
 def test_startup_retry_exhausted_fails(monkeypatch: pytest.MonkeyPatch) -> None:

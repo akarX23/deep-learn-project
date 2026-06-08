@@ -12,6 +12,7 @@
 - Q: How should Kafka environment variables be loaded at runtime? → A: Load from `.env.local` when present, then allow already-initialized process environment variables to override.
 - Q: What additional local infrastructure should docker-compose include? → A: Include Kafka UI using `provectuslabs/kafka-ui:latest` and connect it to the Kafka container.
 - Q: How should FastAPI exceptions be handled? → A: Add global exception handlers for validation errors, HTTP exceptions, and unhandled exceptions that always return one structured error payload shape.
+- Q: Which FastAPI lifecycle mechanism should be used? → A: Use FastAPI lifespan events only; do not use deprecated lifecycle APIs such as `on_event` handlers.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -88,7 +89,7 @@ As a developer, I need a root-level Docker Compose file that runs Kafka plus Kaf
 - **FR-011**: The environment documentation MUST define all required Kafka connectivity and retry variables used by the backend service and include `.env.local` examples.
 - **FR-012**: The system MUST define UX consistency requirements, including predictable API response structure and clear error messaging for startup and topic creation flows.
 - **FR-013**: The system MUST define measurable performance requirements for startup retry handling and topic-creation response latency under expected local-development load.
-- **FR-014**: The backend service MUST use FastAPI lifecycle events to manage startup Kafka-admin initialization and shutdown resource cleanup.
+- **FR-014**: The backend service MUST use FastAPI lifespan events (non-deprecated API) to manage startup Kafka-admin initialization and shutdown resource cleanup, and MUST NOT use deprecated lifecycle handlers such as `on_event`.
 - **FR-015**: The backend service MUST implement global FastAPI exception handlers for request validation errors (422), HTTP exceptions (4xx/5xx), and unhandled exceptions (500), and MUST return a single structured error response shape across these paths.
 
 ### Key Entities *(include if feature involves data)*

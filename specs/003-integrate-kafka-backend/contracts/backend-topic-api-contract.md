@@ -74,11 +74,12 @@ Global exception handling contract:
 
 ## Startup Behavior Contract
 
-- Service MUST attempt Kafka admin initialization during startup.
+- Service MUST attempt Kafka admin initialization during lifespan startup.
 - Service MUST retry on connection failure using configured retry count and timeout.
 - Service MUST fail startup if retry limit is exhausted.
 - Service SHOULD emit diagnostics per startup connection attempt and final failure reason.
-- Service MUST release Kafka admin resources during FastAPI shutdown lifecycle handling.
+- Service MUST release Kafka admin resources during lifespan shutdown handling.
+- Service MUST use FastAPI lifespan events and MUST NOT use deprecated lifecycle handlers such as `on_event`.
 
 ## Local Infrastructure Contract (Docker Compose)
 

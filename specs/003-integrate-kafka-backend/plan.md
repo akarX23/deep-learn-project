@@ -5,7 +5,7 @@
 
 ## Summary
 
-Deliver a root-level FastAPI backend service that establishes Kafka admin connectivity during lifecycle-managed startup, cleans up resources at shutdown, and exposes a single topic-creation endpoint. Add unified global exception handling (validation, HTTP, and unhandled) with a consistent error payload shape. Provide root-level Docker Compose for Kafka plus Kafka UI and aligned environment examples.
+Deliver a root-level FastAPI backend service that initializes Kafka admin connectivity during application startup and performs resource cleanup at shutdown using FastAPI lifespan events only (no deprecated `on_event` handlers). Provide a single topic-creation endpoint with deterministic outcomes and a unified error envelope across validation, HTTP, and unhandled failures. Keep local developer bootstrap simple with root-level Docker Compose for Kafka + Kafka UI and aligned environment examples.
 
 ## Technical Context
 
@@ -15,8 +15,8 @@ Deliver a root-level FastAPI backend service that establishes Kafka admin connec
 **Testing**: pytest, FastAPI TestClient, mock admin adapters  
 **Target Platform**: Linux local/dev and CI  
 **Project Type**: Backend microservice (`backend_service/`)  
-**Performance Goals**: Topic-creation API p95 <= 2s in local conditions; startup retry behavior completes within configured attempt/time budget  
-**Constraints**: Topic-creation route only; load `.env.local` when present and allow process env override; lifecycle-managed startup/shutdown; unified structured error envelope for 422/HTTP/unhandled errors  
+**Performance Goals**: Topic-create API p95 <= 2s in local conditions; startup retry behavior completes within configured attempt/time budget  
+**Constraints**: Topic-create route only; `.env.local` defaults with process-env override; FastAPI lifespan-only lifecycle orchestration; unified structured error envelope for 422/HTTP/unhandled errors; avoid deprecated framework APIs  
 **Scale/Scope**: One Kafka cluster target per backend service instance
 
 ## Constitution Check
@@ -25,23 +25,23 @@ Deliver a root-level FastAPI backend service that establishes Kafka admin connec
 
 ### Pre-Phase 0 Gate Review
 
-- Code Quality Gate: PASS. Layered module layout (`config`, `kafka_admin`, `api`, `main`) with explicit boundaries and clear naming.
-- Testing Gate: PASS. Coverage includes startup success/failure/retry paths, API success/exists/validation/runtime error paths, and local infrastructure expectations.
-- UX Consistency Gate: PASS. Response format standardized across success and all handled error paths.
-- Performance Gate: PASS. Startup retry budget and topic-create latency budget are measurable and tracked.
-- Maintainability Gate: PASS. Startup diagnostics and documented decisions in research/contracts/quickstart are included.
+- Code Quality Gate: PASS. Architecture separates config, Kafka admin adapter, API, and app boundary; lifecycle design explicitly avoids deprecated FastAPI handlers.
+- Testing Gate: PASS. Planned coverage includes startup success/failure/retry, shutdown cleanup, endpoint outcomes, and global exception-envelope behavior.
+- UX Consistency Gate: PASS. API success and error response envelopes are standardized and contract-bound.
+- Performance Gate: PASS. Startup and endpoint latency budgets are explicit and measurable.
+- Maintainability Gate: PASS. Diagnostics and rationale are captured, and lifecycle behavior is centralized at app boundary.
 
 ## Phase 0: Research
 
-Research outcomes are recorded in `/specs/003-integrate-kafka-backend/research.md` and resolve all clarifications:
+Research consolidated in `/specs/003-integrate-kafka-backend/research.md` covers:
 
-- Kafka admin library choice and startup retry strategy.
-- `.env.local` plus process-env precedence.
-- Docker Compose topology with Kafka UI.
-- Global FastAPI exception handling strategy and unified error shape.
-- Lifecycle-managed startup and shutdown approach.
+- Kafka admin library selection and retry semantics.
+- `.env.local` precedence model with process-env overrides.
+- Docker Compose topology decisions for Kafka + Kafka UI.
+- FastAPI lifespan-only lifecycle strategy (no deprecated lifecycle handlers).
+- Global exception-envelope strategy for consistent API failures.
 
-No `NEEDS CLARIFICATION` items remain.
+All clarified requirements are resolved; no `NEEDS CLARIFICATION` items remain.
 
 ## Phase 1: Design and Contracts
 
@@ -53,23 +53,23 @@ Phase 1 outputs:
 
 Design highlights:
 
-- Configuration entity for Kafka connectivity and retry settings.
-- Startup state model for retry attempts and terminal failure.
-- API contract for `POST /api/v1/topics` with deterministic `created` and `already_exists` outcomes.
-- Unified error response entity and contract for validation, HTTP, and unhandled exceptions.
-- Lifecycle event requirement for startup initialization and shutdown cleanup.
+- `KafkaConnectionConfig` for runtime and retry controls.
+- `StartupConnectionState` including shutdown cleanup transition.
+- Single `POST /api/v1/topics` endpoint with deterministic created/already_exists outcomes.
+- `ApiErrorResponse` contract for validation, HTTP, and unhandled failures.
+- Lifespan-managed startup and shutdown lifecycle orchestration.
 
 Agent context update:
 
-- `.github/copilot-instructions.md` points to `specs/003-integrate-kafka-backend/plan.md`.
+- `.github/copilot-instructions.md` already points to `specs/003-integrate-kafka-backend/plan.md`.
 
 ## Post-Design Constitution Re-Check
 
-- Code Quality Gate: PASS. Design artifacts align with modular structure and bounded responsibilities.
-- Testing Gate: PASS. Independent, automatable tests cover startup, endpoint behavior, and exception contract consistency.
-- UX Consistency Gate: PASS. Unified error payload and predictable success payload are documented.
-- Performance Gate: PASS. Local baseline and budgets are documented with reproducible measurement approach.
-- Maintainability Gate: PASS. Non-obvious tradeoffs and diagnostics expectations are recorded.
+- Code Quality Gate: PASS. Separation of concerns is preserved and deprecated API usage is disallowed by design.
+- Testing Gate: PASS. Story-level tests map directly to lifecycle, endpoint, and error-envelope contracts.
+- UX Consistency Gate: PASS. Predictable success/error payload structure is explicit and reusable.
+- Performance Gate: PASS. Validation tasks and baseline capture are retained.
+- Maintainability Gate: PASS. Non-obvious tradeoffs and operational behavior are documented.
 
 ## Project Structure
 
@@ -105,8 +105,8 @@ docker-compose.yaml
 .env.local.example
 ```
 
-**Structure Decision**: Use a dedicated root-level microservice folder and root-level local infrastructure artifacts to keep deployment/bootstrap concerns explicit and isolated from existing agent modules.
+**Structure Decision**: Keep a dedicated root-level backend service and root-level infrastructure/bootstrap artifacts for clear operational ownership and easy local setup.
 
 ## Complexity Tracking
 
-No constitution violations or justified complexity exceptions.
+No constitution violations or justified exceptions.

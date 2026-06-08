@@ -47,5 +47,7 @@ def create_topic(payload: TopicCreateRequest, request: Request) -> JSONResponse:
         code = 200
         msg = "Topic already exists"
 
-    body = TopicCreateResponse(topic_name=payload.topic_name, status=status, message=msg)
+    body = TopicCreateResponse(
+        topic_name=payload.topic_name, status=status, message=msg
+    )
     return JSONResponse(status_code=code, content=body.model_dump())

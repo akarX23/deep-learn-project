@@ -87,7 +87,7 @@
 1. pending -> connected (successful Kafka admin initialization)
 2. pending -> pending (retryable failure and attempts remaining)
 3. pending -> failed (attempt limit reached)
-4. connected -> closed (shutdown lifecycle event triggers admin cleanup)
+4. connected -> closed (lifespan shutdown triggers admin cleanup)
 
 ### TopicCreateResult
 1. request_valid -> created (topic created)
