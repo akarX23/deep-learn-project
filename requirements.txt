@@ -4,3 +4,4 @@ sentence-transformers>=2.7.0
 litellm>=1.40.0
 langgraph>=0.2.0
 pytest>=8.0.0
+python-dotenv>=1.0.0

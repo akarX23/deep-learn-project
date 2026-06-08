@@ -94,3 +94,78 @@ class RAGAgentOutput(BaseModel):
         if value < 0:
             raise ValueError("total_pages_included cannot be negative")
         return value
+
+
+# ---------------------------------------------------------------------------
+# Teaching Agent schemas
+# ---------------------------------------------------------------------------
+
+
+class OutputMode(str, Enum):
+    """Learner level that governs explanation structure, vocabulary, and token ceiling."""
+
+    BEGINNER = "beginner"
+    INTERMEDIATE = "intermediate"
+    ADVANCED = "advanced"
+
+
+class TeachingAgentInput(BaseModel):
+    """Input payload received from the Planner Agent."""
+
+    topic: str
+    output_mode: OutputMode
+    context: str = ""
+
+    @field_validator("topic")
+    @classmethod
+    def validate_topic(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("topic cannot be empty")
+        return value
+
+
+class TeachingContent(BaseModel):
+    """Structured explanation payload returned in a successful Teaching Agent response."""
+
+    explanation: str
+    diagram: Optional[str] = None
+    notes: str
+    example: Optional[str] = None
+
+    @field_validator("explanation", "notes")
+    @classmethod
+    def validate_non_empty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value cannot be empty")
+        return value
+
+
+class TeachingMetadata(BaseModel):
+    """Audit record for the Teaching Agent response."""
+
+    topic: str
+    tokens_used: int = Field(ge=0)
+    model: str
+
+    @field_validator("model")
+    @classmethod
+    def validate_model(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("model cannot be empty")
+        return value
+
+
+class TeachingAgentOutput(BaseModel):
+    """Output payload returned by the Teaching Agent to the Planner Agent."""
+
+    status: str
+    output_mode: OutputMode
+    content: Optional[TeachingContent] = None
+    metadata: TeachingMetadata
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str) -> str:
+        if value not in {"ok", "error"}:
+            raise ValueError("status must be 'ok' or 'error'")
+        return value
