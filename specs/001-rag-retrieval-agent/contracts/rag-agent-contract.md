@@ -57,6 +57,7 @@ Defines the request and response contract between Planner and RAG Retrieval Agen
 - page_number is 1-based.
 - relevance_score is normalized to [0.0, 1.0].
 - ocr_used is always false in v1.
+- retained_content is intentionally absent; compiled_material is the only assembled text in the response.
 
 ## Status semantics
 - complete: all reachable files/pages processed with usable output and no blocking errors.

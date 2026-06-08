@@ -26,7 +26,7 @@
   - FAILED_EXTRACTION
 
 ### ExtractedPage
-- Description: Audit record for one processed page.
+- Description: Audit record for one processed page. Does NOT contain assembled page text; that is internal-only.
 - Fields:
   - file_name: str
   - page_number: int (1-based)
@@ -34,11 +34,16 @@
   - status: PageExtractionStatus
   - ocr_used: bool (always false in v1)
   - errors: list[str]
-  - retained_content: str | None
 - Validation rules:
   - page_number must be >= 1.
   - relevance_score must be in [0.0, 1.0].
-  - retained_content must be present when status is SUCCESS.
+
+### RetainedPageContent (Internal — not in output)
+- Description: Assembled per-page text used internally during compilation. Held by the agent; never serialized to output.
+- Fields:
+  - page_number: int
+  - file_name: str
+  - content: str
 
 ### RAGAgentOutput
 - Description: Agent response contract returned to Planner.
@@ -81,4 +86,4 @@
 ## Derived Fields
 - total_pages_processed: count of all attempted page records.
 - total_pages_included: count of ExtractedPage where status == SUCCESS.
-- compiled_material context: built from retained_content across SUCCESS pages only.
+- compiled_material context: built from internal RetainedPageContent records across SUCCESS pages only.

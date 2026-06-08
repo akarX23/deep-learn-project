@@ -39,3 +39,35 @@
 - Decision: Do not introduce additional external libraries beyond requested dependencies and pytest for testing.
 - Rationale: Current requirements are satisfiable with the selected stack; avoiding new dependencies keeps implementation risk low.
 - Alternatives considered: Adding PDF fixture-generation tooling; rejected for now because static sample assets satisfy testing requirements.
+
+---
+
+## Decision 9 (v2): fitz Document Lifecycle — One-Time Load Per Request
+- Decision: Store open `fitz.Document` handles in a `dict[str, fitz.Document]` on the `RAGAgent` instance, populated before `graph.invoke()` and released in a `finally` block after it returns.
+- Rationale: `fitz.Document` is a native C object that cannot be pickled; placing it in LangGraph `AgentState` breaks checkpointing and graph portability. Instance-level storage is the standard approach for non-serializable resources in LangGraph pipelines.
+- Alternatives considered: fitz.Document in AgentState (breaks checkpointing), pre-built list of fitz.Page objects (loses document metadata access), thread-local context (unnecessary for single-threaded synchronous processing).
+
+## Decision 10 (v2): VLM Image Batching Per Page
+- Decision: Chunk images per page into batches of `RAG_VLM_BATCH_SIZE` (default 4); send each batch as a multi-image LiteLLM content message; concatenate descriptions in order.
+- Rationale: Modern VLMs accept multi-image content arrays in a single API call. Batching per page reduces round-trips while preserving page-level provenance. Cross-page batching would blur context association.
+- Alternatives considered: One call per image (O(N) round-trips), batch across pages (provenance ambiguity), batch per file (same provenance issue).
+
+## Decision 11 (v2): Image Description Prompt — General + Contextual
+- Decision: `IMAGE_DESCRIPTION_PROMPT` combines a general educational-content analyst instruction with a context line embedding the user's study prompt.
+- Rationale: Anchoring to the user prompt biases VLM output toward topic-relevant visual content (diagrams, equations) and away from decorative noise.
+- Alternatives considered: Generic description-only prompt (topic-agnostic output), long multi-paragraph instruction (wastes VLM token budget).
+
+## Decision 12 (v2): retained_content Removed from Output Schema
+- Decision: Remove `ExtractedPage.retained_content` from the Pydantic schema entirely. Internally assembled page text is kept as plain strings in the agent during `_compile_material`, never written to `ExtractedPage`.
+- Rationale: Per-page full text in output multiplies payload size linearly. Downstream consumers need only `compiled_material`. Audit metadata (status, score, errors) suffices for diagnostics.
+- Alternatives considered: Strip at serialization time (misleading schema), keep as `Optional[str] = None` (semantically ambiguous), keep field (payload bloat).
+
+## Decision 13 (v2): Import Grouping Convention
+- Decision: Enforce three grouped import blocks (stdlib → third-party → project-local) separated by blank lines across all modules in `rag_agent/` and `project/`.
+- Rationale: Matches PEP 8 and isort conventions; improves dependency scanability and future linting enforcement via `ruff I` rules.
+- Alternatives considered: Flat alphabetical imports (mixes stdlib/third-party), ad-hoc ordering (inconsistent across files).
+
+## Decision 14 (v2): .env.local and requirements.txt Sectioning
+- Decision: Single `.env.local` with comment-based section headers (`# === Shared ===`, `# === RAG Agent ===`, placeholder sections for Planner/Teaching). Single `requirements.txt` with comment-based sections (`# --- Shared ---`, `# --- RAG Agent ---`, placeholder sections, `# --- Development / Testing ---`).
+- Rationale: All standard dotenv parsers and pip ignore `#` comments. Sections improve discoverability without breaking existing tooling.
+- Alternatives considered: Separate `.env.<agent>` files (multiple files to source), separate requirements files (install complexity).

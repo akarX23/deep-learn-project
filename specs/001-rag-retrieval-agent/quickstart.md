@@ -29,6 +29,7 @@ Set model/provider values before running the agent:
 Embedding model:
 
 - RAG_EMBEDDING_MODEL_NAME (default: all-MiniLM-L6-v2)
+- RAG_VLM_BATCH_SIZE (optional, default 4 — controls how many images per page are sent to the VLM in a single call)
 
 ## 3. Prepare sample input
 
@@ -76,3 +77,5 @@ Set relevance_threshold to 1.0 in sample_input.json and rerun:
 - Validated on 2026-05-27 using `sample_input.json`
 - Runtime baseline: 4.53 seconds
 - Observed output: `status=complete`, `total_pages_processed=6`, `total_pages_included=4`
+
+> **v2 note**: After clarification updates (2026-06-08), `extracted_pages` no longer includes `retained_content`. The `compiled_material` field remains the sole assembled text output.

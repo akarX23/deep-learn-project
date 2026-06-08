@@ -1,9 +1,9 @@
-# Tasks: RAG Retrieval Agent
+# Tasks: RAG Retrieval Agent (v2 Clarification Update)
 
 **Input**: Design documents from `/specs/001-rag-retrieval-agent/`
 **Prerequisites**: plan.md (required), spec.md (required), research.md, data-model.md, contracts/, quickstart.md
 
-**Tests**: Tests are required for this feature and are included in each user story.
+**Tests**: Tests are required for this feature and are included per user story.
 
 **Organization**: Tasks are grouped by user story so each story can be implemented and validated independently.
 
@@ -15,115 +15,108 @@
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-**Purpose**: Create package structure and baseline tooling for the RAG agent module.
+**Purpose**: Align shared environment and dependency layout with clarified architecture.
 
-- [X] T001 Create package directories and init files in project/__init__.py and rag_agent/__init__.py
-- [X] T002 Create test directory structure in rag_agent/tests/__init__.py and rag_agent/tests/inputs/.gitkeep
-- [X] T003 [P] Add Python dependency manifest for pydantic, pymupdf, sentence-transformers, litellm, langgraph, and pytest in requirements.txt
-- [X] T004 [P] Add pytest configuration for rag_agent tests in pytest.ini
+- [ ] T001 Add sectioned shared/agent dependency blocks in requirements.txt
+- [ ] T002 Create project-level shared plus per-agent sections in .env.local
+- [ ] T003 [P] Document .env.local section usage and VLM batch variable in rag_agent/README.md
+- [ ] T004 [P] Update sample env variable guidance for batch processing in specs/001-rag-retrieval-agent/quickstart.md
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-**Purpose**: Implement shared contracts and core abstractions required by all user stories.
+**Purpose**: Implement shared contract and infrastructure updates that all stories depend on.
 
 **⚠️ CRITICAL**: No user story implementation starts before this phase completes.
 
-- [X] T005 Implement PageExtractionStatus enum and shared schemas in project/schemas.py
-- [X] T006 Implement LLMConfig dataclass and environment-variable loaders in rag_agent/config.py
-- [X] T007 Implement unified LiteLLM call wrapper call_llm(messages, config) in rag_agent/llm_client.py
-- [X] T008 [P] Define IMAGE_DESCRIPTION_PROMPT and MATERIAL_COMPILATION_PROMPT constants in rag_agent/prompts.py
-- [X] T009 [P] Implement helper utilities serialize_table_to_markdown, assemble_page_content, and build_compilation_context in rag_agent/helpers.py
-- [X] T010 Wire rag_agent module exports for agent and tool entry points in rag_agent/__init__.py
+- [ ] T005 Remove retained_content from ExtractedPage and update output schema constraints in project/schemas.py
+- [ ] T006 Add VLM batch-size config loader and defaults in rag_agent/config.py
+- [ ] T007 [P] Add batch-aware image instruction template updates in rag_agent/prompts.py
+- [ ] T008 [P] Refactor image-description tools to support multi-image batch calls in rag_agent/tools.py
+- [ ] T009 Add fitz document lifecycle helpers for open/close per request in rag_agent/agent.py
+- [ ] T010 Reorder imports into stdlib/third-party/project-local groups across project/schemas.py and rag_agent/*.py
 
-**Checkpoint**: Shared schemas, config, llm abstraction, and helper utilities are ready for story work.
+**Checkpoint**: Shared schema, config, prompts, and core runtime scaffolding are ready for story implementation.
 
 ---
 
 ## Phase 3: User Story 1 - Extract Relevant PDF Content (Priority: P1) 🎯 MVP
 
-**Goal**: Process PDFs page-by-page, extract multimodal content, score relevance, and audit page outcomes.
+**Goal**: Process PDFs page-by-page with one-time fitz document loading and per-page batched image understanding.
 
-**Independent Test**: Run agent input with sample PDF and confirm every page has an ExtractedPage record with SUCCESS, SKIPPED_IRRELEVANT, or FAILED_EXTRACTION.
+**Independent Test**: Run a valid sample PDF and verify all pages produce audit entries while fitz documents are opened once per file and image descriptions are generated via page-scoped batches.
 
 ### Tests for User Story 1 (REQUIRED)
 
-- [X] T011 [P] [US1] Add fixture loader for sample input and sample PDF paths in rag_agent/tests/test_rag_agent.py
-- [X] T012 [P] [US1] Implement test_get_page_count in rag_agent/tests/test_rag_agent.py
-- [X] T013 [P] [US1] Implement test_extract_text_from_page in rag_agent/tests/test_rag_agent.py
-- [X] T014 [P] [US1] Implement test_extract_tables_from_page in rag_agent/tests/test_rag_agent.py
-- [X] T015 [P] [US1] Implement test_extract_images_from_page in rag_agent/tests/test_rag_agent.py
-- [X] T016 [US1] Implement test_serialize_table_to_markdown in rag_agent/tests/test_rag_agent.py
-- [X] T017 [P] [US1] Implement test_score_page_relevance_high in rag_agent/tests/test_rag_agent.py
-- [X] T018 [P] [US1] Implement test_score_page_relevance_low in rag_agent/tests/test_rag_agent.py
+- [ ] T011 [P] [US1] Add test for one-time fitz open per file during run in rag_agent/tests/test_rag_agent.py
+- [ ] T012 [P] [US1] Add test for per-page VLM batch chunking using RAG_VLM_BATCH_SIZE in rag_agent/tests/test_rag_agent.py
+- [ ] T013 [P] [US1] Add test for batched image prompt context propagation in rag_agent/tests/test_rag_agent.py
+- [ ] T014 [US1] Update extraction and relevance tests for refactored tool signatures in rag_agent/tests/test_rag_agent.py
 
 ### Implementation for User Story 1
 
-- [X] T019 [US1] Implement get_page_count and extract_text_from_page in rag_agent/tools.py
-- [X] T020 [P] [US1] Implement extract_tables_from_page using PyMuPDF table extraction in rag_agent/tools.py
-- [X] T021 [P] [US1] Implement extract_images_from_page using PyMuPDF image extraction in rag_agent/tools.py
-- [X] T022 [US1] Implement score_page_relevance with sentence-transformers cosine similarity in rag_agent/tools.py
-- [X] T023 [US1] Implement describe_image_with_vlm via llm_client.call_llm in rag_agent/tools.py
-- [X] T024 [US1] Implement LangGraph page-processing state model and tool-node orchestration in rag_agent/agent.py
-- [X] T025 [US1] Integrate per-page extraction, relevance threshold filtering, and ExtractedPage auditing in rag_agent/agent.py
-- [X] T026 [US1] Add sample PDF fixture with text/table/image coverage in rag_agent/tests/inputs/sample.pdf
-- [X] T027 [US1] Add valid serialized request fixture in rag_agent/tests/inputs/sample_input.json
+- [ ] T015 [US1] Refactor page extraction functions to consume opened fitz documents/pages in rag_agent/tools.py
+- [ ] T016 [US1] Implement per-page image batching and response aggregation in rag_agent/tools.py
+- [ ] T017 [US1] Integrate opened-document lookup into page pointers and graph state transitions in rag_agent/agent.py
+- [ ] T018 [US1] Update _process_next_page to use shared document handles and batched image descriptions in rag_agent/agent.py
+- [ ] T019 [US1] Preserve page-level audit outcomes for SUCCESS/SKIPPED_IRRELEVANT/FAILED_EXTRACTION with new extraction flow in rag_agent/agent.py
 
-**Checkpoint**: Page extraction, relevance filtering, and per-page audit flow are working independently.
+**Checkpoint**: US1 delivers correct extraction, relevance filtering, and page-level auditing with clarified fitz and batching behavior.
 
 ---
 
 ## Phase 4: User Story 2 - Compile Study Material for Teaching (Priority: P2)
 
-**Goal**: Produce one coherent Markdown document from retained page content.
+**Goal**: Compile coherent Markdown from internal retained content while keeping output payload slim.
 
-**Independent Test**: Run full flow and verify non-empty compiled_material with organized headings and preserved table/image-derived content.
+**Independent Test**: Execute full flow and verify compiled_material remains non-empty and coherent, while extracted_pages contains audit metadata only.
 
 ### Tests for User Story 2 (REQUIRED)
 
-- [X] T028 [US2] Implement test_rag_agent_output_schema for full-run validation in rag_agent/tests/test_rag_agent.py
+- [ ] T020 [P] [US2] Add test that compiled_material is the only assembled text output in rag_agent/tests/test_rag_agent.py
+- [ ] T021 [US2] Add test that extracted_pages omits retained_content in rag_agent/tests/test_rag_agent.py
 
 ### Implementation for User Story 2
 
-- [X] T029 [US2] Build retained-page compilation context assembly in rag_agent/agent.py
-- [X] T030 [US2] Implement final single-shot material compilation LLM call using MATERIAL_COMPILATION_PROMPT in rag_agent/agent.py
-- [X] T031 [US2] Ensure Markdown output consistency and fallback behavior when retained context is minimal in rag_agent/agent.py
+- [ ] T022 [US2] Maintain internal retained page text structures separate from ExtractedPage output records in rag_agent/agent.py
+- [ ] T023 [US2] Update compilation context assembly to read internal retained content only in rag_agent/agent.py
+- [ ] T024 [US2] Ensure Markdown compilation fallback remains deterministic with batched-image context in rag_agent/agent.py
 
-**Checkpoint**: Final compiled Markdown output is generated from retained content and schema output remains valid.
+**Checkpoint**: US2 produces planner-ready compiled material and no longer emits per-page retained text.
 
 ---
 
 ## Phase 5: User Story 3 - Return Contract-Safe Status and Audit (Priority: P3)
 
-**Goal**: Guarantee planner-safe output metadata, status signaling, and partial-failure behavior.
+**Goal**: Keep planner-safe status, counters, and error semantics while enforcing the clarified output contract.
 
-**Independent Test**: Provide one valid and one missing path and verify partial status with non-empty errors while retaining usable output from valid file.
+**Independent Test**: Run mixed valid/invalid file input and verify status/error behavior remains correct with schema-valid extracted_pages metadata-only records.
 
 ### Tests for User Story 3 (REQUIRED)
 
-- [X] T032 [US3] Implement test_rag_agent_partial_failure in rag_agent/tests/test_rag_agent.py
-- [X] T033 [US3] Implement test_relevance_threshold_filtering in rag_agent/tests/test_rag_agent.py
+- [ ] T025 [P] [US3] Add contract test for metadata-only extracted_pages shape in rag_agent/tests/test_rag_agent.py
+- [ ] T026 [P] [US3] Add regression test for partial status with mixed path validity under new internals in rag_agent/tests/test_rag_agent.py
+- [ ] T027 [US3] Add regression test for relevance-threshold skip behavior under batched image path in rag_agent/tests/test_rag_agent.py
 
 ### Implementation for User Story 3
 
-- [X] T034 [US3] Implement request-level error aggregation and non-fatal file/page failure handling in rag_agent/agent.py
-- [X] T035 [US3] Implement deterministic status derivation logic (complete|partial|failed) in rag_agent/agent.py
-- [X] T036 [US3] Ensure mirrored request metadata and aggregate counters in RAGAgentOutput creation in rag_agent/agent.py
-- [X] T037 [US3] Add synchronous CLI entrypoint for local standalone invocation in rag_agent/agent.py
+- [ ] T028 [US3] Update output assembly to mirror request metadata and counters with revised ExtractedPage model in rag_agent/agent.py
+- [ ] T029 [US3] Reconcile status derivation and error aggregation with fitz lifecycle failure modes in rag_agent/agent.py
+- [ ] T030 [US3] Update planner interface contract docs for metadata-only extracted_pages in specs/001-rag-retrieval-agent/contracts/rag-agent-contract.md
 
-**Checkpoint**: Contract-safe status semantics and partial-failure handling are complete.
+**Checkpoint**: US3 returns stable, schema-valid status/audit output aligned with clarified contract requirements.
 
 ---
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-**Purpose**: Final quality pass across all user stories.
+**Purpose**: Final consistency, performance, and documentation alignment across all user stories.
 
-- [X] T038 [P] Document environment variables and execution workflow in rag_agent/README.md
-- [X] T039 Validate quickstart commands and expected outputs in specs/001-rag-retrieval-agent/quickstart.md
-- [X] T040 [P] Add regression test notes and fixture assumptions in rag_agent/tests/inputs/README.md
-- [X] T041 Run full test suite and capture baseline runtime metrics for sample input in rag_agent/tests/test_rag_agent.py
+- [ ] T031 [P] Refresh data model documentation for internal retained content and public output contract in specs/001-rag-retrieval-agent/data-model.md
+- [ ] T032 [P] Refresh research decisions for implemented v2 tradeoffs in specs/001-rag-retrieval-agent/research.md
+- [ ] T033 Run full regression test suite and capture updated baseline metrics in rag_agent/tests/test_rag_agent.py
+- [ ] T034 Validate quickstart run and update observed results in specs/001-rag-retrieval-agent/quickstart.md
 
 ---
 
@@ -134,21 +127,15 @@
 - **Phase 1 (Setup)**: No dependencies; starts immediately.
 - **Phase 2 (Foundational)**: Depends on Phase 1; blocks all user stories.
 - **Phase 3 (US1)**: Depends on Phase 2; establishes MVP extraction path.
-- **Phase 4 (US2)**: Depends on US1 retained-content pipeline.
-- **Phase 5 (US3)**: Depends on US1/US2 output assembly and status surfaces.
+- **Phase 4 (US2)**: Depends on US1 extraction outputs.
+- **Phase 5 (US3)**: Depends on US1/US2 runtime and output assembly.
 - **Phase 6 (Polish)**: Depends on completion of desired user stories.
 
 ### User Story Dependencies
 
 - **US1 (P1)**: Independent after Foundational completion.
-- **US2 (P2)**: Depends on US1 retained page outputs.
-- **US3 (P3)**: Depends on US1 extraction audit and US2 compiled output semantics.
-
-### Within Each User Story
-
-- Write tests first and confirm failing expectations before implementation.
-- Implement tools/helpers before integrating agent loop behaviors.
-- Finalize schema/status assembly only after extraction/compilation flows are in place.
+- **US2 (P2)**: Depends on US1 retained-content internals and compilation inputs.
+- **US3 (P3)**: Depends on US1 extraction audit and US2 final output behavior.
 
 ### Dependency Graph
 
@@ -159,37 +146,31 @@
 ## Parallel Opportunities
 
 - **Setup**: T003 and T004 can run in parallel after T001/T002.
-- **Foundational**: T008 and T009 can run in parallel after T005-T007 begin.
-- **US1 Tests**: T012-T015 and T017-T018 can run in parallel.
-- **US1 Implementation**: T020 and T021 can run in parallel once T019 is defined.
-- **Polish**: T038 and T040 can run in parallel.
+- **Foundational**: T007 and T008 can run in parallel after T005/T006.
+- **US1 Tests**: T011, T012, and T013 can run in parallel.
+- **US3 Tests**: T025 and T026 can run in parallel.
+- **Polish**: T031 and T032 can run in parallel.
 
 ### Parallel Example: User Story 1
 
 ```bash
-# Parallel test creation
-Task: "T012 [US1] Implement test_get_page_count in rag_agent/tests/test_rag_agent.py"
-Task: "T013 [US1] Implement test_extract_text_from_page in rag_agent/tests/test_rag_agent.py"
-Task: "T014 [US1] Implement test_extract_tables_from_page in rag_agent/tests/test_rag_agent.py"
-Task: "T015 [US1] Implement test_extract_images_from_page in rag_agent/tests/test_rag_agent.py"
-
-# Parallel extraction tool implementation
-Task: "T020 [US1] Implement extract_tables_from_page using PyMuPDF table extraction in rag_agent/tools.py"
-Task: "T021 [US1] Implement extract_images_from_page using PyMuPDF image extraction in rag_agent/tools.py"
+Task: "T011 [US1] Add test for one-time fitz open per file during run in rag_agent/tests/test_rag_agent.py"
+Task: "T012 [US1] Add test for per-page VLM batch chunking using RAG_VLM_BATCH_SIZE in rag_agent/tests/test_rag_agent.py"
+Task: "T013 [US1] Add test for batched image prompt context propagation in rag_agent/tests/test_rag_agent.py"
 ```
 
 ### Parallel Example: User Story 2
 
 ```bash
-Task: "T029 [US2] Build retained-page compilation context assembly in rag_agent/agent.py"
-Task: "T028 [US2] Implement test_rag_agent_output_schema for full-run validation in rag_agent/tests/test_rag_agent.py"
+Task: "T020 [US2] Add test that compiled_material is the only assembled text output in rag_agent/tests/test_rag_agent.py"
+Task: "T022 [US2] Maintain internal retained page text structures separate from ExtractedPage output records in rag_agent/agent.py"
 ```
 
 ### Parallel Example: User Story 3
 
 ```bash
-Task: "T032 [US3] Implement test_rag_agent_partial_failure in rag_agent/tests/test_rag_agent.py"
-Task: "T033 [US3] Implement test_relevance_threshold_filtering in rag_agent/tests/test_rag_agent.py"
+Task: "T025 [US3] Add contract test for metadata-only extracted_pages shape in rag_agent/tests/test_rag_agent.py"
+Task: "T026 [US3] Add regression test for partial status with mixed path validity under new internals in rag_agent/tests/test_rag_agent.py"
 ```
 
 ---
@@ -199,20 +180,20 @@ Task: "T033 [US3] Implement test_relevance_threshold_filtering in rag_agent/test
 ### MVP First (User Story 1 Only)
 
 1. Complete Setup and Foundational phases.
-2. Deliver US1 extraction tools, scoring, and page-audit loop.
-3. Validate US1 independently with sample fixture and extraction tests.
+2. Deliver US1 fitz lifecycle reuse and per-page VLM batching.
+3. Validate US1 independently with focused extraction and batching tests.
 
 ### Incremental Delivery
 
-1. Add US2 compilation to produce planner-ready Markdown output.
-2. Add US3 contract-safe status/error semantics for integration reliability.
-3. Complete polish tasks and performance baseline recording.
+1. Add US2 internal-retained-content compilation and slim output contract behavior.
+2. Add US3 status/error contract hardening.
+3. Complete polish tasks and performance baseline validation.
 
-### Team Parallelization Strategy
+### Parallel Team Strategy
 
-1. Engineer A: tools.py extraction and scoring tasks.
-2. Engineer B: schemas/config/llm client and prompt tasks.
-3. Engineer C: agent loop integration and end-to-end tests.
+1. Engineer A: tools.py extraction and batching tasks.
+2. Engineer B: schemas/config/prompts and contract documentation tasks.
+3. Engineer C: agent graph lifecycle integration and regression tests.
 
 ---
 
