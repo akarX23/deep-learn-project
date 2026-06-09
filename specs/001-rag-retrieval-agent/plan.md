@@ -1,59 +1,68 @@
 # Implementation Plan: RAG Retrieval Agent
 
-**Branch**: `001-build-rag-retrieval-agent` | **Date**: 2026-05-27 | **Spec**: `/specs/001-rag-retrieval-agent/spec.md`
+**Branch**: `[001-build-rag-retrieval-agent]` | **Date**: 2026-06-08 | **Spec**: `/specs/001-rag-retrieval-agent/spec.md`
 **Input**: Feature specification from `/specs/001-rag-retrieval-agent/spec.md`
 
 ## Summary
 
-Implement a synchronous RAG Retrieval Agent that reads uploaded PDF files page-by-page,
-extracts text/tables/images using PyMuPDF, scores assembled page content for relevance
-using sentence-transformers, retains relevant pages, and returns a single compiled Markdown
-study document plus page-level audit metadata in a schema-safe output contract.
-
-The agent runtime uses LangGraph for the reasoning loop orchestration and LiteLLM as the
-single interface for all text/image model calls. LLM/VLM connection values are sourced
-from environment variables through centralized configuration.
+Implement and harden the RAG Retrieval Agent pipeline for synchronous, page-level PDF extraction and relevance filtering, returning a schema-safe audit trail plus one compiled Markdown study artifact. The design locks in one-time per-request PDF handle reuse (`fitz.Document`), per-page VLM batching, remote LiteLLM-based embedding, and modality-specific provider environment keys (`RAG_TEXT_PROVIDER`, `RAG_VLM_PROVIDER`, `RAG_EMBEDDING_PROVIDER`) that default to `hosted_vllm` and are composed with model names as `<provider>/<model>`.
 
 ## Technical Context
 
 **Language/Version**: Python 3.11  
-**Primary Dependencies**: pydantic v2, PyMuPDF, sentence-transformers, LiteLLM, LangGraph  
-**Storage**: N/A (in-memory processing; file-system PDF reads only)  
-**Testing**: pytest  
-**Target Platform**: Linux runtime (local dev and container-ready execution)  
-**Project Type**: Agent module/library within a multi-agent backend  
-**Performance Goals**: Process a representative 5-10 page PDF in <=45 seconds on developer hardware; single final compilation call per request  
-**Constraints**: Synchronous execution only, no OCR in v1, PDF-only input, Markdown-only output, environment-variable based LLM configuration  
-**Scale/Scope**: Single request processes multiple PDFs, expected default range up to 10 PDFs and up to 200 total pages per request
+**Primary Dependencies**: pydantic v2, pymupdf (fitz), litellm, langgraph, pytest  
+**Storage**: N/A (filesystem PDFs + in-memory state + environment-variable configuration)  
+**Testing**: pytest with unit and integration-style pipeline tests, monkeypatched LiteLLM calls  
+**Target Platform**: Linux local/dev and CI Python runtime  
+**Project Type**: Backend agent module with CLI entrypoint  
+**Performance Goals**: Representative 5-10 page PDF processed synchronously in acceptable local runtime, with graceful continuation on page-level failures  
+**Constraints**: Synchronous processing only, no OCR requirement, one final compilation call, VLM batching constrained by `VLM_BATCH_SIZE`, non-serializable document handles kept outside LangGraph state  
+**Scale/Scope**: Planner-to-RAG contract for single request processing of one to several PDFs per invocation
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-### Initial Gate Review (Pre-Research)
+**Pre-Phase 0 Gate Review**
 
-- Code Quality Gate: PASS. Responsibility boundaries are explicit by module
-  (`project/schemas.py`, `rag_agent/agent.py`, `rag_agent/tools.py`,
-  `rag_agent/helpers.py`, `rag_agent/llm_client.py`, `rag_agent/prompts.py`,
-  `rag_agent/config.py`).
-- Testing Gate: PASS. Planned tests cover unit behavior, tool extraction, scoring,
-  schema validation, partial failure, and threshold filtering.
-- UX Consistency Gate: PASS. Output format constrained to coherent Markdown with stable
-  sectioning and preserved retained content.
-- Performance Gate: PASS. Budgets and synchronous constraints are defined; extraction
-  remains one-page-at-a-time with bounded LLM calls.
-- Maintainability Gate: PASS. Config and prompting are centralized; pure helper functions
-  isolate deterministic behavior from model calls.
+- Code Quality Gate: PASS. Import grouping, clear module boundaries (`config`, `llm_client`, `tools`, `helpers`, `agent`), and explicit typing for `fitz.Document` are defined.
+- Testing Gate: PASS. Existing pytest suite covers extraction/scoring/output semantics; plan extends coverage for provider-env composition and embedding configuration behavior.
+- UX Consistency Gate: PASS. Markdown output consistency remains explicitly required with deterministic sectioning expectations for compiled material.
+- Performance Gate: PASS. Synchronous runtime objective retained; one-time PDF open and per-page VLM batching reduce avoidable overhead.
+- Maintainability Gate: PASS. Non-obvious behaviors (provider composition, runtime-only document lifecycle) documented in plan/research/data-model/contracts.
 
-### Post-Design Gate Review (After Phase 1 Artifacts)
+## Phase 0: Research
 
-- Code Quality Gate: PASS. Data model and contracts are explicit; no cross-module
-  ambiguity remains.
-- Testing Gate: PASS. quickstart includes full-run and targeted test instructions.
-- UX Consistency Gate: PASS. Contract preserves predictable compiled_material structure.
-- Performance Gate: PASS. Research decisions cap call count and define fallback behavior.
-- Maintainability Gate: PASS. Environment-driven model configuration eliminates hard-coded
-  provider coupling.
+Research was consolidated in `/specs/001-rag-retrieval-agent/research.md` with all prior clarifications resolved, including:
+
+- Remote embedding as primary path through LiteLLM.
+- Separate provider keys for text, VLM, and embedding.
+- Provider default value set to `hosted_vllm`.
+- Provider/model composition strategy for LiteLLM calls.
+
+No unresolved `NEEDS CLARIFICATION` items remain.
+
+## Phase 1: Design and Contracts
+
+Phase 1 artifacts updated:
+
+- `/specs/001-rag-retrieval-agent/data-model.md`
+- `/specs/001-rag-retrieval-agent/contracts/rag-agent-contract.md`
+- `/specs/001-rag-retrieval-agent/quickstart.md`
+
+Design additions include a configuration sub-model for modality-specific provider/model/API settings and explicit defaults.
+
+Agent context update completed by ensuring `.github/copilot-instructions.md` points to:
+
+- `specs/001-rag-retrieval-agent/plan.md`
+
+## Post-Design Constitution Re-Check
+
+- Code Quality Gate: PASS. Design docs enforce typed configuration, stable interfaces, and focused module responsibilities.
+- Testing Gate: PASS. Contract and quickstart specify tests for schema validity, threshold behavior, partial failures, and provider-env wiring.
+- UX Consistency Gate: PASS. Output contract preserves single compiled Markdown artifact with stable semantics.
+- Performance Gate: PASS. Reuse of open document handles and bounded batching remain explicit and testable.
+- Maintainability Gate: PASS. Configuration behavior and assumptions documented across artifacts; no constitution violations introduced.
 
 ## Project Structure
 
@@ -78,22 +87,20 @@ project/
 
 rag_agent/
 ├── agent.py
-├── tools.py
+├── config.py
 ├── helpers.py
 ├── llm_client.py
 ├── prompts.py
-├── config.py
+├── tools.py
 └── tests/
-    ├── inputs/
-    │   ├── sample.pdf
-    │   └── sample_input.json
-    └── test_rag_agent.py
+    ├── test_rag_agent.py
+    └── inputs/
+        ├── sample_input.json
+        └── sample.pdf
 ```
 
-**Structure Decision**: Single Python agent module with shared schemas at repository
-root, keeping domain boundaries explicit while minimizing framework overhead.
+**Structure Decision**: Use the existing single backend Python project layout, with feature documentation under `specs/001-rag-retrieval-agent/` and implementation constrained to `rag_agent/` plus shared contracts in `project/schemas.py`.
 
 ## Complexity Tracking
 
-No constitution violations identified. Complexity remains justified by requirements for
-non-deterministic reasoning orchestration (LangGraph) and multimodal model support.
+No constitution violations requiring exception tracking.

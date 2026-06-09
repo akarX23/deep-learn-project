@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from math import sqrt
-from typing import Iterable
-
-from project.schemas import ExtractedPage
+from typing import Any, Iterable
 
 
 def serialize_table_to_markdown(table_matrix: list[list[object]]) -> str:
@@ -43,16 +41,20 @@ def assemble_page_content(text: str, tables: list[str], image_descriptions: list
     return "\n\n".join(section for section in sections if section.strip())
 
 
-def build_compilation_context(retained_pages: list[ExtractedPage]) -> str:
+def build_compilation_context(retained_pages: list[dict[str, Any]]) -> str:
     """Build labeled context text from retained pages for final compilation."""
 
     chunks: list[str] = []
     for page in retained_pages:
-        if not page.retained_content:
+        content = str(page.get("content", "")).strip()
+        if not content:
             continue
+        file_name = str(page.get("file_name", "unknown"))
+        page_number = int(page.get("page_number", 0))
+        relevance_score = float(page.get("relevance_score", 0.0))
         chunks.append(
-            f"### Source: {page.file_name} | Page {page.page_number} | Score {page.relevance_score:.3f}\n"
-            f"{page.retained_content.strip()}"
+            f"### Source: {file_name} | Page {page_number} | Score {relevance_score:.3f}\n"
+            f"{content}"
         )
     return "\n\n".join(chunks)
 

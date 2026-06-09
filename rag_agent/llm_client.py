@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from rag_agent.config import LLMConfig
+from rag_agent.config import EmbeddingConfig, LLMConfig
 
 
 def call_llm(messages: list[dict[str, Any]], config: LLMConfig) -> str:
@@ -23,7 +23,7 @@ def call_llm(messages: list[dict[str, Any]], config: LLMConfig) -> str:
         raise RuntimeError("LiteLLM is required for model calls") from exc
 
     kwargs: dict[str, Any] = {
-        "model": config.model,
+        "model": config.routed_model,
         "messages": messages,
         "temperature": config.temperature,
         "max_tokens": config.max_tokens,
@@ -35,3 +35,30 @@ def call_llm(messages: list[dict[str, Any]], config: LLMConfig) -> str:
 
     response = completion(**kwargs)
     return response.choices[0].message.content or ""
+
+
+def call_embedding(text: str, config: EmbeddingConfig) -> list[float]:
+    """Execute a LiteLLM embedding call and return embedding vector."""
+
+    if not config.api_base and not config.api_key:
+        raise RuntimeError(
+            "No api_base or api_key configured for embedding call. "
+            "Set environment variables or provide a local model endpoint."
+        )
+
+    try:
+        from litellm import embedding
+    except Exception as exc:
+        raise RuntimeError("LiteLLM is required for embedding calls") from exc
+
+    kwargs: dict[str, Any] = {
+        "model": config.routed_model,
+        "input": text,
+    }
+    if config.api_base:
+        kwargs["api_base"] = config.api_base
+    if config.api_key:
+        kwargs["api_key"] = config.api_key
+
+    response = embedding(**kwargs)
+    return response["data"][0]["embedding"]

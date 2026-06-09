@@ -8,17 +8,24 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypedDict
 
+import fitz
+
 from project.schemas import ExtractedPage, PageExtractionStatus, RAGAgentInput, RAGAgentOutput
-from rag_agent.config import get_embedding_model_name, get_text_llm_config, get_vlm_config
+from rag_agent.config import (
+    get_embedding_config,
+    get_text_llm_config,
+    get_vlm_batch_size,
+    get_vlm_config,
+)
 from rag_agent.helpers import assemble_page_content, build_compilation_context
 from rag_agent.llm_client import call_llm
 from rag_agent.prompts import MATERIAL_COMPILATION_PROMPT
 from rag_agent.tools import (
-    describe_image_with_vlm,
+    describe_images_with_vlm,
     extract_images_from_page,
     extract_tables_from_page,
     extract_text_from_page,
-    get_page_count,
+    open_pdf,
     score_page_relevance,
 )
 
@@ -39,49 +46,20 @@ class AgentState(TypedDict):
     pointers: list[PagePointer]
     index: int
     extracted_pages: list[ExtractedPage]
-    retained_pages: list[ExtractedPage]
+    retained_pages: list[dict[str, Any]]
     errors: list[str]
-
-
-class _FallbackEmbeddingModel:
-    """Small deterministic embedding fallback for offline/dev scenarios."""
-
-    _vocab = [
-        "gradient",
-        "descent",
-        "optimizer",
-        "learning",
-        "rate",
-        "loss",
-        "model",
-        "epoch",
-    ]
-
-    def encode(self, sentences: list[str], normalize_embeddings: bool = False) -> list[list[float]]:
-        vectors: list[list[float]] = []
-        for sentence in sentences:
-            text = sentence.lower()
-            vectors.append([float(token in text) for token in self._vocab])
-        return vectors
 
 
 class RAGAgent:
     """Retrieval agent that extracts and compiles topic-relevant study material."""
 
     def __init__(self) -> None:
-        self.text_llm_config = get_text_llm_config()
-        self.vlm_config = get_vlm_config()
-        self.embedding_model = self._load_embedding_model()
+        self.text_llm_config = None
+        self.vlm_config = None
+        self.vlm_batch_size = 1
+        self.embedding_config = None
+        self._open_docs: dict[str, fitz.Document] = {}
         self._graph = self._build_graph()
-
-    @staticmethod
-    def _load_embedding_model() -> Any:
-        try:
-            from sentence_transformers import SentenceTransformer
-            return SentenceTransformer(get_embedding_model_name(), local_files_only=True)
-        except Exception:
-            # Keep the agent usable in offline/local environments.
-            return _FallbackEmbeddingModel()
 
     def _build_graph(self):
         try:
@@ -106,11 +84,11 @@ class RAGAgent:
         pointers: list[PagePointer] = []
         errors: list[str] = []
         for file_path in request.file_paths:
-            try:
-                total = get_page_count(file_path)
-            except Exception as exc:
-                errors.append(f"{file_path}: {exc}")
+            document = self._open_docs.get(file_path)
+            if document is None:
+                errors.append(f"{file_path}: document not available")
                 continue
+            total = int(document.page_count)
             for page_num in range(1, total + 1):
                 pointers.append(
                     PagePointer(
@@ -120,6 +98,26 @@ class RAGAgent:
                     )
                 )
         return pointers, errors
+
+    def _open_documents(self, file_paths: list[str]) -> list[str]:
+        errors: list[str] = []
+        self._open_docs = {}
+        for file_path in file_paths:
+            if file_path in self._open_docs:
+                continue
+            try:
+                self._open_docs[file_path] = open_pdf(file_path)
+            except Exception as exc:
+                errors.append(f"{file_path}: {exc}")
+        return errors
+
+    def _close_documents(self) -> None:
+        for document in self._open_docs.values():
+            try:
+                document.close()
+            except Exception:
+                continue
+        self._open_docs = {}
 
     def _should_continue(self, state: AgentState) -> str:
         if state["index"] < len(state["pointers"]):
@@ -134,33 +132,37 @@ class RAGAgent:
         text = ""
         tables: list[str] = []
         image_descriptions: list[str] = []
+        document = self._open_docs.get(pointer.file_path)
 
-        try:
-            text = extract_text_from_page(pointer.file_path, pointer.page_number)
-            if request.include_tables:
-                tables = extract_tables_from_page(pointer.file_path, pointer.page_number)
-            if request.include_images:
-                for image in extract_images_from_page(pointer.file_path, pointer.page_number):
-                    image_descriptions.append(
-                        describe_image_with_vlm(image, request.user_prompt, self.vlm_config)
+        if document is None:
+            errors.append("Document handle unavailable")
+        else:
+            try:
+                text = extract_text_from_page(document, pointer.page_number)
+                if request.include_tables:
+                    tables = extract_tables_from_page(document, pointer.page_number)
+                if request.include_images:
+                    images = extract_images_from_page(document, pointer.page_number)
+                    image_descriptions = describe_images_with_vlm(
+                        images,
+                        request.user_prompt,
+                        self.vlm_config,
+                        self.vlm_batch_size,
                     )
-        except Exception as exc:
-            errors.append(str(exc))
+            except Exception as exc:
+                errors.append(str(exc))
 
         assembled = assemble_page_content(text, tables, image_descriptions)
-        relevance = score_page_relevance(assembled, request.user_prompt, self.embedding_model)
+        relevance = score_page_relevance(assembled, request.user_prompt, self.embedding_config)
 
         page_status = PageExtractionStatus.SUCCESS
-        retained_content: str | None = assembled
 
         if not assembled.strip():
             page_status = PageExtractionStatus.FAILED_EXTRACTION
-            retained_content = None
             if not errors:
                 errors.append("No extractable content found on page")
         elif relevance < request.relevance_threshold:
             page_status = PageExtractionStatus.SKIPPED_IRRELEVANT
-            retained_content = None
 
         page_result = ExtractedPage(
             file_name=pointer.file_name,
@@ -169,12 +171,18 @@ class RAGAgent:
             status=page_status,
             ocr_used=False,
             errors=errors,
-            retained_content=retained_content,
         )
 
         state["extracted_pages"].append(page_result)
-        if page_result.status == PageExtractionStatus.SUCCESS and page_result.retained_content:
-            state["retained_pages"].append(page_result)
+        if page_result.status == PageExtractionStatus.SUCCESS and assembled.strip():
+            state["retained_pages"].append(
+                {
+                    "file_name": pointer.file_name,
+                    "page_number": pointer.page_number,
+                    "relevance_score": relevance,
+                    "content": assembled.strip(),
+                }
+            )
 
         if errors:
             state["errors"].extend(
@@ -184,7 +192,7 @@ class RAGAgent:
         state["index"] += 1
         return state
 
-    def _compile_material(self, request: RAGAgentInput, retained_pages: list[ExtractedPage]) -> str:
+    def _compile_material(self, request: RAGAgentInput, retained_pages: list[dict[str, Any]]) -> str:
         context = build_compilation_context(retained_pages)
         if not context.strip():
             return ""
@@ -205,7 +213,7 @@ class RAGAgent:
 
     @staticmethod
     def _derive_status(
-        pointers: list[PagePointer], retained_pages: list[ExtractedPage], errors: list[str]
+        pointers: list[PagePointer], retained_pages: list[dict[str, Any]], errors: list[str]
     ) -> str:
         if not pointers:
             return "failed"
@@ -218,16 +226,26 @@ class RAGAgent:
     def run(self, payload: RAGAgentInput) -> RAGAgentOutput:
         """Run the end-to-end retrieval and compilation pipeline."""
 
-        pointers, initial_errors = self._build_page_pointers(payload)
+        # Load runtime config once per request execution.
+        self.text_llm_config = get_text_llm_config()
+        self.vlm_config = get_vlm_config()
+        self.vlm_batch_size = get_vlm_batch_size()
+        self.embedding_config = get_embedding_config()
+
+        initial_errors = self._open_documents(payload.file_paths)
+        pointers, pointer_errors = self._build_page_pointers(payload)
         state: AgentState = {
             "request": payload,
             "pointers": pointers,
             "index": 0,
             "extracted_pages": [],
             "retained_pages": [],
-            "errors": initial_errors,
+            "errors": initial_errors + pointer_errors,
         }
-        final_state = self._graph.invoke(state)
+        try:
+            final_state = self._graph.invoke(state)
+        finally:
+            self._close_documents()
 
         compiled_material = self._compile_material(payload, final_state["retained_pages"])
         status = self._derive_status(
