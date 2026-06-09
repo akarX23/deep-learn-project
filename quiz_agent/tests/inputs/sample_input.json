@@ -1,0 +1,6 @@
+{
+  "topic": "Gradient Descent Optimization",
+  "teaching_content": "Gradient descent is an iterative optimization algorithm used to minimize a loss function by moving in the direction of the steepest descent as defined by the negative of the gradient. At each iteration, the parameters are updated by subtracting a fraction of the gradient, where that fraction is determined by the learning rate. A high learning rate can cause the optimizer to overshoot the minimum, while a low learning rate leads to slow convergence. Stochastic gradient descent (SGD) uses a single training example per update, while mini-batch gradient descent uses a small subset. The loss function measures how far the model's predictions are from the actual values. Common variants include Adam, RMSProp, and Adagrad, each of which adapts the learning rate during training. Momentum helps accelerate SGD by accumulating gradients in directions of persistent descent. Convergence is reached when the gradient magnitude approaches zero. Regularization techniques such as L1 and L2 penalize large weights to prevent overfitting during optimization. Understanding the loss landscape — including saddle points and local minima — is critical for effective optimizer choice.",
+  "mcq_single_count": 5,
+  "mcq_multi_count": 3
+}
