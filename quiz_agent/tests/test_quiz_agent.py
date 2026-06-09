@@ -60,12 +60,13 @@ def short_teaching_content() -> str:
 
 SAMPLE_QUESTION_GENERATION_RESPONSE = json.dumps({
     "questions": [
-        # --- mcq-single (×5) ---
+        # --- mcq-single (×5) — max_points: 1 each ---
         {
             "id": "q1",
             "type": "mcq-single",
             "prompt": "What does the learning rate control in gradient descent?",
             "sub_concept": "learning rate",
+            "max_points": 1,
             "topic_deep_dive": "The learning rate is a hyperparameter that controls how large a step the optimizer takes at each iteration toward the minimum of the loss function.",
             "options": [
                 {"id": "q1a", "text": "The size of each parameter update step", "is_correct": True,  "explanation": "Correct — the learning rate scales the gradient to determine step size."},
@@ -79,6 +80,7 @@ SAMPLE_QUESTION_GENERATION_RESPONSE = json.dumps({
             "type": "mcq-single",
             "prompt": "Which gradient descent variant processes one sample per update?",
             "sub_concept": "SGD variants",
+            "max_points": 1,
             "topic_deep_dive": "Stochastic Gradient Descent (SGD) updates the model parameters using the gradient computed from a single training example, making each step noisy but computationally cheap.",
             "options": [
                 {"id": "q2a", "text": "Stochastic Gradient Descent (SGD)", "is_correct": True,  "explanation": "Correct — SGD uses exactly one sample per update."},
@@ -92,6 +94,7 @@ SAMPLE_QUESTION_GENERATION_RESPONSE = json.dumps({
             "type": "mcq-single",
             "prompt": "What happens when the learning rate is too high?",
             "sub_concept": "learning rate",
+            "max_points": 1,
             "topic_deep_dive": "A learning rate that is too large causes the optimizer to take oversized steps, potentially jumping over the minimum and causing the loss to diverge rather than converge.",
             "options": [
                 {"id": "q3a", "text": "The optimizer overshoots the minimum",        "is_correct": True,  "explanation": "Correct — large steps risk jumping past the minimum."},
@@ -105,6 +108,7 @@ SAMPLE_QUESTION_GENERATION_RESPONSE = json.dumps({
             "type": "mcq-single",
             "prompt": "What does the loss function measure?",
             "sub_concept": "loss function",
+            "max_points": 1,
             "topic_deep_dive": "The loss function quantifies the discrepancy between the model's predicted outputs and the true target values. Minimizing it is the central objective of training.",
             "options": [
                 {"id": "q4a", "text": "How far predictions are from actual values",  "is_correct": True,  "explanation": "Correct — the loss measures prediction error."},
@@ -118,6 +122,7 @@ SAMPLE_QUESTION_GENERATION_RESPONSE = json.dumps({
             "type": "mcq-single",
             "prompt": "Convergence in gradient descent is indicated by which condition?",
             "sub_concept": "convergence",
+            "max_points": 1,
             "topic_deep_dive": "Convergence occurs when the gradient magnitude approaches zero, meaning the algorithm has reached (or is very close to) a local or global minimum of the loss surface.",
             "options": [
                 {"id": "q5a", "text": "Gradient magnitude approaches zero",  "is_correct": True,  "explanation": "Correct — a near-zero gradient means no further improvement is possible in the current direction."},
@@ -126,12 +131,13 @@ SAMPLE_QUESTION_GENERATION_RESPONSE = json.dumps({
                 {"id": "q5d", "text": "Number of epochs exceeds a threshold","is_correct": False, "explanation": "Incorrect — hitting a maximum epoch count is an early-stopping criterion, not true convergence."},
             ],
         },
-        # --- mcq-multi (×3) ---
+        # --- mcq-multi (×3) — max_points: 2 each ---
         {
             "id": "q6",
             "type": "mcq-multi",
             "prompt": "Which of the following are adaptive learning-rate optimizers?",
             "sub_concept": "optimizer variants",
+            "max_points": 2,
             "topic_deep_dive": "Adaptive optimizers like Adam, RMSProp, and Adagrad adjust the learning rate per-parameter during training, leading to faster and more stable convergence compared to fixed-rate SGD.",
             "options": [
                 {"id": "q6a", "text": "Adam",            "is_correct": True,  "explanation": "Correct — Adam adapts learning rates using first and second moment estimates."},
@@ -146,6 +152,7 @@ SAMPLE_QUESTION_GENERATION_RESPONSE = json.dumps({
             "type": "mcq-multi",
             "prompt": "Which factors contribute to slow convergence in gradient descent?",
             "sub_concept": "convergence",
+            "max_points": 2,
             "topic_deep_dive": "Slow convergence is caused by a learning rate that is too small, poorly scaled features, saddle points in the loss landscape, or lack of momentum to maintain descent direction.",
             "options": [
                 {"id": "q7a", "text": "Learning rate set too low",                "is_correct": True,  "explanation": "Correct — a very small step size requires many iterations to reach the minimum."},
@@ -159,6 +166,7 @@ SAMPLE_QUESTION_GENERATION_RESPONSE = json.dumps({
             "type": "mcq-multi",
             "prompt": "Which techniques help prevent overfitting during optimization?",
             "sub_concept": "regularization",
+            "max_points": 2,
             "topic_deep_dive": "Regularization methods such as L1 and L2 penalize large model weights, encouraging simpler models that generalize better to unseen data.",
             "options": [
                 {"id": "q8a", "text": "L1 regularization (Lasso)", "is_correct": True,  "explanation": "Correct — L1 adds the absolute value of weights to the loss, penalizing large weights."},
@@ -168,12 +176,13 @@ SAMPLE_QUESTION_GENERATION_RESPONSE = json.dumps({
                 {"id": "q8e", "text": "Reducing the number of epochs", "is_correct": False, "explanation": "Incorrect — fewer epochs is an early-stopping heuristic, not a regularization technique per se."},
             ],
         },
-        # --- descriptive (×4) ---
+        # --- descriptive (×4) — max_points: 5 each ---
         {
             "id": "q9",
             "type": "descriptive",
             "prompt": "Explain how the learning rate affects training stability and speed. What trade-offs must a practitioner consider when choosing its value?",
             "sub_concept": "learning rate",
+            "max_points": 5,
             "rubric": [
                 "Defines learning rate as the step-size scalar applied to the gradient",
                 "Explains that too-high LR causes overshooting / divergence",
@@ -187,6 +196,7 @@ SAMPLE_QUESTION_GENERATION_RESPONSE = json.dumps({
             "type": "descriptive",
             "prompt": "Compare Stochastic Gradient Descent (SGD), mini-batch gradient descent, and batch gradient descent. Under what circumstances would you prefer each?",
             "sub_concept": "SGD variants",
+            "max_points": 5,
             "rubric": [
                 "Defines SGD as single-sample updates",
                 "Defines mini-batch as subset-based updates",
@@ -200,6 +210,7 @@ SAMPLE_QUESTION_GENERATION_RESPONSE = json.dumps({
             "type": "descriptive",
             "prompt": "What is momentum in the context of gradient descent, and how does it help the optimizer escape flat regions or saddle points?",
             "sub_concept": "momentum",
+            "max_points": 5,
             "rubric": [
                 "Defines momentum as accumulated past gradient directions",
                 "Explains how it dampens oscillation in narrow valleys",
@@ -213,6 +224,7 @@ SAMPLE_QUESTION_GENERATION_RESPONSE = json.dumps({
             "type": "descriptive",
             "prompt": "Describe the roles of L1 and L2 regularization in an optimization objective. How do they differ in the type of solutions they encourage?",
             "sub_concept": "regularization",
+            "max_points": 5,
             "rubric": [
                 "States that regularization adds a penalty term to the loss",
                 "Explains L1 promotes sparsity (many zero weights)",
@@ -272,8 +284,8 @@ def _make_quiz(questions: list[dict] | None = None) -> dict:
         "metadata": {
             "question_type_counts": {"mcq-single": 5, "mcq-multi": 3, "descriptive": 4},
             "total_questions": 12,
-            "max_score": 35,
-            "mcq_max_score": 15,
+            "max_score": 31,
+            "mcq_max_score": 11,
             "descriptive_max_score": 20,
             "ui_hints": {
                 "mcq_single_input": "radio",
@@ -737,7 +749,7 @@ class TestQuizAgentEvaluate:
         q6_result = next(r for r in output.result.question_results if r.question_id == "q6")
         assert q6_result.per_option_explanations, "Expected per-option explanation panels for q6"
         # q6c (selected-but-wrong) and q6b, q6d (missed-correct) should each have a panel
-        panel_option_ids = {p["option_id"] for p in q6_result.per_option_explanations}
+        panel_option_ids = {p.option_id for p in q6_result.per_option_explanations}
         assert "q6c" in panel_option_ids  # selected wrong
         assert "q6b" in panel_option_ids  # missed correct
         assert "q6d" in panel_option_ids  # missed correct
