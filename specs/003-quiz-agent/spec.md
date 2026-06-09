@@ -1,8 +1,8 @@
 # Feature Specification: Quiz Agent
 
-**Feature Branch**: `001-quiz-agent`
+**Feature Branch**: `003-build-quiz-agent`
 **Created**: 2026-05-23
-**Updated**: 2026-06-08
+**Updated**: 2026-06-09
 **Status**: Active
 **Input**: Teaching Agent passes a detailed topic explanation to the Quiz Agent. When the learner clicks the **Quiz** button in the UI, a question set is generated and displayed. The quiz contains MCQ questions (single-answer with radio buttons, multiple-answer with checkboxes) and 4 descriptive questions (150-word responses). On submission the quiz is auto-evaluated and scores are shown.
 
@@ -14,7 +14,7 @@
 1. Teaching Agent produces a detailed explanation of a topic and passes it to the Quiz Agent
    → If explanation missing or empty: ERROR "No teaching content provided"
 2. Learner clicks the Quiz button in the UI
-3. Quiz Agent ingests the explanation and extracts key concepts, facts, and definitions
+3. Quiz Agent ingests the explanation and generates a question set via a single structured LLM call
 4. Quiz Agent generates a question set:
    → MCQ single-answer questions  (radio buttons, 1 correct of 4 options)
    → MCQ multiple-answer questions (checkboxes, 2+ correct of 4–6 options)
@@ -83,14 +83,14 @@ As a learner using the AI Tutor app, after the Teaching Agent finishes explainin
 **Input & Generation**
 - **FR-001**: System MUST accept the Teaching Agent's detailed explanation as the sole authoritative source for quiz content.
 - **FR-002**: System MUST generate questions strictly grounded in the provided explanation; no external facts may be introduced.
-- **FR-003**: Each generated quiz MUST contain: MCQ single-answer questions, MCQ multiple-answer questions, and exactly 4 descriptive questions.
+- **FR-003**: Each generated quiz MUST contain: MCQ single-answer questions (default 5, minimum 3), MCQ multiple-answer questions (default 3, minimum 2), and exactly 4 descriptive questions. The exact MCQ counts are configurable via `QuizAgentInput.mcq_single_count` and `mcq_multi_count`.
 - **FR-004**: The Quiz button in the Teaching Agent UI MUST trigger quiz generation; the quiz is not shown until the button is clicked.
 - **FR-005**: System MUST tag every question with the sub-concept it tests so weak areas can be reported back to the Teaching Agent.
 
 **Question Types & Behaviour**
-- **FR-006**: MCQ single-answer questions MUST present exactly 4 options rendered as **radio buttons**; only one option may be selected.
+- **FR-006**: MCQ single-answer questions MUST present exactly 4 options; only one option may be selected at a time (see FR-018 for the required input type).
 - **FR-007**: MCQ multiple-answer questions MUST present 4–6 options rendered as **checkboxes** and MUST display the hint "Select all that apply" so the learner knows multiple selections are valid; 2 or more options are correct.
-- **FR-008**: Descriptive questions MUST provide a multi-line text area and a word-count indicator. The target response length is **~150 words**; the UI MUST display a soft warning (not a blocker) when the answer is significantly shorter.
+- **FR-008**: Descriptive questions MUST provide a multi-line text area and a word-count indicator. The target response length is **~150 words**; the UI MUST display a soft warning (not a blocker) when the answer is fewer than **80 words**. Submission is never blocked by word count.
 - **FR-009**: Each descriptive question MUST be backed by a key-points rubric used for grading; the rubric is not visible to the learner during the quiz.
 - **FR-010**: All 4 descriptive questions MUST be on the same topic as the taught content and MUST each target a different sub-concept.
 
@@ -114,22 +114,23 @@ As a learner using the AI Tutor app, after the Teaching Agent finishes explainin
   - Per-question result: the learner's answer, correct answer or model answer, and brief feedback
   - Per-option wrong-answer explanation panels and topic deep-dives for all incorrect/missed MCQ options (per FR-011a and FR-012a)
   - List of weak sub-concepts derived from wrong/low-scoring questions
-- **FR-015**: The results screen MUST include a recommended next action (re-teach, advance, or practice more) based on the overall percentage.
+- **FR-015**: The results screen MUST include a recommended next action based on the overall percentage: **< 50% → "re-teach"**, **50–74% → "practice-more"**, **≥ 75% → "advance"**.
 
 **UI & Experience**
-- **FR-016**: Quiz UI MUST follow the existing AI Tutor app's visual language (typography, colors, spacing, components, dark/light mode).
+- **FR-016**: Quiz UI MUST follow the existing AI Tutor app's visual language (typography, colors, spacing, components, dark/light mode) as defined by the AI Tutor design system (link to be added when design system is published).
 - **FR-017**: All questions MUST be displayed in a single scrollable view so the learner can see the full quiz at once; a progress/completion indicator shows how many questions have been answered.
 - **FR-018**: MCQ single-answer options MUST use `<input type="radio">` (or equivalent accessible component); MCQ multiple-answer options MUST use `<input type="checkbox">`.
 - **FR-019**: Each descriptive text area MUST display a live word count next to it (e.g. "87 / ~150 words").
 - **FR-020**: The Submit button MUST be disabled until all MCQ questions have a selection; descriptive answers are optional for submission purposes.
 - **FR-021**: Inline validation on Submit MUST highlight any unanswered MCQ questions and scroll to the first one.
-- **FR-022**: UI MUST be fully keyboard-navigable (tab through radio buttons, checkboxes, text areas, submit) and meet the same accessibility bar as the rest of the AI Tutor app.
+- **FR-022**: UI MUST be fully keyboard-navigable (tab through radio buttons, checkboxes, text areas, submit) and conform to **WCAG 2.1 Level AA** as the project-wide accessibility baseline.
 
 **Session & Integration**
-- **FR-023**: Quiz state (MCQ selections, descriptive text) MUST persist within the learner's session so refreshes or brief disconnects do not lose work.
+- **FR-023**: Quiz state (MCQ selections, descriptive text) MUST persist within the learner's browser session using `sessionStorage`; if `sessionStorage` is unavailable the learner MUST be warned that progress may not be saved on refresh.
 - **FR-024**: On completion, the Quiz Agent MUST return a structured result (score, weak sub-concepts, descriptive rubric outcomes) to the Teaching Agent so the tutoring loop can adapt.
-- **FR-025**: Learners MUST be able to retake a quiz; a new attempt generates a fresh question set on the same topic.
-- **FR-026**: Quiz history per topic (attempt date, overall score) MUST be viewable by the learner.
+- **FR-025**: Learners MUST be able to retake a quiz; a retake issues a new generation LLM call producing a fresh question set. De-duplication of questions against prior attempts is not required in v1.
+
+> **Future Work (v2)** — FR-026: Quiz history per topic (attempt date, overall score) viewable by the learner requires a persistent storage layer and is deferred to a future iteration. The current agent is in-memory only.
 
 ---
 
@@ -224,6 +225,31 @@ The `QuizResult` object returned after evaluation carries these fields the Teach
 | `per_option_explanations` | list | MCQ multi (wrong/partial) | One entry per mishandled option: `{ option_id, explanation_type ("wrong-selected"\|"missed-correct"), explanation }` |
 | `model_answer` | string | descriptive | The rubric-derived ideal answer shown after submission |
 | `feedback` | string | descriptive | Qualitative feedback referencing what the learner covered or missed |
+
+---
+
+## Performance Budgets
+
+These budgets are binding product requirements (Constitution Principle IV). Validation MUST be included in the Definition of Done.
+
+| Operation | Target (developer hardware, fast endpoint) | Measurement method |
+|---|---|---|
+| Quiz generation (`generate()`) | ≤ 15 seconds wall-clock | Timed integration test with monkeypatched LLM |
+| Descriptive grading (`evaluate()`) | ≤ 20 seconds wall-clock | Timed integration test with monkeypatched LLM |
+| MCQ grading (local, no LLM) | < 50 ms | Unit test assertion |
+| Schema serialisation round-trip | < 10 ms | Unit test assertion |
+
+---
+
+## Success Criteria
+
+| ID | Criterion | Measurement |
+|---|---|---|
+| SC-001 | Quiz generation completes within 15 s on developer hardware | Timed test in CI |
+| SC-002 | Descriptive grading completes within 20 s on developer hardware | Timed test in CI |
+| SC-003 | All MCQ scoring unit tests pass with 100% correctness (including partial credit and floor-at-zero) | `pytest quiz_agent/tests/` |
+| SC-004 | `QuizAgentOutput` serialises to JSON and deserialises without data loss for both `generated` and `evaluated` payloads | `test_output_serialisation_roundtrip_*` |
+| SC-005 | Full generate → evaluate pipeline produces a schema-valid `QuizAgentOutput` with `status: "evaluated"` and `overall_score > 0` | `test_full_pipeline_integration` |
 
 ---
 

@@ -31,7 +31,7 @@
 
 **⚠️ CRITICAL**: No user story implementation starts before this phase completes.
 
-- [ ] T004 Add `QuestionType` enum, `MCQOption`, `Question`, `Quiz`, `SubmittedAnswer`, `QuestionResult`, `QuizResult`, `QuizAgentInput`, and `QuizAgentOutput` schemas to `project/schemas.py`
+- [ ] T004 Add `QuestionType` enum, `MCQOption`, `Question`, `QuizMetadata`, `UIHints`, `Quiz`, `SubmittedAnswer`, `QuestionResult`, `QuizResult`, `QuizAgentInput`, and `QuizAgentOutput` schemas to `project/schemas.py`
 - [ ] T005 [P] Implement `LLMConfig` dataclass and `get_generation_config()` / `get_grading_config()` loaders in `quiz_agent/config.py`
 - [ ] T006 [P] Implement unified LiteLLM call wrapper `call_llm(messages, config) → str` with unconfigured-call guard in `quiz_agent/llm_client.py`
 - [ ] T007 [P] Define `QUESTION_GENERATION_PROMPT` and `DESCRIPTIVE_GRADING_PROMPT` constants in `quiz_agent/prompts.py`
@@ -59,7 +59,7 @@ returned `Quiz` contains the correct question types, option structures, and embe
 - [ ] T013 [P] [US1] Implement `test_generate_question_type_counts` — verifies correct counts of `mcq-single`, `mcq-multi`, and `descriptive` questions in `quiz_agent/tests/test_quiz_agent.py`
 - [ ] T014 [P] [US1] Implement `test_mcq_single_has_four_options` — verifies every `mcq-single` question has exactly 4 options in `quiz_agent/tests/test_quiz_agent.py`
 - [ ] T015 [P] [US1] Implement `test_mcq_multi_has_four_to_six_options` — verifies every `mcq-multi` question has 4–6 options in `quiz_agent/tests/test_quiz_agent.py`
-- [ ] T016 [P] [US1] Implement `test_mcq_options_have_explanations` — verifies each option carries a `wrong_explanation` or `correct_explanation` field and each question carries a `topic_deep_dive` in `quiz_agent/tests/test_quiz_agent.py`
+- [ ] T016 [P] [US1] Implement `test_mcq_options_have_explanations` — verifies each option carries an `explanation` field (used for both wrong-answer and correct-answer feedback) and each MCQ question carries a `topic_deep_dive` in `quiz_agent/tests/test_quiz_agent.py`
 - [ ] T017 [US1] Implement `test_descriptive_questions_have_rubric` — verifies each `descriptive` question includes a non-empty `rubric` field in `quiz_agent/tests/test_quiz_agent.py`
 - [ ] T018 [US1] Implement `test_generate_short_content_returns_error` — verifies that teaching content under the minimum length returns `status: "error"` without an LLM call in `quiz_agent/tests/test_quiz_agent.py`
 - [ ] T019 [US1] Implement `test_generate_llm_failure_returns_error` — verifies that an LLM exception yields `status: "error"` and no unhandled exception in `quiz_agent/tests/test_quiz_agent.py`

@@ -77,8 +77,8 @@ specs/003-quiz-agent/
 
 ```text
 project/
-└── schemas.py           # Add: QuestionType, MCQOption, Question, Quiz,
-                         #      SubmittedAnswer, QuestionResult, QuizResult,
+└── schemas.py           # Add: QuestionType, MCQOption, Question, QuizMetadata, UIHints,
+                         #      Quiz, SubmittedAnswer, QuestionResult, QuizResult,
                          #      QuizAgentInput, QuizAgentOutput
 
 quiz_agent/
@@ -86,7 +86,8 @@ quiz_agent/
 ├── agent.py             # QuizAgent class: generate(input) → Quiz,
                          #                  evaluate(quiz, answers) → QuizResult
 ├── config.py            # LLMConfig dataclass, get_generation_config(), get_grading_config()
-├── llm_client.py        # call_llm(messages, config) → str; guards unconfigured calls
+├── llm_client.py        # call_llm(messages, config) → tuple[str, int]; second element is
+                         #   tokens_used (completion tokens); guards unconfigured calls
 ├── prompts.py           # QUESTION_GENERATION_PROMPT, DESCRIPTIVE_GRADING_PROMPT constants
 ├── validators.py        # validate_question_set(raw: dict) → list[str]; structural checks
 ├── helpers.py           # score_mcq_single(), score_mcq_multi(),
@@ -139,6 +140,9 @@ objects returned by `generate()`. This design:
 | Descriptive grading | 1200 | Scores + model answers + qualitative feedback for all 4 questions |
 
 Completion token counts are reported in `QuizAgentOutput.metadata.tokens_used`.
+`tokens_used` is set independently per phase: the **generation output** reports completion
+tokens from the generation call; the **evaluation output** reports completion tokens from
+the descriptive grading call. It is never a cumulative sum across both calls.
 Teaching content passed to `generate()` is truncated by an input guard in `agent.py` if it
 exceeds a safe prompt-token ceiling, to prevent total request size from exceeding the model
 window.
@@ -213,3 +217,27 @@ No constitution violations identified. Complexity is justified by:
 - Input guard on teaching content length (robustness requirement from spec edge cases).
 
 All complexity is traceable to spec requirements rather than architectural overhead.
+
+## Scope Boundary: Frontend and Deferred Requirements
+
+This plan covers the **backend Quiz Agent module only**. The following spec requirements
+are UI-layer or persistence concerns outside the current iteration scope:
+
+| FR | Requirement | Deferral reason |
+|---|---|---|
+| FR-004 | Quiz button trigger in Teaching Agent UI | Frontend integration |
+| FR-008 | Live word-count indicator in text area | Frontend UI component |
+| FR-016 | Visual language / design system compliance | Frontend styling |
+| FR-017 | Single scrollable view with progress indicator | Frontend layout |
+| FR-018 | `<input type="radio">` / `<input type="checkbox">` rendering | Frontend HTML |
+| FR-019 | Live word-count display (`"87 / ~150 words"`) | Frontend UI component |
+| FR-020 | Submit button disabled until all MCQs answered | Frontend form validation |
+| FR-021 | Inline validation + scroll to first unanswered MCQ | Frontend form validation |
+| FR-022 | WCAG 2.1 Level AA keyboard / screen-reader navigation | Frontend accessibility |
+| FR-023 | `sessionStorage` persistence of quiz state | Frontend session management |
+| FR-025 | Retake flow (new generation call on button click) | Frontend UX + agent call |
+| FR-026 | Quiz history per topic | Future work — requires persistent storage layer; contradicts current `Storage: N/A` constraint; deferred to v2 |
+
+The backend agent is responsible only for producing and evaluating schema-valid `QuizAgentOutput`
+payloads. Session persistence, rendering, and form-control behaviour are the responsibility
+of the frontend integration layer.
