@@ -86,8 +86,11 @@ Global exception handling contract:
 - Root `docker-compose.yaml` MUST define:
   - Kafka service
   - Kafka UI service
+- Kafka service MUST use image `apache/kafka:4.2.1`.
 - Kafka UI service MUST use image `provectuslabs/kafka-ui:latest`.
 - Kafka UI service MUST be configured to connect to the compose Kafka service.
+- Kafka service SHOULD use KRaft-style Apache Kafka environment configuration compatible with
+  official container guidance (node id, process roles, listeners, controller quorum voters).
 
 ## Scope Boundary
 

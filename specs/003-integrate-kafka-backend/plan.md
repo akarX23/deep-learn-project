@@ -1,23 +1,31 @@
 # Implementation Plan: Kafka Backend Integration Service
 
-**Branch**: `[003-integrate-kafka-backend]` | **Date**: 2026-06-08 | **Spec**: `/specs/003-integrate-kafka-backend/spec.md`
+**Branch**: `[003-integrate-kafka-backend]` | **Date**: 2026-06-09 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `/specs/003-integrate-kafka-backend/spec.md`
 
 ## Summary
 
-Deliver a root-level FastAPI backend service that initializes Kafka admin connectivity during application startup and performs resource cleanup at shutdown using FastAPI lifespan events only (no deprecated `on_event` handlers). Provide a single topic-creation endpoint with deterministic outcomes and a unified error envelope across validation, HTTP, and unhandled failures. Keep local developer bootstrap simple with root-level Docker Compose for Kafka + Kafka UI and aligned environment examples.
+Deliver a dedicated FastAPI backend service that initializes Kafka admin connectivity during lifespan startup, retries with env-driven controls, and exposes one topic-creation endpoint with a unified error envelope. Local bootstrap is standardized with root compose services for Kafka and Kafka UI, with Kafka pinned to `apache/kafka:4.2.1` and Kafka UI connected to the broker service.
 
 ## Technical Context
 
-**Language/Version**: Python 3.11+  
-**Primary Dependencies**: FastAPI, Uvicorn, kafka-python (`KafkaAdminClient`), pydantic, python-dotenv  
-**Storage**: N/A  
-**Testing**: pytest, FastAPI TestClient, mock admin adapters  
-**Target Platform**: Linux local/dev and CI  
-**Project Type**: Backend microservice (`backend_service/`)  
-**Performance Goals**: Topic-create API p95 <= 2s in local conditions; startup retry behavior completes within configured attempt/time budget  
-**Constraints**: Topic-create route only; `.env.local` defaults with process-env override; FastAPI lifespan-only lifecycle orchestration; unified structured error envelope for 422/HTTP/unhandled errors; avoid deprecated framework APIs  
-**Scale/Scope**: One Kafka cluster target per backend service instance
+**Language/Version**: Python 3.12.x
+**Primary Dependencies**: FastAPI, Uvicorn, kafka-python, Pydantic v2, python-dotenv
+**Storage**: N/A (stateless service; Kafka metadata managed via broker admin API)
+**Testing**: pytest + fastapi.testclient
+**Target Platform**: Linux containers for local development; Linux host runtime for service
+**Project Type**: Backend web service
+**Performance Goals**:
+- Topic-create API p95 <= 2s in local development (SC-003)
+- Local compose startup to reachable Kafka + Kafka UI under 2 minutes (SC-006)
+**Constraints**:
+- Use FastAPI lifespan only; no deprecated `on_event` handlers (FR-014)
+- Use unified global exception envelope for validation, HTTP, and unhandled failures (FR-015)
+- Kafka image fixed to `apache/kafka:4.2.1` in compose contract (FR-010)
+**Scale/Scope**:
+- One backend service
+- One API endpoint (`POST /api/v1/topics`)
+- One local Kafka cluster target per service instance
 
 ## Constitution Check
 
@@ -25,51 +33,16 @@ Deliver a root-level FastAPI backend service that initializes Kafka admin connec
 
 ### Pre-Phase 0 Gate Review
 
-- Code Quality Gate: PASS. Architecture separates config, Kafka admin adapter, API, and app boundary; lifecycle design explicitly avoids deprecated FastAPI handlers.
-- Testing Gate: PASS. Planned coverage includes startup success/failure/retry, shutdown cleanup, endpoint outcomes, and global exception-envelope behavior.
-- UX Consistency Gate: PASS. API success and error response envelopes are standardized and contract-bound.
-- Performance Gate: PASS. Startup and endpoint latency budgets are explicit and measurable.
-- Maintainability Gate: PASS. Diagnostics and rationale are captured, and lifecycle behavior is centralized at app boundary.
-
-## Phase 0: Research
-
-Research consolidated in `/specs/003-integrate-kafka-backend/research.md` covers:
-
-- Kafka admin library selection and retry semantics.
-- `.env.local` precedence model with process-env overrides.
-- Docker Compose topology decisions for Kafka + Kafka UI.
-- FastAPI lifespan-only lifecycle strategy (no deprecated lifecycle handlers).
-- Global exception-envelope strategy for consistent API failures.
-
-All clarified requirements are resolved; no `NEEDS CLARIFICATION` items remain.
-
-## Phase 1: Design and Contracts
-
-Phase 1 outputs:
-
-- `/specs/003-integrate-kafka-backend/data-model.md`
-- `/specs/003-integrate-kafka-backend/contracts/backend-topic-api-contract.md`
-- `/specs/003-integrate-kafka-backend/quickstart.md`
-
-Design highlights:
-
-- `KafkaConnectionConfig` for runtime and retry controls.
-- `StartupConnectionState` including shutdown cleanup transition.
-- Single `POST /api/v1/topics` endpoint with deterministic created/already_exists outcomes.
-- `ApiErrorResponse` contract for validation, HTTP, and unhandled failures.
-- Lifespan-managed startup and shutdown lifecycle orchestration.
-
-Agent context update:
-
-- `.github/copilot-instructions.md` already points to `specs/003-integrate-kafka-backend/plan.md`.
-
-## Post-Design Constitution Re-Check
-
-- Code Quality Gate: PASS. Separation of concerns is preserved and deprecated API usage is disallowed by design.
-- Testing Gate: PASS. Story-level tests map directly to lifecycle, endpoint, and error-envelope contracts.
-- UX Consistency Gate: PASS. Predictable success/error payload structure is explicit and reusable.
-- Performance Gate: PASS. Validation tasks and baseline capture are retained.
-- Maintainability Gate: PASS. Non-obvious tradeoffs and operational behavior are documented.
+- Code Quality Gate: PASS
+- Define `ruff check`, `ruff format --check`, and `python -m compileall backend_service` as mandatory checks before completion evidence.
+- Testing Gate: PASS
+- Require unit/integration tests for startup retry behavior, shutdown cleanup, API success/duplicate/validation/runtime paths, and contract-shaped error responses.
+- UX Consistency Gate: PASS
+- Enforce one response envelope shape for failure paths and deterministic status values for success paths (`created`, `already_exists`, `error`).
+- Performance Gate: PASS
+- Track startup retry timing and topic-create latency in quickstart evidence; keep topic p95 budget <= 2s and compose bootstrap target under 2 minutes.
+- Maintainability Gate: PASS
+- Require startup diagnostics, explicit lifecycle orchestration, and synchronized docs/contracts for env, API, and compose behavior.
 
 ## Project Structure
 
@@ -103,10 +76,64 @@ backend_service/
 docker-compose.yaml
 .env.example
 .env.local.example
+requirements.txt
 ```
 
-**Structure Decision**: Keep a dedicated root-level backend service and root-level infrastructure/bootstrap artifacts for clear operational ownership and easy local setup.
+**Structure Decision**: Keep a single backend-service package (`backend_service/`) with explicit API, config, and Kafka admin modules, and maintain feature artifacts in `specs/003-integrate-kafka-backend/`.
+
+## Phase 0: Research Outcomes
+
+Research decisions are documented in [research.md](./research.md) and resolve all technical unknowns from the template baseline:
+
+- Kafka admin library: `kafka-python` `KafkaAdminClient`
+- Lifecycle orchestration: FastAPI lifespan startup/shutdown
+- Env precedence: `.env.local` base + process-env override
+- API scope: topic creation only
+- Local infra topology: Kafka + Kafka UI with Kafka pinned to `apache/kafka:4.2.1`
+- Error strategy: global exception handlers returning one envelope shape
+- Retry model: env-driven retry count + timeout with strict validation
+
+No unresolved `NEEDS CLARIFICATION` items remain.
+
+## Phase 1: Design & Contracts
+
+### Data Model Output
+
+- [data-model.md](./data-model.md) defines:
+- Runtime config (`KafkaConnectionConfig`)
+- Startup lifecycle state (`StartupConnectionState`)
+- API request/result/error envelope (`TopicCreateRequest`, `TopicCreateResult`, `ApiErrorResponse`)
+- Compose topology contract entity (`ComposeServiceConfig`) including fixed Kafka image tag
+
+### Contract Output
+
+- [contracts/backend-topic-api-contract.md](./contracts/backend-topic-api-contract.md) defines:
+- Runtime env contract and precedence
+- `POST /api/v1/topics` request/response/error behavior
+- Lifespan startup/shutdown contract
+- Local compose infrastructure contract with `apache/kafka:4.2.1` + Kafka UI connectivity
+
+### Quickstart Output
+
+- [quickstart.md](./quickstart.md) defines local setup, service run flow, API usage, testing, and quality/performance validation commands.
+
+### Agent Context Update
+
+- `.github/copilot-instructions.md` already references `specs/003-integrate-kafka-backend/plan.md` inside both SPECKIT marker blocks; no path update required.
+
+## Post-Design Constitution Check
+
+- Code Quality Gate: PASS
+- Quality checks and evidence commands are captured in quickstart and aligned with implementation tasks.
+- Testing Gate: PASS
+- Independent test scenarios from all three user stories map to existing backend test modules and contract behaviors.
+- UX Consistency Gate: PASS
+- Contract and quickstart preserve one failure envelope and deterministic response semantics.
+- Performance Gate: PASS
+- Budgets are explicitly carried from spec to plan and verification notes.
+- Maintainability Gate: PASS
+- Design keeps narrow service scope, explicit lifecycle behavior, and synchronized artifacts.
 
 ## Complexity Tracking
 
-No constitution violations or justified exceptions.
+No constitution violations or justified complexity exceptions identified at planning time.

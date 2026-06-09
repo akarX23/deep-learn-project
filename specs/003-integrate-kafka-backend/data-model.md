@@ -66,11 +66,13 @@
 - Description: Local docker compose service configuration for developer bootstrap.
 - Fields:
   - kafka_service_name: str (default `kafka`)
+  - kafka_image: str (fixed `apache/kafka:4.2.1`)
   - kafka_ui_service_name: str (default `kafka-ui`)
   - kafka_ui_image: str (fixed `provectuslabs/kafka-ui:latest`)
   - kafka_bootstrap_reference: str (default `kafka:9092`)
 - Validation rules:
   - kafka_service_name must be non-empty.
+  - kafka_image must equal `apache/kafka:4.2.1`.
   - kafka_ui_service_name must be non-empty.
   - kafka_ui_image must equal `provectuslabs/kafka-ui:latest`.
   - kafka_bootstrap_reference must point to the compose Kafka service.

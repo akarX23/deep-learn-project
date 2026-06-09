@@ -70,6 +70,7 @@ class KafkaSettings(BaseModel):
 
 class ComposeSettings(BaseModel):
     kafka_service_name: str = "kafka"
+    kafka_image: str = "apache/kafka:4.2.1"
     kafka_ui_service_name: str = "kafka-ui"
     kafka_ui_image: str = "provectuslabs/kafka-ui:latest"
     kafka_bootstrap_reference: str = "kafka:9092"

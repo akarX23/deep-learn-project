@@ -29,6 +29,12 @@ Validate containers are running:
 docker compose ps
 ```
 
+Confirm compose image expectations:
+
+```bash
+docker compose config | grep -E "apache/kafka:4.2.1|provectuslabs/kafka-ui:latest"
+```
+
 Verify Kafka UI is reachable (default):
 
 ```bash
@@ -81,8 +87,9 @@ pytest backend_service/tests -q
 ```
 
 Latest local evidence:
-- `10 passed` in `backend_service/tests`.
+- `13 passed` in `backend_service/tests`.
 - Covers startup success, retry-then-success, retry exhaustion, shutdown cleanup, env precedence, API success, duplicate handling, payload validation, HTTP exception envelope, unhandled exception envelope, and runtime error mapping.
+- Covers compose contract checks for Kafka image pin (`apache/kafka:4.2.1`), Kafka UI image wiring, and KRaft environment key presence.
 
 ## 6. Run quality checks
 
@@ -113,9 +120,8 @@ Target:
 - Bring up local Kafka + Kafka UI in under 2 minutes.
 
 Current environment result:
-- Blocked in this execution environment because compose commands are unavailable:
-  - `docker compose` subcommand is not present.
-  - `docker-compose` binary is not installed.
+- `docker compose` command is available, but startup validation is blocked by Docker daemon permission:
+  - `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`
 
 Validation command to run in a compose-capable environment:
 

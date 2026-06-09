@@ -14,6 +14,10 @@
 - Q: How should FastAPI exceptions be handled? → A: Add global exception handlers for validation errors, HTTP exceptions, and unhandled exceptions that always return one structured error payload shape.
 - Q: Which FastAPI lifecycle mechanism should be used? → A: Use FastAPI lifespan events only; do not use deprecated lifecycle APIs such as `on_event` handlers.
 
+### Session 2026-06-09
+
+- Q: Which Apache Kafka image tag should docker-compose use? → A: Use `apache/kafka:4.2.1`.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Initialize Backend Kafka Connectivity (Priority: P1)
@@ -85,7 +89,7 @@ As a developer, I need a root-level Docker Compose file that runs Kafka plus Kaf
 - **FR-007**: The backend microservice MUST provide a single API endpoint to create Kafka topics.
 - **FR-008**: The topic-creation API MUST validate input and return structured errors for invalid requests.
 - **FR-009**: The topic-creation API MUST handle already-existing topics safely without crashing the service.
-- **FR-010**: The project root MUST contain a `docker-compose.yaml` defining Kafka and Kafka UI services, with Kafka UI using image `provectuslabs/kafka-ui:latest` and configured to connect to the Kafka service.
+- **FR-010**: The project root MUST contain a `docker-compose.yaml` defining Kafka and Kafka UI services, with Kafka using image `apache/kafka:4.2.1` and Kafka UI using image `provectuslabs/kafka-ui:latest` configured to connect to the Kafka service.
 - **FR-011**: The environment documentation MUST define all required Kafka connectivity and retry variables used by the backend service and include `.env.local` examples.
 - **FR-012**: The system MUST define UX consistency requirements, including predictable API response structure and clear error messaging for startup and topic creation flows.
 - **FR-013**: The system MUST define measurable performance requirements for startup retry handling and topic-creation response latency under expected local-development load.

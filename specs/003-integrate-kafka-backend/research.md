@@ -21,26 +21,31 @@
 - Alternatives considered: Broader Kafka management API set (out of scope), inter-service proxy capabilities (explicitly rejected).
 
 ## Decision 5: Docker Compose Topology
-- Decision: Provide root-level `docker-compose.yaml` with Kafka and Kafka UI services; use `provectuslabs/kafka-ui:latest` and configure Kafka UI to connect to the Kafka service.
-- Rationale: Preserves simple local bootstrap while adding immediate topic/cluster visibility and matching clarified requirement.
-- Alternatives considered: Kafka-only compose (insufficient after clarification), include backend service in compose (not requested), include Zookeeper-based topology (extra complexity with modern KRaft support available).
+- Decision: Provide root-level `docker-compose.yaml` with Kafka and Kafka UI services; pin Kafka to `apache/kafka:4.2.1`, keep Kafka UI on `provectuslabs/kafka-ui:latest`, and wire Kafka UI to `kafka:9092`.
+- Rationale: Satisfies clarified requirement for Apache Kafka image usage while retaining deterministic local reproducibility and immediate observability.
+- Alternatives considered: Bitnami Kafka image (rejected to avoid image-family drift from clarified requirement), `apache/kafka:latest` (rejected to avoid non-deterministic upgrades), Kafka-only compose (insufficient after Kafka UI clarification).
 
-## Decision 6: Topic Creation Idempotency Behavior
+## Decision 6: Apache Kafka KRaft Compose Environment
+- Decision: Use KRaft-oriented environment keys aligned with Apache Kafka container guidance (`KAFKA_NODE_ID`, `KAFKA_PROCESS_ROLES`, listeners, quorum voters, replication-factor defaults).
+- Rationale: Keeps compose bootstrap self-contained without ZooKeeper, consistent with modern Kafka single-node local development setup.
+- Alternatives considered: ZooKeeper-based setup (unnecessary complexity for current scope), vendor-specific env key families not matching Apache Kafka docs.
+
+## Decision 7: Topic Creation Idempotency Behavior
 - Decision: Treat existing-topic requests as deterministic non-fatal responses (`already_exists`) rather than hard failures.
 - Rationale: Improves automation safety for repeated provisioning calls.
 - Alternatives considered: Raise error on duplicate topic creation (less user-friendly for internal automation).
 
-## Decision 7: Retry Configuration Model
+## Decision 8: Retry Configuration Model
 - Decision: Use explicit environment variables for startup retry count and retry timeout seconds with strict validation.
 - Rationale: Makes startup behavior measurable and tunable per environment.
 - Alternatives considered: Hardcoded retry values (inflexible), exponential backoff with extra knobs (not required for first version).
 
-## Decision 8: Lifecycle Event Strategy
+## Decision 9: Lifecycle Event Strategy
 - Decision: Use FastAPI lifespan events to perform Kafka admin initialization at startup and connection cleanup at shutdown; avoid deprecated `on_event` handlers.
 - Rationale: Keeps readiness and teardown behavior explicit, centralized at app boundary, and aligned with current framework guidance.
 - Alternatives considered: Deprecated `on_event` lifecycle handlers (rejected due to deprecation), lazy connection creation on first request (delayed failures), module-level singleton setup (harder to test and less deterministic teardown).
 
-## Decision 9: Global Exception Handling Strategy
+## Decision 10: Global Exception Handling Strategy
 - Decision: Add global FastAPI exception handlers for request validation errors, HTTP exceptions, and unhandled exceptions, returning one structured error envelope.
 - Rationale: Provides consistent client-facing error shape and simplifies observability/consumer parsing.
 - Alternatives considered: Per-route error shaping only (inconsistent coverage), default framework error bodies (inconsistent contract).

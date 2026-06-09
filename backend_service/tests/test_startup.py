@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 import pytest
 from fastapi.testclient import TestClient
@@ -125,9 +126,46 @@ def test_startup_retry_exhausted_fails(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_compose_configuration_defaults() -> None:
     compose = ComposeSettings()
     assert compose.kafka_service_name == "kafka"
+    assert compose.kafka_image == "apache/kafka:4.2.1"
     assert compose.kafka_ui_service_name == "kafka-ui"
     assert compose.kafka_ui_image == "provectuslabs/kafka-ui:latest"
     assert compose.kafka_ui_url == "http://localhost:8080"
+
+
+def test_compose_kafka_and_kafka_ui_image_contract() -> None:
+    compose_text = Path("docker-compose.yaml").read_text(encoding="utf-8")
+
+    assert "kafka:" in compose_text
+    assert "image: apache/kafka:4.2.1" in compose_text
+    assert "kafka-ui:" in compose_text
+    assert "image: provectuslabs/kafka-ui:latest" in compose_text
+
+
+def test_compose_kafka_ui_bootstrap_wiring_contract() -> None:
+    compose_text = Path("docker-compose.yaml").read_text(encoding="utf-8")
+
+    assert "KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092" in compose_text
+
+
+def test_compose_kraft_env_key_presence_contract() -> None:
+    compose_text = Path("docker-compose.yaml").read_text(encoding="utf-8")
+    required_env_keys = [
+        "KAFKA_NODE_ID",
+        "KAFKA_PROCESS_ROLES",
+        "KAFKA_LISTENERS",
+        "KAFKA_ADVERTISED_LISTENERS",
+        "KAFKA_CONTROLLER_LISTENER_NAMES",
+        "KAFKA_LISTENER_SECURITY_PROTOCOL_MAP",
+        "KAFKA_CONTROLLER_QUORUM_VOTERS",
+        "KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR",
+        "KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR",
+        "KAFKA_TRANSACTION_STATE_LOG_MIN_ISR",
+        "KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS",
+        "KAFKA_NUM_PARTITIONS",
+    ]
+
+    for key in required_env_keys:
+        assert re.search(rf"^\s+{key}:", compose_text, re.MULTILINE), key
 
 
 def test_kafka_ui_reachability_expectation_contract() -> None:
