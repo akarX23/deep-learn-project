@@ -17,10 +17,10 @@
 
 **Purpose**: Project initialization and Kafka module structure
 
-- [ ] T001 Create project structure per implementation plan
-- [ ] T002 Initialize Kafka dependencies in requirements.txt (kafka-python, httpx, FastAPI/Uvicorn)
-- [ ] T003 [P] Setup environment variable template in .env.local.example
-- [ ] T004 Create project/topics.py with TopicRegistry enum (rag, rag-complete)
+- [X] T001 Create project structure per implementation plan
+- [X] T002 Initialize Kafka dependencies in requirements.txt (kafka-python, httpx, FastAPI/Uvicorn)
+- [X] T003 [P] Setup environment variable template in .env.local.example
+- [X] T004 Create project/topics.py with TopicRegistry enum (rag, rag-complete)
 
 ---
 
@@ -30,12 +30,12 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T005 Create rag_agent/config.py with KafkaRuntimeConfig class (inherit BACKEND_KAFKA* flags)
-- [ ] T006 [P] Update project/schemas.py with RAGRequestEvent and RAGCompletionEvent Pydantic models
-- [ ] T007 Create rag_agent/kafka.py with KafkaProducer and KafkaConsumer initialization (single gateway module)
-- [ ] T008 Create rag_agent/service.py with FastAPI app and lifespan context manager (startup/shutdown hooks)
-- [ ] T009 Implement startup topic bootstrap call in rag_agent/service.py (POST to BACKEND_API_TOPIC_URL)
-- [ ] T010 [P] Add graceful shutdown with consumer/producer cleanup in service.py lifespan
+- [X] T005 Create rag_agent/config.py with KafkaRuntimeConfig class (inherit BACKEND_KAFKA* flags)
+- [X] T006 [P] Update project/schemas.py with RAGRequestEvent and RAGCompletionEvent Pydantic models
+- [X] T007 Create rag_agent/kafka.py with KafkaProducer and KafkaConsumer initialization (single gateway module)
+- [X] T008 Create rag_agent/service.py with FastAPI app and lifespan context manager (startup/shutdown hooks)
+- [X] T009 Implement startup topic bootstrap call in rag_agent/service.py (POST to BACKEND_API_TOPIC_URL)
+- [X] T010 [P] Add graceful shutdown with consumer/producer cleanup in service.py lifespan
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -49,18 +49,18 @@
 
 ### Tests for User Story 1 (REQUIRED)
 
-- [ ] T011 [P] [US1] Contract test for RAGRequestEvent validation in rag_agent/tests/test_request_event.py
-- [ ] T012 [P] [US1] Integration test for event consumption from topic rag in rag_agent/tests/test_kafka_integration.py
-- [ ] T013 [P] [US1] Integration test for request dispatch to RAGAgent pipeline in rag_agent/tests/test_kafka_integration.py
+- [X] T011 [P] [US1] Contract test for RAGRequestEvent validation in rag_agent/tests/test_request_event.py
+- [X] T012 [P] [US1] Integration test for event consumption from topic rag in rag_agent/tests/test_kafka_integration.py
+- [X] T013 [P] [US1] Integration test for request dispatch to RAGAgent pipeline in rag_agent/tests/test_kafka_integration.py
 
 ### Implementation for User Story 1
 
-- [ ] T014 [US1] Create rag_agent/handlers.py with RAGRequestEventHandler class and process_request() method
-- [ ] T015 [US1] Implement RAGRequestEvent validation logic in handlers.py (required fields, non-empty checks)
-- [ ] T016 [US1] Initialize consumer subscription to topic `rag` in rag_agent/kafka.py (consumer_subscribe_rag())
-- [ ] T017 [US1] Implement consumer poll loop in rag_agent/service.py (continuous polling with error continuation)
-- [ ] T018 [US1] Map consumed raw event to RAGRequestEvent Pydantic model in handlers.py
-- [ ] T019 [US1] Invoke existing RAGAgent.run() with request payload in handlers.py (map user_request→prompt)
+- [X] T014 [US1] Create rag_agent/handlers.py with RAGRequestEventHandler class and process_request() method
+- [X] T015 [US1] Implement RAGRequestEvent validation logic in handlers.py (required fields, non-empty checks)
+- [X] T016 [US1] Initialize consumer subscription to topic `rag` in rag_agent/kafka.py (consumer_subscribe_rag())
+- [X] T017 [US1] Implement consumer poll loop in rag_agent/service.py (continuous polling with error continuation)
+- [X] T018 [US1] Map consumed raw event to RAGRequestEvent Pydantic model in handlers.py
+- [X] T019 [US1] Invoke existing RAGAgent.run() with request payload in handlers.py (map user_request→prompt)
 
 **Checkpoint**: User Story 1 complete - RAG can now consume requests from Kafka and trigger processing
 
@@ -74,17 +74,17 @@
 
 ### Tests for User Story 2 (REQUIRED)
 
-- [ ] T020 [P] [US2] Contract test for RAGCompletionEvent payload shape in rag_agent/tests/test_completion_event.py
-- [ ] T021 [P] [US2] Integration test for topic rag-complete event publishing in rag_agent/tests/test_kafka_integration.py
-- [ ] T022 [P] [US2] Integration test for request-to-completion correlation metadata in rag_agent/tests/test_kafka_integration.py
+- [X] T020 [P] [US2] Contract test for RAGCompletionEvent payload shape in rag_agent/tests/test_completion_event.py
+- [X] T021 [P] [US2] Integration test for topic rag-complete event publishing in rag_agent/tests/test_kafka_integration.py
+- [X] T022 [P] [US2] Integration test for request-to-completion correlation metadata in rag_agent/tests/test_kafka_integration.py
 
 ### Implementation for User Story 2
 
-- [ ] T023 [US2] Create completion event publisher producer_publish_rag_complete() in rag_agent/kafka.py
-- [ ] T024 [US2] Implement RAGProcessingResult→RAGCompletionEvent mapping in handlers.py (map RAGAgent output to completion contract)
-- [ ] T025 [US2] Add event.json serialization for Kafka producer in handlers.py (with session_ctx preservation)
-- [ ] T026 [US2] Call completion publisher after RAG processing in handlers.py (whether success, partial, or failed)
-- [ ] T027 [US2] Include error metadata in RAGCompletionEvent when processing fails (FR-007 compliance)
+- [X] T023 [US2] Create completion event publisher producer_publish_rag_complete() in rag_agent/kafka.py
+- [X] T024 [US2] Implement RAGProcessingResult→RAGCompletionEvent mapping in handlers.py (map RAGAgent output to completion contract)
+- [X] T025 [US2] Add event.json serialization for Kafka producer in handlers.py (with session_ctx preservation)
+- [X] T026 [US2] Call completion publisher after RAG processing in handlers.py (whether success, partial, or failed)
+- [X] T027 [US2] Include error metadata in RAGCompletionEvent when processing fails (FR-007 compliance)
 
 **Checkpoint**: User Stories 1 AND 2 complete - full request-to-completion flow is operational
 
@@ -98,19 +98,19 @@
 
 ### Tests for User Story 3 (REQUIRED)
 
-- [ ] T028 [P] [US3] Contract test for structured RequestLifecycleLogEntry format in rag_agent/tests/test_logging.py
-- [ ] T029 [P] [US3] Integration test for lifecycle logging across all stages in rag_agent/tests/test_kafka_integration.py
-- [ ] T030 [P] [US3] Integration test for error-stage logging when processing fails in rag_agent/tests/test_kafka_integration.py
+- [X] T028 [P] [US3] Contract test for structured RequestLifecycleLogEntry format in rag_agent/tests/test_logging.py
+- [X] T029 [P] [US3] Integration test for lifecycle logging across all stages in rag_agent/tests/test_kafka_integration.py
+- [X] T030 [P] [US3] Integration test for error-stage logging when processing fails in rag_agent/tests/test_kafka_integration.py
 
 ### Implementation for User Story 3
 
-- [ ] T031 [US3] Create rag_agent/logging.py with StructuredLogger and emit_log_entry() (RFC 3339 timestamp, correlation metadata)
-- [ ] T032 [US3] Add consumed-stage log emission in consumer poll loop (service.py) after message received
-- [ ] T033 [US3] Add validated-stage log emission in handlers.py after RAGRequestEvent validation passes
-- [ ] T034 [US3] Add processing_started log emission in handlers.py when RAGAgent.run() is invoked
-- [ ] T035 [US3] Add processing_completed log emission in handlers.py after RAGAgent.run() returns (with status)
-- [ ] T036 [US3] Add publish_completed log emission in handlers.py after rag-complete event is published
-- [ ] T037 [US3] Add error-stage log emission for validation failures and per-request exceptions (non-fatal continuation)
+- [X] T031 [US3] Create rag_agent/logging.py with StructuredLogger and emit_log_entry() (RFC 3339 timestamp, correlation metadata)
+- [X] T032 [US3] Add consumed-stage log emission in consumer poll loop (service.py) after message received
+- [X] T033 [US3] Add validated-stage log emission in handlers.py after RAGRequestEvent validation passes
+- [X] T034 [US3] Add processing_started log emission in handlers.py when RAGAgent.run() is invoked
+- [X] T035 [US3] Add processing_completed log emission in handlers.py after RAGAgent.run() returns (with status)
+- [X] T036 [US3] Add publish_completed log emission in handlers.py after rag-complete event is published
+- [X] T037 [US3] Add error-stage log emission for validation failures and per-request exceptions (non-fatal continuation)
 
 **Checkpoint**: All user stories complete - full integration with observability ready for deployment
 
@@ -120,7 +120,7 @@
 
 **Purpose**: Quality validation, documentation, and end-to-end verification
 
-- [ ] T038 [P] Update rag_agent/README.md with Kafka integration documentation (consumer setup, topic contract, startup bootstrap)
+- [X] T038 [P] Update rag_agent/README.md with Kafka integration documentation (consumer setup, topic contract, startup bootstrap)
 - [ ] T039 [P] Run quality checks: ruff check, ruff format --check, python -m compileall on rag_agent/
 - [ ] T040 Run full test suite: pytest rag_agent/tests/test_kafka_integration.py -v (all US1/US2/US3 integration tests pass)
 - [ ] T041 Validate quickstart.md walkthrough: install → .env.local → docker compose up → service startup → publish test event → verify completion event
