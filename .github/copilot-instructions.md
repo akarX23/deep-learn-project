@@ -1,11 +1,11 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read
-specs/003-integrate-kafka-backend/plan.md
+specs/004-ui-frontend/plan.md
 <!-- SPECKIT END -->
 
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-specs/003-integrate-kafka-backend/plan.md
+specs/004-ui-frontend/plan.md
 <!-- SPECKIT END -->

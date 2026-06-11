@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read
-specs/000-planner-agent/plan.md
+specs/004-ui-frontend/plan.md
 <!-- SPECKIT END -->
 
 ## Project Overview

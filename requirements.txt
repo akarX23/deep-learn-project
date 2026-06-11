@@ -1,6 +1,7 @@
 # --- Shared ---
 pydantic>=2.0
 python-dotenv>=1.0.0
+streamlit>=1.36.0
 
 # --- RAG Agent ---
 pymupdf>=1.27.0
