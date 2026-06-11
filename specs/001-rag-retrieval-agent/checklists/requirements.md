@@ -1,7 +1,7 @@
-# Specification Quality Checklist: RAG Retrieval Agent
+# Specification Quality Checklist: RAG Kafka Event Integration
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2026-05-27
+**Created**: 2026-06-11
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -32,5 +32,5 @@
 ## Notes
 
 - Validation pass 1 complete: all checklist items pass.
-- Scope boundary explicitly excludes Planner Agent and Teaching Agent implementation.
-- Test coverage expectations are explicitly included as requirements to support downstream planning.
+- Spec updated in-place under `specs/001-rag-retrieval-agent` per user instruction.
+- Active feature directory switched to `specs/001-rag-retrieval-agent` for downstream commands.

@@ -1,65 +1,46 @@
-# Research: RAG Retrieval Agent
+# Research: RAG Kafka Event Integration
 
-## Decision 1: PDF Extraction Library
-- Decision: Use PyMuPDF (`fitz`) for page count, text extraction, table extraction, and image extraction.
-- Rationale: One dependency covers all required per-page operations with good performance and direct page access.
-- Alternatives considered: `pdfplumber` (good tables but weaker image flow integration), `pypdf` (lighter but insufficient extraction coverage).
+## Decision 1: Kafka Boundary Module
+- Decision: Implement all Kafka connection logic, producer/consumer initialization, and send/receive controller functions in a single `rag_agent/kafka.py` module.
+- Rationale: Enforces one integration boundary, simplifies testing/mocking, and prevents transport logic from leaking across service code.
+- Alternatives considered: Split producer/consumer across multiple modules (more indirection and coordination overhead), inline Kafka calls in service handlers (poor maintainability).
 
-## Decision 2: Orchestration Runtime
-- Decision: Use LangGraph for deterministic page-processing flow with explicit state transitions.
-- Rationale: StateGraph provides clear control over page iteration, conditional continuation, and final compilation.
-- Alternatives considered: Hand-rolled loops (less structured), generic agent executors (less explicit state control).
+## Decision 2: Topic Registry Strategy
+- Decision: Define all cross-service topic names in `project/topics.py` using enums grouped by service domain.
+- Rationale: Centralized topic ownership avoids hardcoded strings and keeps agent/service topic contracts discoverable.
+- Alternatives considered: Topic constants local to each service module (duplication risk), environment-only topic names (harder contract governance).
 
-## Decision 3: LLM Invocation Layer
-- Decision: Route text, VLM, and embedding calls through a unified LiteLLM client abstraction.
-- Rationale: Keeps provider integration consistent and reduces SDK-specific branching.
-- Alternatives considered: Provider-specific SDKs (more lock-in, duplicated code paths).
+## Decision 3: Kafka Configuration Source
+- Decision: RAG Kafka clients inherit connection details using existing `BACKEND_KAFKA*` environment flags.
+- Rationale: Reuses established backend Kafka configuration contract and avoids introducing duplicate RAG-specific transport flags.
+- Alternatives considered: New `RAG_KAFKA_*` flag set (configuration drift), static config file (less deployment flexibility).
 
-## Decision 4: Embedding Source
-- Decision: Use remote LiteLLM-backed embedding API as the primary relevance scoring source.
-- Rationale: Aligns embedding configuration and operational model with text/VLM flows and avoids local model distribution overhead.
-- Alternatives considered: Local sentence-transformers as primary path (extra model management), hybrid dual-path fallback (higher complexity).
+## Decision 4: Service Runtime Model
+- Decision: Convert the RAG integration entrypoint into a lightweight FastAPI service that stays alive and hosts startup lifecycle hooks.
+- Rationale: Provides reliable process lifecycle, startup orchestration, and health/debug surfaces while keeping retrieval logic unchanged in `RAGAgent`.
+- Alternatives considered: Standalone infinite consumer script (weaker lifecycle control), embedding consumer inside existing CLI path only (not service-friendly).
 
-## Decision 5: Provider Key Strategy
-- Decision: Define separate provider environment variables for each modality:
-  - `RAG_TEXT_PROVIDER`
-  - `RAG_VLM_PROVIDER`
-  - `RAG_EMBEDDING_PROVIDER`
-- Rationale: Allows independent routing across providers per modality while preserving a uniform call interface.
-- Alternatives considered: Single global provider variable (insufficient flexibility), mandatory explicit provider with no default (higher setup friction).
+## Decision 5: Startup Topic Bootstrap Flow
+- Decision: On FastAPI startup, call backend topic API via `BACKEND_API_TOPIC_URL` to ensure required topics exist before consumer polling begins.
+- Rationale: Topic creation remains centralized in backend service while RAG ensures readiness for event processing.
+- Alternatives considered: RAG direct topic creation via admin client (duplicates backend concern), manual pre-provisioning only (fragile operational setup).
 
-## Decision 6: Provider Default Value
-- Decision: Default each modality provider to `hosted_vllm` when not explicitly set.
-- Rationale: Provides a predictable baseline configuration and keeps existing setups working without extra env edits.
-- Alternatives considered: No default (fail-fast but less ergonomic), defaulting to provider-specific names tied to one vendor.
+## Decision 6: Consumer Loop and Dispatch
+- Decision: Initialize a continuous polling loop that consumes from topic `rag`, validates event payload, and dispatches to explicit handler functions.
+- Rationale: Keeps event handling deterministic and allows non-fatal continuation across malformed messages or per-request failures.
+- Alternatives considered: Batch poll-and-process framework with opaque callbacks (harder observability), one-shot consumer invocation (not suitable for service mode).
 
-## Decision 7: Model Routing Composition
-- Decision: Compose LiteLLM model identifiers as `<provider>/<model>` for text, VLM, and embedding calls.
-- Rationale: Explicit composition preserves compatibility with provider-routed LiteLLM backends and avoids ambiguous model resolution.
-- Alternatives considered: Passing raw model name only (insufficient for provider-keyed routing).
+## Decision 7: Completion Event Contract
+- Decision: Publish processing results to topic `rag-complete` with `session_ctx`, `user_prompt`, `compiled_material`, status, errors, timing, and correlation metadata.
+- Rationale: Downstream services need both retrieval output and lifecycle metadata for orchestration and diagnostics.
+- Alternatives considered: Minimal success-only payload (insufficient for partial/failure handling), include full extracted page internals in event (payload bloat).
 
-## Decision 8: Document Handle Lifecycle
-- Decision: Open each source PDF once per request and cache handles as `dict[str, fitz.Document]` on `RAGAgent`, outside serializable LangGraph state.
-- Rationale: `fitz.Document` is non-serializable; request-scoped cache avoids repeated open overhead and prevents graph state serialization issues.
-- Alternatives considered: Re-open per page (performance penalty), placing handles in graph state (serialization risk).
+## Decision 8: Logging Strategy
+- Decision: Emit structured progress logs at stages: consumed, validated, processing_started, processing_completed, publish_completed, and error stages.
+- Rationale: Enables end-to-end traceability per request and supports faster incident diagnosis.
+- Alternatives considered: Freeform log strings (harder querying), only error-level logs (insufficient flow visibility).
 
-## Decision 9: Image Description Batching
-- Decision: Batch image description calls per page using `VLM_BATCH_SIZE`, preserving image order and page association.
-- Rationale: Reduces API round trips while maintaining deterministic provenance at page granularity.
-- Alternatives considered: One call per image (higher latency), cross-page batching (context/provenance ambiguity).
-
-## Decision 10: Output Payload Shape
-- Decision: Exclude retained page content from `extracted_pages`; return compiled text only in `compiled_material`.
-- Rationale: Prevents payload bloat while preserving the audit record required by Planner.
-- Alternatives considered: Retaining page text in response (larger payload, redundant content).
-
-## Implementation Outcomes (2026-06-08)
-- Provider-aware routing is now applied across text, VLM, and embedding calls via `<provider>/<model>` composition.
-- Default provider value `hosted_vllm` is active for all three modalities when provider env vars are unset.
-- Request execution now loads runtime model configs once per run and reuses open `fitz.Document` handles for page processing.
-- Full regression suite passes (`pytest -q`: 21 passed).
-- Representative runtime validation completed on sample input: 1.93s, `status=complete`, 6 pages processed, 5 included.
-
-## Tradeoffs Observed
-- Requiring explicit embedding model configuration improves correctness but introduces startup failure when env is missing.
-- Embedding and LLM calls remain network/service dependent; fallback logic keeps pipeline non-fatal for per-page relevance when embedding calls fail.
+## Decision 9: Scope Guardrail
+- Decision: Do not implement Planner agent logic; only consume Planner-produced events and process through RAG pipeline.
+- Rationale: Preserves bounded feature scope and avoids cross-agent coupling beyond contract integration.
+- Alternatives considered: Planner-side fallback or orchestration logic in RAG service (scope violation).

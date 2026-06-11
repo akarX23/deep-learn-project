@@ -1,120 +1,111 @@
-# Data Model: RAG Retrieval Agent
+# Data Model: RAG Kafka Event Integration
 
 ## Entities
 
-### RAGAgentInput
-- Description: Request payload received by the RAG agent.
+### RAGRequestEvent
+- Description: Incoming Kafka event consumed from topic `rag`.
 - Fields:
-  - request_id: str (UUID string)
-  - user_prompt: str
+  - request_id: str
+  - session_ctx: dict[str, object]
+  - user_request: str
   - file_paths: list[str]
-  - include_tables: bool (default true)
-  - include_images: bool (default true)
-  - relevance_threshold: float (default 0.6)
-  - schema_version: str (default "1.0")
+  - created_at: str | None
+  - source: str | None
 - Validation rules:
-  - request_id must be a valid UUID string.
+  - request_id must be non-empty and correlation-safe.
+  - session_ctx must be present and JSON-serializable.
+  - user_request must be non-empty.
   - file_paths must be non-empty.
-  - relevance_threshold must be in [0.0, 1.0].
-  - schema_version must be non-empty.
 
-### PageExtractionStatus (Enum)
-- Description: Per-page extraction outcome.
-- Allowed values:
-  - SUCCESS
-  - SKIPPED_IRRELEVANT
-  - FAILED_EXTRACTION
-
-### ExtractedPage
-- Description: Audit record for one processed page. Does not contain assembled page text; that is internal-only.
+### RAGCompletionEvent
+- Description: Outgoing Kafka event published to topic `rag-complete`.
 - Fields:
-  - file_name: str
-  - page_number: int (1-based)
-  - relevance_score: float
-  - status: PageExtractionStatus
-  - ocr_used: bool (always false in v1)
-  - errors: list[str]
-- Validation rules:
-  - page_number must be >= 1.
-  - relevance_score must be in [0.0, 1.0].
-
-### RetainedPageContent (Internal, not in output)
-- Description: Assembled per-page text used internally for final compilation only.
-- Fields:
-  - file_name: str
-  - page_number: int
-  - content: str
-
-### ModalityLLMConfig (Runtime Config)
-- Description: Modality-specific LiteLLM configuration object used for text, VLM, and embedding calls.
-- Fields:
-  - provider: str (default `hosted_vllm`)
-  - model: str
-  - api_base: str | None
-  - api_key: str | None
-  - temperature: float | None
-  - max_tokens: int | None
-- Derived field:
-  - routed_model: str = `<provider>/<model>`
-- Validation rules:
-  - provider must be non-empty.
-  - model must be non-empty.
-
-### RAGRuntimeConfig
-- Description: Aggregated runtime config for all model modalities.
-- Fields:
-  - text: ModalityLLMConfig
-  - vlm: ModalityLLMConfig
-  - embedding: ModalityLLMConfig
-- Env mapping:
-  - text.provider <- RAG_TEXT_PROVIDER (default hosted_vllm)
-  - vlm.provider <- RAG_VLM_PROVIDER (default hosted_vllm)
-  - embedding.provider <- RAG_EMBEDDING_PROVIDER (default hosted_vllm)
-
-### RAGAgentOutput
-- Description: Agent response contract returned to Planner.
-- Fields:
-  - request_id: str (mirrored)
-  - user_prompt: str (mirrored)
-  - schema_version: str (mirrored)
+  - request_id: str
+  - session_ctx: dict[str, object]
+  - user_prompt: str
   - compiled_material: str
-  - extracted_pages: list[ExtractedPage]
+  - status: str (`complete` | `partial` | `failed`)
+  - errors: list[str]
   - total_pages_processed: int
   - total_pages_included: int
-  - errors: list[str]
-  - status: str (complete | partial | failed)
+  - started_at: str
+  - completed_at: str
+  - duration_ms: int
+  - source: str
 - Validation rules:
-  - total_pages_processed >= total_pages_included >= 0.
-  - status is complete when successful extraction/compilation occurs without blocking errors.
-  - status is partial when mixed success/failure occurs with usable output.
-  - status is failed when no usable output can be produced.
+  - request_id, session_ctx, user_prompt, and status are required.
+  - compiled_material may be empty only when status is `failed`.
+  - duration_ms must be >= 0.
+
+### TopicRegistry
+- Description: Enum-based topic registry in `project/topics.py` for all agents/services.
+- Fields:
+  - planner.rag_request_topic: str (`rag`)
+  - rag.rag_complete_topic: str (`rag-complete`)
+  - additional service topic enums as needed by repository conventions.
+- Validation rules:
+  - topic names must be non-empty and unique across enum values.
+
+### KafkaRuntimeConfig
+- Description: Runtime configuration inherited from backend Kafka flags.
+- Fields:
+  - bootstrap_servers: str (`BACKEND_KAFKA_BOOTSTRAP_SERVERS`)
+  - client_id: str (`BACKEND_KAFKA_CLIENT_ID` or service default)
+  - security_protocol: str | None (`BACKEND_KAFKA_SECURITY_PROTOCOL`)
+  - sasl_mechanism: str | None (`BACKEND_KAFKA_SASL_MECHANISM`)
+  - sasl_username: str | None (`BACKEND_KAFKA_SASL_USERNAME`)
+  - sasl_password: str | None (`BACKEND_KAFKA_SASL_PASSWORD`)
+  - ssl_cafile: str | None (`BACKEND_KAFKA_SSL_CAFILE`)
+  - backend_api_topic_url: str (`BACKEND_API_TOPIC_URL`)
+- Validation rules:
+  - bootstrap_servers and backend_api_topic_url must be non-empty.
+
+### ConsumerLifecycleState
+- Description: Service runtime state for continuous polling and graceful operation.
+- Fields:
+  - running: bool
+  - last_poll_at: str | None
+  - last_success_request_id: str | None
+  - consecutive_failures: int
+- Validation rules:
+  - consecutive_failures must be >= 0.
+
+### RequestLifecycleLogEntry
+- Description: Structured observability record for each stage in the request lifecycle.
+- Fields:
+  - request_id: str
+  - stage: str (`consumed` | `validated` | `processing_started` | `processing_completed` | `publish_completed` | `error`)
+  - level: str
+  - message: str
+  - timestamp: str
+  - metadata: dict[str, object]
+- Validation rules:
+  - stage and request_id are required for all request-scoped entries.
 
 ## Relationships
-- One RAGAgentInput maps to one RAGAgentOutput.
-- One RAGAgentOutput contains zero or more ExtractedPage records.
-- Each ExtractedPage has exactly one PageExtractionStatus.
-- One request execution uses one RAGRuntimeConfig containing three modality configs.
+- One `RAGRequestEvent` maps to one `RAGCompletionEvent`.
+- `KafkaRuntimeConfig` governs producer and consumer initialization in `rag_agent/kafka.py`.
+- `TopicRegistry` provides topic names used by consumer subscription and completion publishing.
+- `ConsumerLifecycleState` tracks runtime polling state across many `RAGRequestEvent` instances.
+- Multiple `RequestLifecycleLogEntry` records are emitted for each request lifecycle.
 
 ## State Transitions
 
-### Request-level state
-1. received -> processing_pages
-2. processing_pages -> compiling_material (if retained pages > 0)
-3. processing_pages -> failed (if no usable page content exists)
-4. compiling_material -> complete (usable compiled output with no blocking error)
-5. compiling_material -> partial (usable output plus non-fatal errors)
-6. any state -> failed (fatal exception path)
+### Request-level lifecycle
+1. consumed -> validated
+2. validated -> processing_started
+3. processing_started -> processing_completed
+4. processing_completed -> publish_completed
+5. any stage -> error (non-fatal, service keeps running)
 
-### Page-level state
-1. started -> FAILED_EXTRACTION (missing or unusable extraction)
-2. started -> SKIPPED_IRRELEVANT (score < threshold)
-3. started -> SUCCESS (score >= threshold and retained content available)
+### Service-level consumer state
+1. stopped -> running (FastAPI startup)
+2. running -> running (continuous poll loop)
+3. running -> stopped (FastAPI shutdown)
 
 ## Derived Fields
-- total_pages_processed: count of all attempted pages.
-- total_pages_included: count of pages with SUCCESS status.
-- compiled_material context: built from internal RetainedPageContent records for SUCCESS pages only.
-- routed model IDs:
-  - text_routed_model = `<RAG_TEXT_PROVIDER>/<RAG_TEXT_MODEL>`
-  - vlm_routed_model = `<RAG_VLM_PROVIDER>/<RAG_VLM_MODEL>`
-  - embedding_routed_model = `<RAG_EMBEDDING_PROVIDER>/<RAG_EMBEDDING_MODEL>`
+- `duration_ms` = `completed_at - started_at` (milliseconds)
+- `status` derives from RAG processing result semantics:
+  - `complete` for successful output without blocking failures
+  - `partial` for mixed outcomes with usable output
+  - `failed` for no usable output
