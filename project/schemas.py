@@ -137,7 +137,9 @@ class RAGCompletionEvent(BaseModel):
     duration_ms: int = Field(ge=0)
     source: str = "rag-service"
 
-    @field_validator("request_id", "user_prompt", "status", "started_at", "completed_at")
+    @field_validator(
+        "request_id", "user_prompt", "status", "started_at", "completed_at"
+    )
     @classmethod
     def validate_non_empty_fields(cls, value: str) -> str:
         if not value.strip():
@@ -166,7 +168,9 @@ class RequestLifecycleLogEntry(BaseModel):
     stage: str
     level: str = "INFO"
     message: str
-    timestamp: str = Field(default_factory=lambda: datetime.now(UTC).isoformat().replace("+00:00", "Z"))
+    timestamp: str = Field(
+        default_factory=lambda: datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    )
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("request_id", "stage", "level", "message")
@@ -194,6 +198,23 @@ class WorkerRuntimeState(BaseModel):
     poll_thread_alive: bool
     startup_topic_check_complete: bool
     startup_topic_check_warnings: List[str] = Field(default_factory=list)
+
+
+class StartupTopicBootstrapResult(BaseModel):
+    """Outcome of Kafka topic bootstrap during service startup."""
+
+    created: List[str] = Field(
+        default_factory=list,
+        description="Topic names successfully created during this startup pass",
+    )
+    already_existed: List[str] = Field(
+        default_factory=list,
+        description="Topic names that already existed (idempotent — not errors)",
+    )
+    errors: List[tuple[str, str]] = Field(
+        default_factory=list,
+        description="List of (topic_name, error_message) tuples for non-fatal errors",
+    )
 
 
 # ---------------------------------------------------------------------------

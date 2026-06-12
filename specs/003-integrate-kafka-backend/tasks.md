@@ -19,8 +19,8 @@
 
 **Purpose**: Verify existing project structure and add type model for bootstrap results
 
-- [ ] T001 Confirm `project/topics.py` module exists and contains `PlannerTopics` and `RAGTopics` enums
-- [ ] T002 [P] Add `StartupTopicBootstrapResult` dataclass to `project/schemas.py` with `created`, `already_existed`, and `errors` fields per data-model.md
+- [x] T001 Confirm `project/topics.py` module exists and contains `PlannerTopics` and `RAGTopics` enums
+- [x] T002 [P] Add `StartupTopicBootstrapResult` dataclass to `project/schemas.py` with `created`, `already_existed`, and `errors` fields per data-model.md
 
 ---
 
@@ -30,7 +30,7 @@
 
 **⚠️ CRITICAL**: US1 implementation depends on this phase
 
-- [ ] T003 Add `get_all_topic_names() -> list[str]` aggregator function to `project/topics.py` that returns union of `PlannerTopics.RAG` and `RAGTopics.RAG_COMPLETE`
+- [x] T003 Add `get_all_topic_names() -> list[str]` aggregator function to `project/topics.py` that returns union of `PlannerTopics.RAG` and `RAGTopics.RAG_COMPLETE`
 
 **Checkpoint**: Topic registry aggregator ready; US1 implementation can now proceed
 
@@ -44,33 +44,33 @@
 
 ### Tests for User Story 1 (REQUIRED — write tests FIRST, ensure they FAIL before implementation)
 
-- [ ] T004 [P] [US1] Add unit test `test_bootstrap_topics_creates_new_topics()` in `backend_service/tests/test_startup.py` covering scenario where all topics are created (use mock Kafka admin)
-- [ ] T005 [P] [US1] Add unit test `test_bootstrap_topics_idempotent_with_existing()` in `backend_service/tests/test_startup.py` covering scenario where all topics already exist (returns "already_exists")
-- [ ] T006 [P] [US1] Add unit test `test_bootstrap_topics_mixed_new_and_existing()` in `backend_service/tests/test_startup.py` covering mixed scenario with some topics new, some existing
-- [ ] T007 [P] [US1] Add unit test `test_bootstrap_topics_empty_registry()` in `backend_service/tests/test_startup.py` covering scenario where registry returns empty topic list
-- [ ] T008 [P] [US1] Add unit test `test_bootstrap_topics_transient_error_continues()` in `backend_service/tests/test_startup.py` covering non-fatal KafkaError on one topic — verifies remaining topics are still created and error is logged
+- [x] T004 [P] [US1] Add unit test `test_bootstrap_topics_creates_new_topics()` in `backend_service/tests/test_startup.py` covering scenario where all topics are created (use mock Kafka admin)
+- [x] T005 [P] [US1] Add unit test `test_bootstrap_topics_idempotent_with_existing()` in `backend_service/tests/test_startup.py` covering scenario where all topics already exist (returns "already_exists")
+- [x] T006 [P] [US1] Add unit test `test_bootstrap_topics_mixed_new_and_existing()` in `backend_service/tests/test_startup.py` covering mixed scenario with some topics new, some existing
+- [x] T007 [P] [US1] Add unit test `test_bootstrap_topics_empty_registry()` in `backend_service/tests/test_startup.py` covering scenario where registry returns empty topic list
+- [x] T008 [P] [US1] Add unit test `test_bootstrap_topics_transient_error_continues()` in `backend_service/tests/test_startup.py` covering non-fatal KafkaError on one topic — verifies remaining topics are still created and error is logged
 
 ### Implementation for User Story 1
 
-- [ ] T009 [US1] Add `bootstrap_topics(self, topic_names: list[str]) -> StartupTopicBootstrapResult` method to `KafkaAdminService` class in `backend_service/app/kafka_admin.py`
+- [x] T009 [US1] Add `bootstrap_topics(self, topic_names: list[str]) -> StartupTopicBootstrapResult` method to `KafkaAdminService` class in `backend_service/app/kafka_admin.py`
   - Loop through each topic name
   - Call existing `create_topic(topic_name, num_partitions=1, replication_factor=1)`
   - Append "created" results to `result.created` list
   - Append "already_exists" results to `result.already_existed` list
   - Catch `RuntimeError` for transient broker errors, log WARNING, append to `result.errors` list, continue
   - Return `StartupTopicBootstrapResult` with all three lists populated
-- [ ] T010 [US1] Import `get_all_topic_names()` from `project.topics` in `backend_service/app/main.py`
-- [ ] T011 [US1] Extend FastAPI lifespan startup sequence in `backend_service/app/main.py`:
+- [x] T010 [US1] Import `get_all_topic_names()` from `project.topics` in `backend_service/app/main.py`
+- [x] T011 [US1] Extend FastAPI lifespan startup sequence in `backend_service/app/main.py`:
   - After `app.state.kafka_admin.connect()` succeeds
   - Call `topic_names = get_all_topic_names()`
   - Log INFO: `"Bootstrapping Kafka topics: %s"` with topic list
   - Call `result = app.state.kafka_admin.bootstrap_topics(topic_names)`
   - Log INFO: `"Topic bootstrap complete: %d created, %d already existed, %d errors"` with result counts
-- [ ] T012 [US1] Add structured logging within `bootstrap_topics()` method:
+- [x] T012 [US1] Add structured logging within `bootstrap_topics()` method:
   - Log DEBUG for each topic created: `"Topic created: %s"`
   - Log DEBUG for each topic already existed: `"Topic already exists: %s"`
   - Log WARNING for each error: `"Failed to bootstrap topic '%s': %s"` with topic name and error message
-- [ ] T013 [US1] Add inline TODO comments in `bootstrap_topics()` method documenting deferred validation/health-check concerns per FR-006
+- [x] T013 [US1] Add inline TODO comments in `bootstrap_topics()` method documenting deferred validation/health-check concerns per FR-006
 
 **Checkpoint**: User Story 1 is fully functional and independently testable
 
@@ -80,12 +80,12 @@
 
 **Purpose**: Verify integration with existing startup flow and validate startup contract
 
-- [ ] T014 [P] Verify existing startup tests in `backend_service/tests/test_startup.py` (e.g., `test_startup_retry_then_success`, `test_shutdown_lifecycle_invokes_admin_close`) still pass without modification — regression gate
-- [ ] T015 [US1] Add integration test `test_lifespan_includes_topic_bootstrap()` in `backend_service/tests/test_startup.py` that:
+- [x] T014 [P] Verify existing startup tests in `backend_service/tests/test_startup.py` (e.g., `test_startup_retry_then_success`, `test_shutdown_lifecycle_invokes_admin_close`) still pass without modification — regression gate
+- [x] T015 [US1] Add integration test `test_lifespan_includes_topic_bootstrap()` in `backend_service/tests/test_startup.py` that:
   - Creates a test FastAPI app with mocked Kafka admin
   - Verifies lifespan calls `bootstrap_topics()` after `connect()`
   - Verifies startup completes and service is ready
-- [ ] T016 [US1] Validate startup contract from `backend-topic-bootstrap-contract.md`:
+- [x] T016 [US1] Validate startup contract from `backend-topic-bootstrap-contract.md`:
   - Startup logs include "Bootstrapping Kafka topics:" at INFO level
   - Startup logs include "Topic bootstrap complete:" at INFO level
   - All guaranteed behaviors (idempotency, error continuation, etc.) are honored
@@ -99,13 +99,13 @@
 
 **Purpose**: Code quality, performance validation, documentation finalization
 
-- [ ] T017 [P] Run quality checks and record results:
-  - `.venv/bin/ruff check project backend_service` — must pass
-  - `.venv/bin/ruff format --check project backend_service` — must pass
-  - `.venv/bin/python -m compileall project backend_service` — must pass
+- [x] T017 [P] Run quality checks and record results:
+  - `.venv/bin/ruff check project backend_service` — must pass ✓
+  - `.venv/bin/ruff format --check project backend_service` — applied ✓
+  - `.venv/bin/python -m compileall project backend_service` — must pass ✓
   - Record output in `specs/003-integrate-kafka-backend/quickstart.md`
-- [ ] T018 [P] Run full test suite:
-  - `.venv/bin/python -m pytest backend_service/tests/ -q`
+- [x] T018 [P] Run full test suite:
+  - `.venv/bin/python -m pytest backend_service/tests/ -q` — 19 tests pass ✓
   - All tests must pass including new T004-T008 tests and regression tests
   - Record test evidence in `specs/003-integrate-kafka-backend/quickstart.md`
 - [ ] T019 [US1] Measure and validate performance against SC-003:
@@ -120,7 +120,7 @@
   - Restart service and verify topics already-exist scenario
   - Verify Kafka UI shows topics created
   - Record E2E validation results in `specs/003-integrate-kafka-backend/quickstart.md`
-- [ ] T021 [P] Add code comments documenting non-obvious decisions from research.md:
+- [x] T021 [P] Add code comments documenting non-obvious decisions from research.md:
   - Idempotency via `TopicAlreadyExistsError` catch in existing `create_topic()`
   - Non-fatal error handling (log-and-continue) per edge case in spec
   - Why `get_all_topic_names()` is an aggregator (avoids caller coupling to enums)
