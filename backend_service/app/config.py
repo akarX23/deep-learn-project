@@ -12,6 +12,9 @@ class KafkaSettings(BaseModel):
     startup_retry_count: int = Field(default=5, ge=0)
     startup_retry_timeout_seconds: int = Field(default=2, ge=1)
 
+    app_env: str = "dev"
+    enable_test_event_apis: bool | None = None
+
     client_id: str = "backend-service"
     security_protocol: str | None = None
     sasl_mechanism: str | None = None
@@ -26,6 +29,13 @@ class KafkaSettings(BaseModel):
             raise ValueError("bootstrap_servers cannot be empty")
         return value
 
+    @field_validator("app_env")
+    @classmethod
+    def _validate_app_env(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("app_env cannot be empty")
+        return value
+
     @classmethod
     def from_env(cls, dotenv_path: str = ".env.local") -> "KafkaSettings":
         # .env.local provides local defaults. Existing process env should win.
@@ -36,11 +46,18 @@ class KafkaSettings(BaseModel):
         if not raw_bootstrap:
             raise RuntimeError("BACKEND_KAFKA_BOOTSTRAP_SERVERS is required")
 
+        raw_app_env = os.getenv("APP_ENV", "dev")
+        default_test_routes_enabled = raw_app_env.strip().lower() in {"dev", "test"}
+
         return cls(
             bootstrap_servers=raw_bootstrap,
             startup_retry_count=_read_int("BACKEND_KAFKA_STARTUP_RETRY_COUNT", 5),
             startup_retry_timeout_seconds=_read_int(
                 "BACKEND_KAFKA_STARTUP_RETRY_TIMEOUT_SECONDS", 2
+            ),
+            app_env=raw_app_env,
+            enable_test_event_apis=_read_bool(
+                "BACKEND_ENABLE_TEST_EVENT_APIS", default_test_routes_enabled
             ),
             client_id=os.getenv("BACKEND_KAFKA_CLIENT_ID", "backend-service"),
             security_protocol=_read_optional("BACKEND_KAFKA_SECURITY_PROTOCOL"),
@@ -49,6 +66,11 @@ class KafkaSettings(BaseModel):
             sasl_password=_read_optional("BACKEND_KAFKA_SASL_PASSWORD"),
             ssl_cafile=_read_optional("BACKEND_KAFKA_SSL_CAFILE"),
         )
+
+    def test_event_routes_enabled(self) -> bool:
+        if self.enable_test_event_apis is not None:
+            return self.enable_test_event_apis
+        return self.app_env.strip().lower() in {"dev", "test"}
 
     def admin_kwargs(self) -> dict[str, object]:
         kwargs: dict[str, object] = {
@@ -83,6 +105,18 @@ def _read_optional(name: str) -> str | None:
         return None
     cleaned = raw.strip()
     return cleaned or None
+
+
+def _read_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    cleaned = raw.strip().lower()
+    if cleaned in {"1", "true", "yes", "on"}:
+        return True
+    if cleaned in {"0", "false", "no", "off"}:
+        return False
+    raise RuntimeError(f"{name} must be a boolean")
 
 
 def _read_int(name: str, default: int) -> int:
