@@ -45,6 +45,42 @@
 - Rationale: Keeps this feature bounded to RAG runtime behavior.
 - Alternatives considered: planner-side fallback behavior inside worker (scope violation).
 
+## Decision 10: Remove Dedicated `StructuredLogger` Class
+
+- **Decision**: Delete `rag_agent/logging.py` and `StructuredLogger`. Replace all usages with `import logging; logger = logging.getLogger(__name__)` in each module.
+- **Rationale**: `StructuredLogger` wraps the standard library without adding behaviour not already provided by `logging.basicConfig`. It couples imports to a custom class, adds test surface area, and contradicts the constitution's simplicity mandate (Principle V). Per-module `__name__` loggers produce equivalent output with no extra code.
+- **Alternatives considered**: Keep `StructuredLogger` as a thin wrapper (indirection with no benefit); migrate to `structlog` (new dependency, over-engineered for current scope).
+
+## Decision 11: Create `utils/` Directory and Move Helper-Oriented Modules
+
+- **Decision**: Add `rag_agent/utils/` containing `helpers.py`, `llm_client.py`, `prompts.py`, and `tools.py`, moved from the module root. Remove from root.
+- **Rationale**: These are support utilities, not entry points. Separating them into `utils/` makes the module root scannable: entry-points (`worker.py`, `agent.py`, `handlers.py`) vs. utilities. Satisfies FR-013.
+- **Alternatives considered**: Flatten everything at root (too many top-level files); sub-packages per concern (over-structured).
+
+## Decision 12: Consolidate `config` and `llm_client` into `helpers.py`
+
+- **Decision**: Move `LLMConfig`, `EmbeddingConfig`, all `get_*_config()` accessors from `config.py`, and `call_llm()`/`call_embedding()` from `llm_client.py` into `utils/helpers.py`. Delete standalone `config.py` and `llm_client.py`.
+- **Rationale**: Config objects are only ever consumed alongside LLM/embedding call sites — they have no separate consumer. Maintaining three files for one concern (LLM invocation + config) violates Principle V. Satisfies FR-016.
+- **Alternatives considered**: Keep `config.py` separate (import indirection with no benefit); create `llm.py` (renames without reducing surface).
+
+## Decision 13: Simplify LLM Call Wrappers to Basic Calls
+
+- **Decision**: After merging into `utils/helpers.py`, `call_llm()` and `call_embedding()` retain only the essential litellm call body. Credential guards, import-error guards, and response-format checks are replaced with `# TODO:` markers.
+- **Rationale**: Current guards duplicate responsibility that belongs in config loading and are mixed with invocation logic. Removing them from call functions simplifies the critical path per FR-014.
+- **Alternatives considered**: Keep guards in call functions (duplicates responsibility); move guards to config loader now (adds scope beyond this iteration).
+
+## Decision 14: Delete `service.py`
+
+- **Decision**: Delete `rag_agent/service.py`. It is a compatibility shim (`from rag_agent.worker import ...`) with no unique logic and no direct test callers.
+- **Rationale**: Dead re-export modules contradict FR-012 and Principle V's "remove obsolete code paths" requirement.
+- **Alternatives considered**: Keep as public API alias (no known callers; creates confusion).
+
+## Decision 15: Scope Basic Exception Handling in `agent.py` and `handlers.py`
+
+- **Decision**: Retain one broad `except Exception` guard per top-level entry (`RAGAgent.run()`, `RAGRequestEventHandler.__call__()`). Remove inner per-step try/except blocks. Mark each removed guard `# TODO: Add specific exception handling for <concern>`.
+- **Rationale**: Per FR-008 and FR-017, this phase focuses on core dispatch flow. Inner exception granularity adds code surface without changing observable behaviour for the current test suite.
+- **Alternatives considered**: Remove all exception handling (breaks SC-004); keep all current guards (contradicts simplification mandate).
+
 ## Implementation Evidence
 - Replaced FastAPI service lifecycle with standalone worker runtime in `rag_agent/worker.py`.
 - Removed backend topic API startup dependency from config and environment templates.
@@ -57,3 +93,12 @@
 - Advanced semantic/event validation in `RAGRequestEventHandler.parse_event`.
 - Metrics instrumentation (timing/throughput counters) in `RAGRequestEventHandler.process_request`.
 - Full local end-to-end quickstart validation against a running Kafka stack remains environment-dependent.
+
+## Deferred TODO Scope (Updated — Simplification Phase)
+
+- Credential validation guards in `call_llm()` / `call_embedding()`.
+- Response-format validation in LLM call wrappers.
+- Advanced config validation beyond env-read in `get_kafka_config()` / `get_text_llm_config()` etc.
+- Inner per-step exception handling in `RAGAgent.run()` page-processing loop.
+- Inner exception handling in `RAGRequestEventHandler.__call__()` beyond top-level guard.
+- `StructuredLogger`-style JSON-serialized lifecycle entries (superseded by plain logger calls).

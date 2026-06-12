@@ -110,6 +110,23 @@
 3. processing_completed -> publish_completed
 4. any stage -> error (non-fatal, worker remains running)
 
+## Module Structure Model (New — Simplification Phase)
+
+### `rag_agent/utils/` Package
+
+- **Purpose**: Contains all helper-oriented support modules moved from the `rag_agent/` root.
+- **Contents**:
+  - `helpers.py` — Pure utility functions (`cosine_similarity`, `serialize_table_to_markdown`, `assemble_page_content`, `build_compilation_context`) + merged LLM/config responsibilities (`LLMConfig`, `EmbeddingConfig`, `KafkaRuntimeConfig`, `get_text_llm_config()`, `get_vlm_config()`, `get_embedding_config()`, `call_llm()`, `call_embedding()`).
+  - `llm_client.py` — Simplified LLM/embedding wrappers (basic calls only, deferred validation via TODOs).
+  - `prompts.py` — Prompt templates (`IMAGE_DESCRIPTION_PROMPT`, `MATERIAL_COMPILATION_PROMPT`). Unchanged.
+  - `tools.py` — Stateless PDF extraction functions. Unchanged.
+- **Consumers**: `agent.py`, `handlers.py`, `worker.py` import from `rag_agent.utils.*`.
+
+### Deleted Modules
+
+- `rag_agent/service.py` — Removed. Was a compatibility re-export shim for `worker.py`.
+- `rag_agent/logging.py` — Removed. `StructuredLogger` class deleted; replaced by standard `logging.getLogger(__name__)` pattern across all modules.
+
 ## Derived Fields
 - `duration_ms` = `completed_at - started_at` (milliseconds)
 - `missing_topics` = `required_topics - existing_topics`
