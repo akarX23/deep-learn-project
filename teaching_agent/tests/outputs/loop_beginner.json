@@ -1,0 +1,15 @@
+{
+  "status": "ok",
+  "output_mode": "beginner",
+  "content": {
+    "explanation": "1. A loop is a way to repeat the same actions over and over in a program.\n2. Think of a loop like a merry-go-round: you get on, ride it, and then get on again to ride some more.\n3. Loops matter because they help us do repetitive tasks quickly and accurately.\n4. To use a loop, you first tell the computer what actions to repeat, then how many times to repeat them, and finally, it does those actions that many times.\n5. Beginners often get stuck in loops that never end because they forget to change something each time the loop runs.",
+    "diagram": "graph TD\n    A[Start] --> B{Condition}\n    B -->|yes| C[Actions]\n    C --> B\n    B -->|no| D[End]",
+    "notes": "• Loops repeat actions\n• They need a condition to stop\n• Be careful not to create endless loops",
+    "example": "Let's say you want to greet your friends 5 times. You can write a loop that says 'hello' and then repeats that action 4 more times. Step 1: decide what to repeat (saying hello), Step 2: decide how many times (5), Step 3: the loop does the action that many times."
+  },
+  "metadata": {
+    "topic": "What is a loop in programming?",
+    "tokens_used": 284,
+    "model": "groq/llama-3.3-70b-versatile"
+  }
+}
