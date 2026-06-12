@@ -199,6 +199,10 @@ class WorkerRuntimeState(BaseModel):
     startup_topic_check_complete: bool
     startup_topic_check_warnings: List[str] = Field(default_factory=list)
 
+# ---------------------------------------------------------------------------
+# Backend Service schemas
+# ---------------------------------------------------------------------------
+
 
 class StartupTopicBootstrapResult(BaseModel):
     """Outcome of Kafka topic bootstrap during service startup."""

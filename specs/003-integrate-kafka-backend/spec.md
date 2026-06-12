@@ -1,6 +1,6 @@
 # Feature Specification: Backend Kafka Startup Topic Bootstrap
 
-**Feature Branch**: `001-build-rag-retrieval-agent`  
+**Feature Branch**: `003-integrate-kafka-backend`  
 **Created**: 2026-06-12  
 **Status**: Draft  
 **Input**: User description: "The backend service should get the topic list from project/topics and create all the topics on start-up. Any additional validation checks can be put as TODOs. The core functionality of creating topics only should be integrated into the start-up function."
@@ -17,6 +17,9 @@
 - Q: Where should topic names be sourced? → A: Read from `project/topics` module (the centralized topic registry) — not from environment variables or external APIs.
 - Q: What happens if a topic already exists? → A: Topic creation should be idempotent — already-existing topics are not treated as errors.
 - Q: What level of validation is required now? → A: Only the core topic-creation behavior is required now; advanced validation (result inspection, per-topic error handling, health assertions) is deferred with TODO markers.
+- Q: How should the backend test-event API payload for `rag` be supplied? → A: Hybrid mode — backend generates a schema-valid default payload, with optional client-provided override fields validated against `RAGRequestEvent`.
+- Q: In which environments should test-event APIs be enabled? → A: Enabled by default in dev/test only; production requires explicit configuration opt-in.
+- Q: What should the `rag` test-event API return on publish success? → A: Return a normalized publish-result envelope and include Kafka broker metadata when available.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -42,6 +45,7 @@ As a platform developer, I need the backend service to automatically create all 
 - The project topic registry returns an empty list — startup proceeds without creating any topics.
 - Kafka admin connection is established but topic creation encounters a transient broker error — current behavior logs and continues; full error-handling strategy is deferred as a TODO.
 - Topics registry grows: new entries added in future must be created automatically on next startup without code changes beyond registry updates.
+- `rag` test-event publish succeeds but broker metadata is partially unavailable — API still returns normalized success with nullable metadata fields.
 
 ## Requirements *(mandatory)*
 
@@ -55,11 +59,21 @@ As a platform developer, I need the backend service to automatically create all 
 - **FR-006**: Topic-creation logic MUST NOT include advanced per-topic validation, result assertion, or health-check behavior in this iteration — these concerns MUST be marked as TODO for later implementation.
 - **FR-007**: The backend service MUST log a clear message for the topic bootstrap step at startup, including the list of topics attempted.
 - **FR-008**: The backend service MUST continue startup even if topic bootstrap encounters non-fatal errors, and MUST log any such errors clearly.
+- **FR-009**: The backend service MUST expose a test-event API route for topic `rag` that publishes events to Kafka using the `RAGRequestEvent` contract from `project/schemas.py`.
+- **FR-010**: The `rag` test-event API MUST support hybrid payload mode: backend-generated default payload plus optional client-provided override fields.
+- **FR-011**: Any client-provided override fields for the `rag` test-event API MUST be validated against `RAGRequestEvent` before publish.
+- **FR-012**: The backend service MUST NOT call agent services directly from this API; it only publishes contract-valid test events to Kafka topics.
+- **FR-013**: Test-event APIs MUST be enabled by default in development and test environments.
+- **FR-014**: In production environments, test-event APIs MUST require explicit configuration opt-in before routes are enabled.
+- **FR-015**: On successful `rag` test-event publish, the backend service MUST return a normalized response envelope that includes request correlation and publish status.
+- **FR-016**: The successful `rag` test-event response MUST include Kafka publish metadata (for example partition/offset/timestamp) when available from the producer result.
 
 ### Key Entities
 
 - **TopicRegistry**: The `project/topics` module providing the list of topic names the system requires; the backend service reads from it at startup without modification.
 - **StartupTopicBootstrapResult**: The outcome of the startup topic-creation pass — topics created, topics already existing, and any errors encountered.
+- **RAGRequestEvent**: Kafka request payload schema used by the backend test-event API for publishing to topic `rag`.
+- **TestEventPublishResult**: API response envelope containing request identifier, target topic, publish status, and optional Kafka metadata fields.
 
 ## Success Criteria *(mandatory)*
 
@@ -69,6 +83,8 @@ As a platform developer, I need the backend service to automatically create all 
 - **SC-002**: 100% of backend service startups where all required topics already exist complete the topic bootstrap step without errors or service interruption.
 - **SC-003**: The topic bootstrap step completes within 5 seconds in a local development environment with a connected Kafka cluster.
 - **SC-004**: Startup logs always include a record of the topic bootstrap attempt and its outcome.
+- **SC-005**: 100% of successful `rag` test-event API calls return a normalized publish-result envelope with request_id, topic, and publish_status.
+- **SC-006**: For successful `rag` test-event API calls, Kafka broker metadata fields are returned whenever the producer result exposes them.
 
 ## Assumptions
 

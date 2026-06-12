@@ -1,36 +1,41 @@
-# Research: Backend Kafka Startup Topic Bootstrap
+# Research: Backend Kafka Startup Bootstrap + RAG Test-Event API
 
 ## Decision 1: Topic Name Source
-- **Decision**: Read topic names exclusively from `project/topics` module via a new `get_all_topic_names()` aggregator function.
-- **Rationale**: `project/topics` is the existing centralized registry; all topic names are already defined there. Adding one aggregator keeps callers ignorant of individual enum classes.
-- **Alternatives considered**: Read from environment variables (breaks registry-driven single source of truth), pass topic list as config parameter (pushes registry concern into call site).
+- **Decision**: Read topic names from `project/topics.get_all_topic_names()` as the single startup source.
+- **Rationale**: Centralized registry avoids config drift and keeps topic provisioning in one authoritative module.
+- **Alternatives considered**: Environment-provided topic lists (drift risk), hard-coded backend list (duplicate source of truth).
 
-## Decision 2: Bootstrap Placement — Method vs. Standalone Function
-- **Decision**: Add `bootstrap_topics(topic_names: list[str]) -> StartupTopicBootstrapResult` as a method on `KafkaAdminService`.
-- **Rationale**: `KafkaAdminService` already owns the `_client` reference and `create_topic()`. Adding bootstrap as a method keeps Kafka admin operations cohesive and avoids exposing the internal client.
-- **Alternatives considered**: Standalone function in `main.py` (scatters Kafka logic across modules), standalone helper module (unnecessary indirection for one call).
+## Decision 2: Bootstrap Placement
+- **Decision**: Keep topic bootstrap in `KafkaAdminService.bootstrap_topics(topic_names)` and call it from FastAPI lifespan startup.
+- **Rationale**: Preserves cohesion of Kafka admin operations and clean startup sequencing (`connect -> bootstrap -> serve -> close`).
+- **Alternatives considered**: Standalone helper in `main.py` (splits Kafka logic), direct client calls from lifespan (harder to test/mocks).
 
-## Decision 3: Idempotency Mechanism
-- **Decision**: Reuse the existing `create_topic()` method which already catches `TopicAlreadyExistsError` and returns `"already_exists"` — no duplicate-detection logic needed in `bootstrap_topics()`.
-- **Rationale**: `TopicAlreadyExistsError` from `kafka-python` is the authoritative signal for topic existence. The existing handler is already correct and tested.
-- **Alternatives considered**: Pre-check via `list_topics()` before each create (race-prone and adds a round-trip per topic), suppress all `KafkaError` broadly (masks real errors).
+## Decision 3: Idempotency + Non-Fatal Startup Errors
+- **Decision**: Treat existing topics as success and continue startup when individual topic creation fails, recording errors in `StartupTopicBootstrapResult`.
+- **Rationale**: Meets FR-003 and FR-008 while preserving observability via explicit warning logs.
+- **Alternatives considered**: Fail-fast on first topic error (violates spec behavior), silent ignore (insufficient diagnostics).
 
-## Decision 4: Non-Fatal Error Handling
-- **Decision**: Catch `RuntimeError` raised by `create_topic()` for non-`TopicAlreadyExistsError` Kafka errors; log a WARNING and continue to the next topic.
-- **Rationale**: A transient broker error on one topic must not abort the entire bootstrap pass or prevent service startup. Full error-handling policy is a TODO per FR-006.
-- **Alternatives considered**: Fail-fast on any topic error (violates FR-008 and spec edge case), silently skip errors (poor observability, violates constitution Principle V).
+## Decision 4: Test-Event API Scope Pattern
+- **Decision**: Introduce topic-scoped test-event endpoint(s), starting with `rag`, and keep route behavior publish-only (no direct agent invocation).
+- **Rationale**: Aligns with FR-009 and FR-012 while establishing an extensible per-topic route pattern.
+- **Alternatives considered**: One generic topic endpoint for all payload types (weaker schema guarantees), direct service invocation route (violates scope boundary).
 
-## Decision 5: Topic Creation Defaults
-- **Decision**: Use `num_partitions=1`, `replication_factor=1` as bootstrap defaults.
-- **Rationale**: Matches the existing API default in `TopicCreateRequest`. Safe for local and development environments. Production tuning is explicitly out of scope per spec assumptions.
-- **Alternatives considered**: Make partition/replication configurable via env vars (adds scope beyond what's requested), use larger defaults (not needed for dev cluster).
+## Decision 5: Environment Gating
+- **Decision**: Gate test-event routes by environment with dev/test enabled by default and production requiring explicit opt-in flag.
+- **Rationale**: Satisfies FR-013 and FR-014 and minimizes accidental production misuse.
+- **Alternatives considered**: Always-enabled routes (unsafe for prod), always-disabled unless enabled everywhere (friction in local testing).
 
-## Decision 6: Return Type — StartupTopicBootstrapResult
-- **Decision**: `bootstrap_topics()` returns a `StartupTopicBootstrapResult` dataclass with `created`, `already_existed`, and `errors` lists.
-- **Rationale**: Gives the caller (lifespan) a structured view of what happened for logging and future use without requiring it to parse log output.
-- **Alternatives considered**: Return `None` (caller has no visibility), return raw dict (untyped).
+## Decision 6: Hybrid Payload Mode for RAG
+- **Decision**: Build a backend default `RAGRequestEvent` payload, then apply optional client override fields and validate the merged payload against `RAGRequestEvent` before publish.
+- **Rationale**: Delivers predictable test payloads while preserving caller flexibility with strict schema enforcement.
+- **Alternatives considered**: Client-only full payload (high setup burden), backend-only no overrides (too rigid for testing scenarios).
 
-## Decision 7: Logging Approach
-- **Decision**: Log topic names before the loop at INFO level; log each outcome (created/already_exists) at DEBUG level; log each error at WARNING level with topic name and error message.
-- **Rationale**: Keeps startup output clean at INFO while preserving detailed per-topic visibility at DEBUG. Consistent with existing `logger.info(...)` pattern in `main.py`.
-- **Alternatives considered**: Log every topic at INFO (too verbose in production), log only failures (insufficient startup observability per SC-004).
+## Decision 7: Publish Metadata Contract
+- **Decision**: Return a normalized publish-result envelope with required correlation/status fields and optional Kafka metadata object (partition/offset/timestamp) when available.
+- **Rationale**: Meets FR-015 and FR-016 while handling partial metadata scenarios without breaking API shape.
+- **Alternatives considered**: Return raw broker object (leaky abstraction), omit metadata entirely (misses accepted clarification).
+
+## Decision 8: Logging and Performance Validation
+- **Decision**: Keep startup summary logs at INFO, detailed outcomes at DEBUG, and validate two budgets: startup bootstrap <= 5s and test publish response <= 2s p95 in local dev.
+- **Rationale**: Satisfies observability and performance gates from constitution and spec success criteria.
+- **Alternatives considered**: Minimal logs only (insufficient traceability), no explicit response-time budget (performance gate miss).

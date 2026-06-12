@@ -1,4 +1,4 @@
-# Data Model: Backend Kafka Startup Topic Bootstrap
+# Data Model: Backend Kafka Bootstrap + RAG Test-Event API
 
 ## Entities
 
@@ -17,6 +17,91 @@
 - A result with a non-empty `errors` list is still a valid (partial) outcome — startup continues.
 
 **State transitions**: None — this is a read-only snapshot produced once per startup pass.
+
+---
+
+### RAGRequestEvent (shared schema, reused)
+
+**Purpose**: Canonical Kafka payload contract for publishing test events to topic `rag`.
+
+| Field | Type | Description |
+|---|---|---|
+| `request_id` | `str` | Correlation identifier (non-empty) |
+| `session_ctx` | `dict[str, Any]` | Context map (required, non-null) |
+| `user_request` | `str` | End-user request text (non-empty) |
+| `file_paths` | `list[str]` | Source files for retrieval (min length 1) |
+| `created_at` | `str \| None` | Optional event timestamp |
+| `source` | `str \| None` | Optional producer source label |
+
+**Validation rules**:
+- `request_id` and `user_request` must be non-empty strings.
+- `session_ctx` cannot be null.
+- `file_paths` must contain at least one entry.
+
+---
+
+### RAGTestEventOverrideRequest
+
+**Purpose**: API request body used to optionally override default rag test payload fields.
+
+| Field | Type | Description |
+|---|---|---|
+| `overrides` | `dict[str, Any] \| None` | Partial field updates merged onto backend-generated default `RAGRequestEvent` payload |
+
+**Validation rules**:
+- Unknown/invalid merged fields are rejected during final `RAGRequestEvent` validation.
+- Empty body is allowed and results in backend defaults only.
+
+---
+
+### KafkaPublishMetadata
+
+**Purpose**: Optional metadata block returned from Kafka publish acknowledgement.
+
+| Field | Type | Description |
+|---|---|---|
+| `partition` | `int \| None` | Broker partition used for the record |
+| `offset` | `int \| None` | Record offset in partition |
+| `timestamp` | `int \| None` | Broker/event timestamp (epoch milliseconds) |
+
+**Validation rules**:
+- Values are nullable to support partial metadata availability.
+- Non-null integer values must be non-negative.
+
+---
+
+### TestEventPublishResult
+
+**Purpose**: Normalized API response envelope for successful rag test-event publish requests.
+
+| Field | Type | Description |
+|---|---|---|
+| `request_id` | `str` | Correlation ID copied from published event |
+| `topic` | `str` | Kafka topic name (`rag`) |
+| `publish_status` | `str` | Publish outcome (`published` for successful sends) |
+| `metadata` | `KafkaPublishMetadata \| None` | Kafka metadata when exposed by producer result |
+
+**Validation rules**:
+- `request_id`, `topic`, and `publish_status` are required.
+- `metadata` may be null when broker metadata is unavailable.
+
+**State transitions**:
+- `constructed` -> `validated` (Pydantic response validation) -> `returned`
+
+---
+
+### TestEventRoutePolicy
+
+**Purpose**: Runtime route enablement policy for test-event APIs.
+
+| Field | Type | Description |
+|---|---|---|
+| `environment` | `str` | Current runtime environment (`dev`, `test`, `prod`, etc.) |
+| `test_routes_enabled` | `bool` | Effective toggle controlling route registration |
+
+**Validation rules**:
+- In `prod`, `test_routes_enabled` defaults to `False` unless explicit opt-in is set.
+- In `dev`/`test`, `test_routes_enabled` defaults to `True`.
 
 ---
 
@@ -77,6 +162,10 @@ bootstrap_topics(topic_names: list[str]) -> StartupTopicBootstrapResult
       │
       ▼
 [log bootstrap summary at INFO]
+      │
+      ├─ if test routes enabled by policy
+      │      ▼
+      │   [register rag test-event route]
       │
       ▼
 [yield — service is ready]

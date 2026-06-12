@@ -1,7 +1,7 @@
-# Contract: Backend Kafka Topic API
+# Contract: Backend Kafka Topic and Test-Event APIs
 
 ## Purpose
-Defines the backend microservice contract for topic creation and startup readiness assumptions.
+Defines backend API contracts for Kafka topic operations and topic-scoped test-event publishing.
 
 ## Runtime Configuration Contract
 
@@ -72,6 +72,64 @@ Global exception handling contract:
 - HTTP exceptions (`4xx/5xx`) MUST return the structured error envelope.
 - Unhandled exceptions (`500`) MUST return the structured error envelope.
 
+### POST /api/v1/test-events/rag
+
+Publish a contract-valid `RAGRequestEvent` to Kafka topic `rag` for integration testing.
+
+Request body:
+```json
+{
+  "overrides": {
+    "user_request": "Summarize gradient descent",
+    "file_paths": ["rag_agent/tests/inputs/sample.pdf"],
+    "session_ctx": {"mode": "quick"}
+  }
+}
+```
+
+Request semantics:
+- Backend creates a default payload first.
+- Optional `overrides` are merged onto defaults.
+- Merged payload MUST validate against `project.schemas.RAGRequestEvent` before publish.
+- API MUST only publish to Kafka; it MUST NOT invoke agent runtime services directly.
+
+Success response (200 OK):
+```json
+{
+  "request_id": "test-req-123",
+  "topic": "rag",
+  "publish_status": "published",
+  "metadata": {
+    "partition": 0,
+    "offset": 42,
+    "timestamp": 1781234567890
+  }
+}
+```
+
+Success response with partial metadata (200 OK):
+```json
+{
+  "request_id": "test-req-123",
+  "topic": "rag",
+  "publish_status": "published",
+  "metadata": {
+    "partition": 0,
+    "offset": 42,
+    "timestamp": null
+  }
+}
+```
+
+Validation/runtime failure response (4xx/5xx):
+```json
+{
+  "topic_name": null,
+  "status": "error",
+  "message": "Validation failed"
+}
+```
+
 ## Startup Behavior Contract
 
 - Service MUST attempt Kafka admin initialization during lifespan startup.
@@ -80,6 +138,12 @@ Global exception handling contract:
 - Service SHOULD emit diagnostics per startup connection attempt and final failure reason.
 - Service MUST release Kafka admin resources during lifespan shutdown handling.
 - Service MUST use FastAPI lifespan events and MUST NOT use deprecated lifecycle handlers such as `on_event`.
+
+## Test-Event Route Enablement Contract
+
+- In `dev` and `test` environments, test-event routes MUST be enabled by default.
+- In `prod`, test-event routes MUST remain disabled unless explicit opt-in is configured.
+- Route enablement SHOULD be decided during app creation to avoid per-request policy branching.
 
 ## Local Infrastructure Contract (Docker Compose)
 
@@ -94,5 +158,5 @@ Global exception handling contract:
 
 ## Scope Boundary
 
-- No producer/consumer/message relay APIs are exposed.
-- Only topic creation endpoint is in scope for this feature.
+- In-scope APIs: topic creation endpoint and `rag` test-event publish endpoint.
+- Out-of-scope: direct invocation of planner/rag agent processing from backend API layer.
