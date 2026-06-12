@@ -1,59 +1,36 @@
-# Research: Kafka Backend Integration Service
+# Research: Backend Kafka Startup Topic Bootstrap
 
-## Decision 1: Kafka Admin Client Library
-- Decision: Use `kafka-python` `KafkaAdminClient` for topic management and broker connectivity checks.
-- Rationale: Mature Python client, straightforward admin APIs, and good compatibility with FastAPI sync startup hooks.
-- Alternatives considered: `confluent-kafka` admin API (high performance but heavier native dependency requirements), `aiokafka` (async-first, unnecessary for current sync admin scope).
+## Decision 1: Topic Name Source
+- **Decision**: Read topic names exclusively from `project/topics` module via a new `get_all_topic_names()` aggregator function.
+- **Rationale**: `project/topics` is the existing centralized registry; all topic names are already defined there. Adding one aggregator keeps callers ignorant of individual enum classes.
+- **Alternatives considered**: Read from environment variables (breaks registry-driven single source of truth), pass topic list as config parameter (pushes registry concern into call site).
 
-## Decision 2: FastAPI Startup Connectivity Strategy
-- Decision: Initialize Kafka admin client during FastAPI lifespan startup and retry connection according to env-driven retry count and retry timeout.
-- Rationale: Ensures service readiness semantics are explicit and predictable before serving API calls while staying on non-deprecated framework APIs.
-- Alternatives considered: Lazy-initialize on first API call (delays failure and harms reliability), background retry after startup (unclear readiness state).
+## Decision 2: Bootstrap Placement — Method vs. Standalone Function
+- **Decision**: Add `bootstrap_topics(topic_names: list[str]) -> StartupTopicBootstrapResult` as a method on `KafkaAdminService`.
+- **Rationale**: `KafkaAdminService` already owns the `_client` reference and `create_topic()`. Adding bootstrap as a method keeps Kafka admin operations cohesive and avoids exposing the internal client.
+- **Alternatives considered**: Standalone function in `main.py` (scatters Kafka logic across modules), standalone helper module (unnecessary indirection for one call).
 
-## Decision 3: Environment Loading Precedence
-- Decision: Load `.env.local` when present, then allow already-initialized process environment variables to override file values.
-- Rationale: Supports local defaults while preserving container/orchestrator-injected runtime configuration.
-- Alternatives considered: `.env.local` only (breaks deployment injection), process env only (worse local developer ergonomics).
+## Decision 3: Idempotency Mechanism
+- **Decision**: Reuse the existing `create_topic()` method which already catches `TopicAlreadyExistsError` and returns `"already_exists"` — no duplicate-detection logic needed in `bootstrap_topics()`.
+- **Rationale**: `TopicAlreadyExistsError` from `kafka-python` is the authoritative signal for topic existence. The existing handler is already correct and tested.
+- **Alternatives considered**: Pre-check via `list_topics()` before each create (race-prone and adds a round-trip per topic), suppress all `KafkaError` broadly (masks real errors).
 
-## Decision 4: API Scope Boundary
-- Decision: Expose only one topic-creation API in this feature; no message relay, producer, or consumer endpoints.
-- Rationale: Keeps service responsibility minimal and aligned to requested admin/provisioning use case.
-- Alternatives considered: Broader Kafka management API set (out of scope), inter-service proxy capabilities (explicitly rejected).
+## Decision 4: Non-Fatal Error Handling
+- **Decision**: Catch `RuntimeError` raised by `create_topic()` for non-`TopicAlreadyExistsError` Kafka errors; log a WARNING and continue to the next topic.
+- **Rationale**: A transient broker error on one topic must not abort the entire bootstrap pass or prevent service startup. Full error-handling policy is a TODO per FR-006.
+- **Alternatives considered**: Fail-fast on any topic error (violates FR-008 and spec edge case), silently skip errors (poor observability, violates constitution Principle V).
 
-## Decision 5: Docker Compose Topology
-- Decision: Provide root-level `docker-compose.yaml` with Kafka and Kafka UI services; pin Kafka to `apache/kafka:4.2.1`, keep Kafka UI on `provectuslabs/kafka-ui:latest`, and wire Kafka UI to `kafka:9092`.
-- Rationale: Satisfies clarified requirement for Apache Kafka image usage while retaining deterministic local reproducibility and immediate observability.
-- Alternatives considered: Bitnami Kafka image (rejected to avoid image-family drift from clarified requirement), `apache/kafka:latest` (rejected to avoid non-deterministic upgrades), Kafka-only compose (insufficient after Kafka UI clarification).
+## Decision 5: Topic Creation Defaults
+- **Decision**: Use `num_partitions=1`, `replication_factor=1` as bootstrap defaults.
+- **Rationale**: Matches the existing API default in `TopicCreateRequest`. Safe for local and development environments. Production tuning is explicitly out of scope per spec assumptions.
+- **Alternatives considered**: Make partition/replication configurable via env vars (adds scope beyond what's requested), use larger defaults (not needed for dev cluster).
 
-## Decision 6: Apache Kafka KRaft Compose Environment
-- Decision: Use KRaft-oriented environment keys aligned with Apache Kafka container guidance (`KAFKA_NODE_ID`, `KAFKA_PROCESS_ROLES`, listeners, quorum voters, replication-factor defaults).
-- Rationale: Keeps compose bootstrap self-contained without ZooKeeper, consistent with modern Kafka single-node local development setup.
-- Alternatives considered: ZooKeeper-based setup (unnecessary complexity for current scope), vendor-specific env key families not matching Apache Kafka docs.
+## Decision 6: Return Type — StartupTopicBootstrapResult
+- **Decision**: `bootstrap_topics()` returns a `StartupTopicBootstrapResult` dataclass with `created`, `already_existed`, and `errors` lists.
+- **Rationale**: Gives the caller (lifespan) a structured view of what happened for logging and future use without requiring it to parse log output.
+- **Alternatives considered**: Return `None` (caller has no visibility), return raw dict (untyped).
 
-## Decision 7: Topic Creation Idempotency Behavior
-- Decision: Treat existing-topic requests as deterministic non-fatal responses (`already_exists`) rather than hard failures.
-- Rationale: Improves automation safety for repeated provisioning calls.
-- Alternatives considered: Raise error on duplicate topic creation (less user-friendly for internal automation).
-
-## Decision 8: Retry Configuration Model
-- Decision: Use explicit environment variables for startup retry count and retry timeout seconds with strict validation.
-- Rationale: Makes startup behavior measurable and tunable per environment.
-- Alternatives considered: Hardcoded retry values (inflexible), exponential backoff with extra knobs (not required for first version).
-
-## Decision 9: Lifecycle Event Strategy
-- Decision: Use FastAPI lifespan events to perform Kafka admin initialization at startup and connection cleanup at shutdown; avoid deprecated `on_event` handlers.
-- Rationale: Keeps readiness and teardown behavior explicit, centralized at app boundary, and aligned with current framework guidance.
-- Alternatives considered: Deprecated `on_event` lifecycle handlers (rejected due to deprecation), lazy connection creation on first request (delayed failures), module-level singleton setup (harder to test and less deterministic teardown).
-
-## Decision 10: Global Exception Handling Strategy
-- Decision: Add global FastAPI exception handlers for request validation errors, HTTP exceptions, and unhandled exceptions, returning one structured error envelope.
-- Rationale: Provides consistent client-facing error shape and simplifies observability/consumer parsing.
-- Alternatives considered: Per-route error shaping only (inconsistent coverage), default framework error bodies (inconsistent contract).
-
-## Final Tradeoffs and Validation Notes
-
-- Implementation keeps a synchronous startup path and synchronous admin API calls to reduce complexity for the first delivery.
-- Lifecycle management uses FastAPI lifespan events to avoid deprecated APIs and keep startup/shutdown orchestration in one place.
-- Local baseline from test harness:
-	- Startup with one retry and 1s retry timeout: ~1007 ms.
-	- Topic creation endpoint p95 (30 requests, mocked admin): ~2.60 ms.
+## Decision 7: Logging Approach
+- **Decision**: Log topic names before the loop at INFO level; log each outcome (created/already_exists) at DEBUG level; log each error at WARNING level with topic name and error message.
+- **Rationale**: Keeps startup output clean at INFO while preserving detailed per-topic visibility at DEBUG. Consistent with existing `logger.info(...)` pattern in `main.py`.
+- **Alternatives considered**: Log every topic at INFO (too verbose in production), log only failures (insufficient startup observability per SC-004).

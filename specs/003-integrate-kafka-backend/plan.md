@@ -1,48 +1,35 @@
-# Implementation Plan: Kafka Backend Integration Service
+# Implementation Plan: Backend Kafka Startup Topic Bootstrap
 
-**Branch**: `[003-integrate-kafka-backend]` | **Date**: 2026-06-09 | **Spec**: [spec.md](./spec.md)
-**Input**: Feature specification from `/specs/003-integrate-kafka-backend/spec.md`
+**Branch**: `001-build-rag-retrieval-agent` | **Date**: 2026-06-12 | **Spec**: [spec.md](spec.md)  
+**Input**: Feature specification from `specs/003-integrate-kafka-backend/spec.md`
 
 ## Summary
 
-Deliver a dedicated FastAPI backend service that initializes Kafka admin connectivity during lifespan startup, retries with env-driven controls, and exposes one topic-creation endpoint with a unified error envelope. Local bootstrap is standardized with root compose services for Kafka and Kafka UI, with Kafka pinned to `apache/kafka:4.2.1` and Kafka UI connected to the broker service.
+The backend service's FastAPI lifespan startup function must be extended to automatically create all Kafka topics listed in the shared `project/topics` registry immediately after Kafka admin connectivity is established. Topic creation is idempotent (already-existing topics are not errors), non-fatal on transient broker errors (log-and-continue), and limited to the core create-topics loop — advanced per-topic validation, result assertion, and health checks are deferred as explicit TODO markers. No new environment variables or configuration changes are required.
 
 ## Technical Context
 
-**Language/Version**: Python 3.12.x
-**Primary Dependencies**: FastAPI, Uvicorn, kafka-python, Pydantic v2, python-dotenv
-**Storage**: N/A (stateless service; Kafka metadata managed via broker admin API)
-**Testing**: pytest + fastapi.testclient
-**Target Platform**: Linux containers for local development; Linux host runtime for service
-**Project Type**: Backend web service
-**Performance Goals**:
-- Topic-create API p95 <= 2s in local development (SC-003)
-- Local compose startup to reachable Kafka + Kafka UI under 2 minutes (SC-006)
-**Constraints**:
-- Use FastAPI lifespan only; no deprecated `on_event` handlers (FR-014)
-- Use unified global exception envelope for validation, HTTP, and unhandled failures (FR-015)
-- Kafka image fixed to `apache/kafka:4.2.1` in compose contract (FR-010)
-**Scale/Scope**:
-- One backend service
-- One API endpoint (`POST /api/v1/topics`)
-- One local Kafka cluster target per service instance
+**Language/Version**: Python 3.11  
+**Primary Dependencies**: FastAPI 0.111+, kafka-python 2.0+, pydantic v2, python-dotenv  
+**Storage**: N/A — topics are created in the external Kafka cluster; no local persistence  
+**Testing**: pytest + `fastapi.testclient.TestClient`  
+**Target Platform**: Linux server (local dev via Docker Compose)  
+**Project Type**: Web service (`backend_service/`)  
+**Performance Goals**: Startup topic bootstrap completes within 5 seconds against a local Kafka cluster (SC-003)  
+**Constraints**: Bootstrap must be idempotent; non-fatal transient errors must not abort startup; no extra env vars introduced  
+**Scale/Scope**: Creates ≤10 topics at startup; single-cluster target per service instance
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-### Pre-Phase 0 Gate Review
+- **Code Quality Gate**: All changed files must pass `ruff check` and `ruff format --check` before merge. No dead code, no commented-out blocks, bounded function size.
+- **Testing Gate**: New `bootstrap_topics()` method requires unit tests covering (a) all-new topics, (b) all-already-existing, (c) mixed, (d) empty registry, (e) transient error log-and-continue. Existing startup tests must continue to pass (regression gate).
+- **UX Consistency Gate**: Startup log output follows existing `logger.info(...)` pattern in `main.py`. Error events use `logger.exception(...)` consistent with existing unhandled-error handler. No new API surface changes — this is startup-only.
+- **Performance Gate**: Bootstrap step duration validated in unit test (mock clock or timing assertion) to confirm O(n) over topic count with no blocking beyond admin call. SC-003: ≤5s wall-clock target documented in quickstart.
+- **Maintainability Gate**: TODO markers required in `bootstrap_topics()` per FR-006. Non-obvious decisions (idempotency via `TopicAlreadyExistsError` catch, non-fatal KafkaError handling) documented in research.md and code comments.
 
-- Code Quality Gate: PASS
-- Define `ruff check`, `ruff format --check`, and `python -m compileall backend_service` as mandatory checks before completion evidence.
-- Testing Gate: PASS
-- Require unit/integration tests for startup retry behavior, shutdown cleanup, API success/duplicate/validation/runtime paths, and contract-shaped error responses.
-- UX Consistency Gate: PASS
-- Enforce one response envelope shape for failure paths and deterministic status values for success paths (`created`, `already_exists`, `error`).
-- Performance Gate: PASS
-- Track startup retry timing and topic-create latency in quickstart evidence; keep topic p95 budget <= 2s and compose bootstrap target under 2 minutes.
-- Maintainability Gate: PASS
-- Require startup diagnostics, explicit lifecycle orchestration, and synchronized docs/contracts for env, API, and compose behavior.
+**Post-design re-check**: All gates still pass — no additional complexity introduced. No violations to justify.
 
 ## Project Structure
 
@@ -50,90 +37,44 @@ Deliver a dedicated FastAPI backend service that initializes Kafka admin connect
 
 ```text
 specs/003-integrate-kafka-backend/
-├── plan.md
-├── research.md
-├── data-model.md
-├── quickstart.md
+├── plan.md              # This file
+├── research.md          # Phase 0 output
+├── data-model.md        # Phase 1 output
+├── quickstart.md        # Phase 1 output
 ├── contracts/
-│   └── backend-topic-api-contract.md
-└── tasks.md
+│   └── backend-topic-bootstrap-contract.md  # Phase 1 output
+└── tasks.md             # Phase 2 output (/speckit.tasks — NOT created by /speckit.plan)
 ```
 
-### Source Code (repository root)
+### Source Code (touched files)
 
 ```text
+project/
+└── topics.py                          # Add get_all_topic_names() aggregator
+
 backend_service/
 ├── app/
-│   ├── api/
-│   │   └── topics.py
-│   ├── config.py
-│   ├── kafka_admin.py
-│   └── main.py
+│   ├── kafka_admin.py                 # Add bootstrap_topics() method
+│   └── main.py                        # Extend lifespan: call bootstrap_topics() after connect()
 └── tests/
-    ├── test_startup.py
-    └── test_topics_api.py
-
-docker-compose.yaml
-.env.example
-.env.local.example
-requirements.txt
+    └── test_startup.py                # Add bootstrap_topics unit tests
 ```
 
-**Structure Decision**: Keep a single backend-service package (`backend_service/`) with explicit API, config, and Kafka admin modules, and maintain feature artifacts in `specs/003-integrate-kafka-backend/`.
+**Structure Decision**: No new modules or packages needed. All changes are additive within existing files. The `project/topics` module is the single source-of-truth for topic names; `backend_service` imports it directly.
 
-## Phase 0: Research Outcomes
+## Data Flow
 
-Research decisions are documented in [research.md](./research.md) and resolve all technical unknowns from the template baseline:
-
-- Kafka admin library: `kafka-python` `KafkaAdminClient`
-- Lifecycle orchestration: FastAPI lifespan startup/shutdown
-- Env precedence: `.env.local` base + process-env override
-- API scope: topic creation only
-- Local infra topology: Kafka + Kafka UI with Kafka pinned to `apache/kafka:4.2.1`
-- Error strategy: global exception handlers returning one envelope shape
-- Retry model: env-driven retry count + timeout with strict validation
-
-No unresolved `NEEDS CLARIFICATION` items remain.
-
-## Phase 1: Design & Contracts
-
-### Data Model Output
-
-- [data-model.md](./data-model.md) defines:
-- Runtime config (`KafkaConnectionConfig`)
-- Startup lifecycle state (`StartupConnectionState`)
-- API request/result/error envelope (`TopicCreateRequest`, `TopicCreateResult`, `ApiErrorResponse`)
-- Compose topology contract entity (`ComposeServiceConfig`) including fixed Kafka image tag
-
-### Contract Output
-
-- [contracts/backend-topic-api-contract.md](./contracts/backend-topic-api-contract.md) defines:
-- Runtime env contract and precedence
-- `POST /api/v1/topics` request/response/error behavior
-- Lifespan startup/shutdown contract
-- Local compose infrastructure contract with `apache/kafka:4.2.1` + Kafka UI connectivity
-
-### Quickstart Output
-
-- [quickstart.md](./quickstart.md) defines local setup, service run flow, API usage, testing, and quality/performance validation commands.
-
-### Agent Context Update
-
-- `.github/copilot-instructions.md` already references `specs/003-integrate-kafka-backend/plan.md` inside both SPECKIT marker blocks; no path update required.
-
-## Post-Design Constitution Check
-
-- Code Quality Gate: PASS
-- Quality checks and evidence commands are captured in quickstart and aligned with implementation tasks.
-- Testing Gate: PASS
-- Independent test scenarios from all three user stories map to existing backend test modules and contract behaviors.
-- UX Consistency Gate: PASS
-- Contract and quickstart preserve one failure envelope and deterministic response semantics.
-- Performance Gate: PASS
-- Budgets are explicitly carried from spec to plan and verification notes.
-- Maintainability Gate: PASS
-- Design keeps narrow service scope, explicit lifecycle behavior, and synchronized artifacts.
-
-## Complexity Tracking
-
-No constitution violations or justified complexity exceptions identified at planning time.
+```
+FastAPI lifespan startup
+  → KafkaSettings.from_env()
+  → KafkaAdminService.connect()          # existing: retries, raises on exhaustion
+  → get_all_topic_names()                # reads project/topics registry
+  → KafkaAdminService.bootstrap_topics(topic_names)
+      for each topic_name:
+        create_topic(topic_name, num_partitions=1, replication_factor=1)
+          → "created"           → log INFO
+          → "already_exists"    → log DEBUG
+          → RuntimeError        → log WARNING, continue  (non-fatal)
+  → yield  (service is ready)
+  → KafkaAdminService.close()           # existing shutdown
+```

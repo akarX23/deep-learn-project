@@ -1,7 +1,7 @@
-# Specification Quality Checklist: Kafka Backend Integration Service
+# Specification Quality Checklist: Backend Kafka Startup Topic Bootstrap
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2026-06-08
+**Created**: 2026-06-12
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -31,4 +31,8 @@
 
 ## Notes
 
-- Validated in one pass. No clarifications required.
+- Spec updated 2026-06-12 to focus on startup topic bootstrap from `project/topics` registry.
+- All mandatory sections present and validated in one pass.
+- No [NEEDS CLARIFICATION] markers remain.
+- Advanced per-topic validation and error-handling behavior are explicitly deferred with TODO requirement (FR-006).
+- Ready for `/speckit.plan`.
