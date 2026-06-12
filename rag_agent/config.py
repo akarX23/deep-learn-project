@@ -45,7 +45,6 @@ class KafkaRuntimeConfig:
     """Runtime configuration for Kafka-backed RAG service behavior."""
 
     bootstrap_servers: str
-    topic_api_url: str
     client_id: str = "rag-service"
     security_protocol: str | None = None
     sasl_mechanism: str | None = None
@@ -63,17 +62,13 @@ class KafkaRuntimeConfig:
             load_dotenv(dotenv_path=dotenv_path, override=False)
 
         bootstrap_servers = _read_optional("BACKEND_KAFKA_BOOTSTRAP_SERVERS")
-        topic_api_url = _read_optional("BACKEND_API_TOPIC_URL")
         if not bootstrap_servers:
             raise RuntimeError("BACKEND_KAFKA_BOOTSTRAP_SERVERS is required")
-        if not topic_api_url:
-            raise RuntimeError("BACKEND_API_TOPIC_URL is required")
 
         client_id = _read_optional("BACKEND_KAFKA_CLIENT_ID") or "rag-service"
         consumer_group_id = f"{client_id}-consumer"
         return cls(
             bootstrap_servers=bootstrap_servers,
-            topic_api_url=topic_api_url,
             client_id=client_id,
             security_protocol=_read_optional("BACKEND_KAFKA_SECURITY_PROTOCOL"),
             sasl_mechanism=_read_optional("BACKEND_KAFKA_SASL_MECHANISM"),
@@ -81,6 +76,7 @@ class KafkaRuntimeConfig:
             sasl_password=_read_optional("BACKEND_KAFKA_SASL_PASSWORD"),
             ssl_cafile=_read_optional("BACKEND_KAFKA_SSL_CAFILE"),
             consumer_group_id=consumer_group_id,
+            poll_timeout_ms=_read_int("BACKEND_KAFKA_POLL_TIMEOUT_MS", 1000),
         )
 
     def producer_kwargs(self) -> dict[str, str]:

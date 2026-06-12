@@ -4,21 +4,20 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import Any
 
 from project.schemas import RAGAgentInput, RAGCompletionEvent, RAGRequestEvent, RAGAgentOutput
 from rag_agent.agent import RAGAgent
-from rag_agent.kafka import publish_rag_complete
+from rag_agent.kafka import KafkaProducerProtocol, publish_rag_complete
 from rag_agent.logging import StructuredLogger
 
 
 class RAGRequestEventHandler:
-    """Validate inbound Kafka events and dispatch them to the RAG pipeline."""
+    """Ingest Kafka request events and dispatch them to the RAG pipeline."""
 
     def __init__(
         self,
         agent_factory: Callable[[], RAGAgent] = RAGAgent,
-        publisher: Callable[[Any, RAGCompletionEvent], None] = publish_rag_complete,
+        publisher: Callable[[KafkaProducerProtocol, RAGCompletionEvent], None] = publish_rag_complete,
         clock: Callable[[], datetime] | None = None,
         lifecycle_logger: StructuredLogger | None = None,
     ) -> None:
@@ -27,17 +26,11 @@ class RAGRequestEventHandler:
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._logger = lifecycle_logger or StructuredLogger()
 
-    def validate_event(self, payload: dict[str, Any]) -> RAGRequestEvent:
-        """Validate raw inbound Kafka payload against the request contract."""
+    def parse_event(self, payload: dict[str, object]) -> RAGRequestEvent:
+        """Parse inbound payload into request event schema."""
 
-        event = RAGRequestEvent.model_validate(payload)
-        self._logger.emit(
-            request_id=event.request_id,
-            stage="validated",
-            message="Validated RAG request event",
-            metadata={"file_count": len(event.file_paths)},
-        )
-        return event
+        # TODO: Add richer schema and semantic validation in a follow-up task.
+        return RAGRequestEvent.model_validate(payload)
 
     def build_completion_event(
         self,
@@ -63,12 +56,16 @@ class RAGRequestEventHandler:
             duration_ms=duration_ms,
         )
 
-    def process_request(self, payload: dict[str, Any], producer: Any = None) -> RAGCompletionEvent:
-        """Convert a validated request event into a RAGAgent execution."""
+    def process_request(
+        self,
+        payload: dict[str, object],
+        producer: KafkaProducerProtocol | None = None,
+    ) -> RAGCompletionEvent | None:
+        """Convert a parsed request event into a RAGAgent execution."""
 
         raw_request_id = _extract_request_id(payload)
         try:
-            event = self.validate_event(payload)
+            event = self.parse_event(payload)
         except Exception as exc:
             self._logger.emit(
                 request_id=raw_request_id,
@@ -92,6 +89,7 @@ class RAGRequestEventHandler:
             message="Starting RAG pipeline execution",
             metadata={"file_count": len(event.file_paths)},
         )
+        # TODO: Add timing and throughput metrics counters in a follow-up task.
         try:
             result = agent.run(request)
         except Exception as exc:
@@ -153,7 +151,9 @@ def _isoformat_utc(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _extract_request_id(payload: dict[str, Any]) -> str:
+def _extract_request_id(payload: dict[str, object]) -> str:
+    """Extract request_id from raw inbound payload."""
+
     raw_request_id = payload.get("request_id")
     if isinstance(raw_request_id, str) and raw_request_id.strip():
         return raw_request_id

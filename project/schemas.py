@@ -177,6 +177,25 @@ class RequestLifecycleLogEntry(BaseModel):
         return value
 
 
+class TopicPresenceCheckResult(BaseModel):
+    """Result of checking Kafka metadata for required topics."""
+
+    required_topics: List[str]
+    existing_topics: List[str]
+    missing_topics: List[str]
+    warning_message: str | None = None
+
+
+class WorkerRuntimeState(BaseModel):
+    """Runtime state for the standalone RAG worker process."""
+
+    running: bool
+    stop_event_set: bool
+    poll_thread_alive: bool
+    startup_topic_check_complete: bool
+    startup_topic_check_warnings: List[str] = Field(default_factory=list)
+
+
 # ---------------------------------------------------------------------------
 # Teaching Agent schemas
 # ---------------------------------------------------------------------------

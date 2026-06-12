@@ -44,3 +44,16 @@
 - Decision: Continue excluding planner-side logic; only consume planner-produced events and emit RAG completion events.
 - Rationale: Keeps this feature bounded to RAG runtime behavior.
 - Alternatives considered: planner-side fallback behavior inside worker (scope violation).
+
+## Implementation Evidence
+- Replaced FastAPI service lifecycle with standalone worker runtime in `rag_agent/worker.py`.
+- Removed backend topic API startup dependency from config and environment templates.
+- Added Kafka topic presence metadata checks that warn-and-continue on missing topics.
+- Added structured startup-stage logging (`startup_topic_check`) and kept request lifecycle stages.
+- Added worker runtime test coverage for lifecycle, idle loop continuity, startup topic checks, and non-fatal per-event failures.
+- Added typed handler contract and TODO-marker tests for deferred validation/metrics scope.
+
+## Deferred TODO Scope
+- Advanced semantic/event validation in `RAGRequestEventHandler.parse_event`.
+- Metrics instrumentation (timing/throughput counters) in `RAGRequestEventHandler.process_request`.
+- Full local end-to-end quickstart validation against a running Kafka stack remains environment-dependent.

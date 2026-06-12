@@ -28,7 +28,7 @@ BACKEND_KAFKA_SSL_CAFILE=
 ```
 
 Important:
-- Do not set or depend on `BACKEND_API_TOPIC_URL` for this feature phase.
+- No backend topic bootstrap API is used by this worker runtime.
 - Topics are assumed to be provisioned externally.
 
 ## 3. Start Kafka infrastructure
@@ -104,6 +104,12 @@ Ensure lifecycle logs include:
 .venv/bin/ruff format --check project rag_agent
 .venv/bin/python -m compileall project rag_agent
 ```
+
+Latest local results:
+- `.venv/bin/ruff check project rag_agent` passed.
+- `.venv/bin/ruff format --check project rag_agent` reported formatting drift in existing files.
+- `.venv/bin/python -m compileall project rag_agent` passed.
+- `.venv/bin/python -m pytest -q rag_agent/tests/test_worker_runtime.py rag_agent/tests/test_kafka_integration.py` passed.
 
 ## 10. Scope reminder
 

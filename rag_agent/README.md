@@ -2,7 +2,7 @@
 
 This package implements a synchronous RAG retrieval agent that processes PDF files page-by-page and returns planner-safe study material in markdown.
 
-It also includes a Kafka-driven FastAPI runtime that consumes request events from `rag`, executes the existing `RAGAgent` pipeline, and publishes completion events to `rag-complete`.
+It also includes a Kafka-driven worker runtime that consumes request events from `rag`, executes the existing `RAGAgent` pipeline, and publishes completion events to `rag-complete`.
 
 ## Environment variables
 
@@ -43,7 +43,9 @@ Kafka runtime variables:
 - `BACKEND_KAFKA_SASL_USERNAME` (optional)
 - `BACKEND_KAFKA_SASL_PASSWORD` (optional)
 - `BACKEND_KAFKA_SSL_CAFILE` (optional)
-- `BACKEND_API_TOPIC_URL` (required for startup topic bootstrap)
+- `BACKEND_KAFKA_POLL_TIMEOUT_MS` (optional, default `1000`)
+
+Startup behavior assumes required topics already exist and performs a Kafka metadata presence check with warning-only logging when topics are missing.
 
 LiteLLM routing behavior:
 
@@ -57,20 +59,20 @@ LiteLLM routing behavior:
 python -m rag_agent.agent --input rag_agent/tests/inputs/sample_input.json
 ```
 
-## Run Kafka service locally
+## Run Kafka worker locally
 
 ```bash
-python -m rag_agent.service
+python -m rag_agent.worker
 ```
 
 Startup flow:
 
 - Loads Kafka settings from `BACKEND_KAFKA*`
-- Calls `BACKEND_API_TOPIC_URL` to ensure `rag` and `rag-complete` exist
+- Checks Kafka metadata for required topics (`rag`, `rag-complete`)
 - Starts Kafka consumer polling on `rag`
-- Validates inbound request events and dispatches to `RAGAgent`
+- Dispatches inbound request events to `RAGAgent`
 - Publishes completion events to `rag-complete`
-- Emits structured lifecycle logs for `consumed`, `validated`, `processing_started`, `processing_completed`, `publish_completed`, and `error`
+- Emits structured lifecycle logs for `startup_topic_check`, `consumed`, `processing_started`, `processing_completed`, `publish_completed`, and `error`
 
 ## Run tests
 

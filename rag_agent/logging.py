@@ -41,3 +41,27 @@ class StructuredLogger:
             metadata=metadata or {},
         )
         return self.emit_log_entry(entry)
+
+    def emit_startup_topic_check(
+        self,
+        *,
+        missing_topics: list[str],
+        level: str = "INFO",
+    ) -> RequestLifecycleLogEntry:
+        """Emit startup-stage topic presence result."""
+
+        if missing_topics:
+            message = (
+                "Kafka startup topic check found missing topics: "
+                + ", ".join(missing_topics)
+            )
+        else:
+            message = "Kafka startup topic check passed"
+
+        return self.emit(
+            request_id="worker",
+            stage="startup_topic_check",
+            level=level,
+            message=message,
+            metadata={"missing_topics": missing_topics},
+        )

@@ -10,10 +10,10 @@
 
 **Purpose**: Align dependency/config surfaces with standalone worker runtime requirements.
 
-- [ ] T001 Remove FastAPI/uvicorn runtime dependency usage from `requirements.txt` and keep worker-relevant dependencies only
-- [ ] T002 [P] Remove backend topic API variable references from `.env.local.example` and add worker startup notes
-- [ ] T003 [P] Update runtime entrypoint documentation for worker process in `rag_agent/README.md`
-- [ ] T004 Confirm centralized topic registry includes required worker topics in `project/topics.py`
+- [X] T001 Remove FastAPI/uvicorn runtime dependency usage from `requirements.txt` and keep worker-relevant dependencies only
+- [X] T002 [P] Remove backend topic API variable references from `.env.local.example` and add worker startup notes
+- [X] T003 [P] Update runtime entrypoint documentation for worker process in `rag_agent/README.md`
+- [X] T004 Confirm centralized topic registry includes required worker topics in `project/topics.py`
 
 ---
 
@@ -23,12 +23,12 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T005 Remove `BACKEND_API_TOPIC_URL` and related startup API config from `rag_agent/config.py`
-- [ ] T006 [P] Add typed `TopicPresenceCheckResult` and `WorkerRuntimeState` models in `project/schemas.py`
-- [ ] T007 Add typed Kafka metadata topic-presence check helper in `rag_agent/kafka.py`
-- [ ] T008 Create standalone worker runtime module with thread lifecycle (`start`, `run loop`, `stop`) in `rag_agent/worker.py`
-- [ ] T009 Migrate or remove FastAPI lifecycle orchestration from `rag_agent/service.py` and rewire runtime entry to `rag_agent/worker.py`
-- [ ] T010 [P] Add structured startup-stage logging (`startup_topic_check`) in `rag_agent/logging.py`
+- [X] T005 Remove `BACKEND_API_TOPIC_URL` and related startup API config from `rag_agent/config.py`
+- [X] T006 [P] Add typed `TopicPresenceCheckResult` and `WorkerRuntimeState` models in `project/schemas.py`
+- [X] T007 Add typed Kafka metadata topic-presence check helper in `rag_agent/kafka.py`
+- [X] T008 Create standalone worker runtime module with thread lifecycle (`start`, `run loop`, `stop`) in `rag_agent/worker.py`
+- [X] T009 Migrate or remove FastAPI lifecycle orchestration from `rag_agent/service.py` and rewire runtime entry to `rag_agent/worker.py`
+- [X] T010 [P] Add structured startup-stage logging (`startup_topic_check`) in `rag_agent/logging.py`
 
 **Checkpoint**: Worker foundation is ready; user story implementation can proceed.
 
@@ -42,16 +42,16 @@
 
 ### Tests for User Story 1
 
-- [ ] T011 [P] [US1] Add worker startup/shutdown lifecycle test in `rag_agent/tests/test_worker_runtime.py`
-- [ ] T012 [P] [US1] Add consumer loop continues-when-idle test in `rag_agent/tests/test_worker_runtime.py`
-- [ ] T013 [P] [US1] Add non-fatal per-event failure continuation test in `rag_agent/tests/test_worker_runtime.py`
+- [X] T011 [P] [US1] Add worker startup/shutdown lifecycle test in `rag_agent/tests/test_worker_runtime.py`
+- [X] T012 [P] [US1] Add consumer loop continues-when-idle test in `rag_agent/tests/test_worker_runtime.py`
+- [X] T013 [P] [US1] Add non-fatal per-event failure continuation test in `rag_agent/tests/test_worker_runtime.py`
 
 ### Implementation for User Story 1
 
-- [ ] T014 [US1] Implement dedicated poll thread bootstrap and stop signaling in `rag_agent/worker.py`
-- [ ] T015 [US1] Implement typed single-batch poll dispatch helper for worker loop in `rag_agent/worker.py`
-- [ ] T016 [US1] Wire worker entrypoint (`python -m rag_agent.worker`) for process startup in `rag_agent/worker.py`
-- [ ] T017 [US1] Ensure graceful shutdown closes consumer and producer in `rag_agent/kafka.py` and `rag_agent/worker.py`
+- [X] T014 [US1] Implement dedicated poll thread bootstrap and stop signaling in `rag_agent/worker.py`
+- [X] T015 [US1] Implement typed single-batch poll dispatch helper for worker loop in `rag_agent/worker.py`
+- [X] T016 [US1] Wire worker entrypoint (`python -m rag_agent.worker`) for process startup in `rag_agent/worker.py`
+- [X] T017 [US1] Ensure graceful shutdown closes consumer and producer in `rag_agent/kafka.py` and `rag_agent/worker.py`
 
 **Checkpoint**: Worker runtime is independently functional and testable.
 
@@ -65,16 +65,16 @@
 
 ### Tests for User Story 2
 
-- [ ] T018 [P] [US2] Add startup topic check success test in `rag_agent/tests/test_worker_runtime.py`
-- [ ] T019 [P] [US2] Add missing-topic warning-and-continue startup test in `rag_agent/tests/test_worker_runtime.py`
-- [ ] T020 [P] [US2] Add regression test asserting no backend topic API call path is used in `rag_agent/tests/test_worker_runtime.py`
+- [X] T018 [P] [US2] Add startup topic check success test in `rag_agent/tests/test_worker_runtime.py`
+- [X] T019 [P] [US2] Add missing-topic warning-and-continue startup test in `rag_agent/tests/test_worker_runtime.py`
+- [X] T020 [P] [US2] Add regression test asserting no backend topic API call path is used in `rag_agent/tests/test_worker_runtime.py`
 
 ### Implementation for User Story 2
 
-- [ ] T021 [US2] Remove startup topic-creation API call behavior from `rag_agent/kafka.py`
-- [ ] T022 [US2] Implement required-topic presence check on startup in `rag_agent/worker.py`
-- [ ] T023 [US2] Emit clear actionable warning when required topics are missing in `rag_agent/logging.py`
-- [ ] T024 [US2] Remove backend API dependency notes from runtime docs in `rag_agent/README.md` and `specs/001-rag-retrieval-agent/quickstart.md`
+- [X] T021 [US2] Remove startup topic-creation API call behavior from `rag_agent/kafka.py`
+- [X] T022 [US2] Implement required-topic presence check on startup in `rag_agent/worker.py`
+- [X] T023 [US2] Emit clear actionable warning when required topics are missing in `rag_agent/logging.py`
+- [X] T024 [US2] Remove backend API dependency notes from runtime docs in `rag_agent/README.md` and `specs/001-rag-retrieval-agent/quickstart.md`
 
 **Checkpoint**: Startup topic verification flow is independently functional and testable.
 
@@ -88,16 +88,16 @@
 
 ### Tests for User Story 3
 
-- [ ] T025 [P] [US3] Add typed-handler signature contract test in `rag_agent/tests/test_request_event.py`
-- [ ] T026 [P] [US3] Add ingest-to-dispatch integration test in `rag_agent/tests/test_kafka_integration.py`
-- [ ] T027 [P] [US3] Add TODO marker coverage test for deferred validation/metrics in `rag_agent/tests/test_request_event.py`
+- [X] T025 [P] [US3] Add typed-handler signature contract test in `rag_agent/tests/test_request_event.py`
+- [X] T026 [P] [US3] Add ingest-to-dispatch integration test in `rag_agent/tests/test_kafka_integration.py`
+- [X] T027 [P] [US3] Add TODO marker coverage test for deferred validation/metrics in `rag_agent/tests/test_request_event.py`
 
 ### Implementation for User Story 3
 
-- [ ] T028 [US3] Refactor `RAGRequestEventHandler` to minimal ingest+dispatch flow with explicit TODO markers in `rag_agent/handlers.py`
-- [ ] T029 [US3] Replace broad untyped parameters and returns in handler interfaces with explicit types in `rag_agent/handlers.py`
-- [ ] T030 [US3] Replace broad untyped worker/Kafka function signatures with explicit typed boundaries in `rag_agent/worker.py` and `rag_agent/kafka.py`
-- [ ] T031 [US3] Keep completion mapping and publish flow tied to request correlation in `rag_agent/handlers.py`
+- [X] T028 [US3] Refactor `RAGRequestEventHandler` to minimal ingest+dispatch flow with explicit TODO markers in `rag_agent/handlers.py`
+- [X] T029 [US3] Replace broad untyped parameters and returns in handler interfaces with explicit types in `rag_agent/handlers.py`
+- [X] T030 [US3] Replace broad untyped worker/Kafka function signatures with explicit typed boundaries in `rag_agent/worker.py` and `rag_agent/kafka.py`
+- [X] T031 [US3] Keep completion mapping and publish flow tied to request correlation in `rag_agent/handlers.py`
 
 **Checkpoint**: Minimal typed handler flow is independently functional and testable.
 
@@ -107,12 +107,12 @@
 
 **Purpose**: Complete quality, performance, and end-to-end validation evidence.
 
-- [ ] T032 [P] Update architecture and operational docs for worker runtime in `rag_agent/README.md` and `specs/001-rag-retrieval-agent/quickstart.md`
+- [X] T032 [P] Update architecture and operational docs for worker runtime in `rag_agent/README.md` and `specs/001-rag-retrieval-agent/quickstart.md`
 - [ ] T033 [P] Run quality checks (`.venv/bin/ruff check`, `.venv/bin/ruff format --check`, `.venv/bin/python -m compileall`) and capture output references in `specs/001-rag-retrieval-agent/quickstart.md`
-- [ ] T034 Run targeted worker and Kafka integration tests via `.venv/bin/python -m pytest` in `rag_agent/tests/test_worker_runtime.py` and `rag_agent/tests/test_kafka_integration.py`
-- [ ] T035 [P] Add poll-to-completion latency measurement script or test helper in `rag_agent/tests/test_worker_runtime.py`
+- [X] T034 Run targeted worker and Kafka integration tests via `.venv/bin/python -m pytest` in `rag_agent/tests/test_worker_runtime.py` and `rag_agent/tests/test_kafka_integration.py`
+- [X] T035 [P] Add poll-to-completion latency measurement script or test helper in `rag_agent/tests/test_worker_runtime.py`
 - [ ] T036 Validate quickstart end-to-end flow against local Kafka and record results in `specs/001-rag-retrieval-agent/quickstart.md`
-- [ ] T037 Capture final implementation evidence and remaining deferred TODO scope in `specs/001-rag-retrieval-agent/research.md`
+- [X] T037 Capture final implementation evidence and remaining deferred TODO scope in `specs/001-rag-retrieval-agent/research.md`
 
 ---
 

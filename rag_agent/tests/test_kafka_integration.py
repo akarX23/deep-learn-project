@@ -7,7 +7,7 @@ from project.schemas import RAGAgentOutput
 from rag_agent.handlers import RAGRequestEventHandler
 from rag_agent.logging import StructuredLogger
 from rag_agent.kafka import publish_rag_complete
-from rag_agent.service import process_consumer_batch
+from rag_agent.worker import process_consumer_batch
 
 
 class _FakeConsumer:
@@ -95,6 +95,53 @@ def test_request_handler_dispatches_to_rag_agent() -> None:
     assert published["event"].session_ctx == {"session_id": "s-2"}
 
 
+def test_ingest_to_dispatch_flow_preserves_request_id() -> None:
+    class _FakeAgent:
+        def run(self, request):
+            return RAGAgentOutput(
+                request_id=request.request_id,
+                user_prompt=request.user_prompt,
+                schema_version=request.schema_version,
+                compiled_material="# Notes",
+                extracted_pages=[],
+                total_pages_processed=1,
+                total_pages_included=1,
+                errors=[],
+                status="complete",
+            )
+
+    published = {}
+
+    def _capture_publish(_producer, event):
+        published["request_id"] = event.request_id
+
+    handler = RAGRequestEventHandler(agent_factory=_FakeAgent, publisher=_capture_publish)
+    consumer = _FakeConsumer(
+        {
+            "rag": [
+                SimpleNamespace(
+                    topic="rag",
+                    value={
+                        "request_id": "req-ingest-1",
+                        "session_ctx": {"session_id": "s-10"},
+                        "user_request": "Summarize this file",
+                        "file_paths": ["rag_agent/tests/inputs/sample.pdf"],
+                    },
+                )
+            ]
+        }
+    )
+
+    process_consumer_batch(
+        consumer,
+        producer=object(),
+        handler=handler.process_request,
+        poll_timeout_ms=50,
+    )
+
+    assert published["request_id"] == "req-ingest-1"
+
+
 def test_publish_rag_complete_sends_to_completion_topic() -> None:
     sent = {}
 
@@ -159,7 +206,7 @@ def test_completion_event_preserves_request_correlation() -> None:
     assert output.duration_ms == 1000
 
 
-def test_lifecycle_logging_covers_consume_validate_process_and_publish() -> None:
+def test_lifecycle_logging_covers_consume_process_and_publish() -> None:
     captured_logger = _CapturingLogger()
     lifecycle_logger = StructuredLogger(captured_logger)
 
@@ -209,7 +256,6 @@ def test_lifecycle_logging_covers_consume_validate_process_and_publish() -> None
     stages = [entry[1]["stage"] for entry in captured_logger.entries]
     assert stages == [
         "consumed",
-        "validated",
         "processing_started",
         "processing_completed",
         "publish_completed",

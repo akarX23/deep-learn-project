@@ -3,16 +3,36 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Protocol
 
-import httpx
-
-from project.schemas import RAGCompletionEvent
+from project.schemas import RAGCompletionEvent, TopicPresenceCheckResult
 from project.topics import PlannerTopics
 from rag_agent.config import KafkaRuntimeConfig
 
 
-def create_producer(config: KafkaRuntimeConfig):
+JsonPayload = dict[str, object]
+
+
+class ConsumerRecordProtocol(Protocol):
+    topic: str
+    value: JsonPayload
+
+
+class KafkaConsumerProtocol(Protocol):
+    def subscribe(self, topics: list[str]) -> None: ...
+    def poll(self, timeout_ms: int) -> dict[object, list[ConsumerRecordProtocol]]: ...
+    def topics(self) -> set[str]: ...
+    def close(self) -> None: ...
+
+
+class KafkaProducerProtocol(Protocol):
+    def send(self, topic: str, payload: JsonPayload) -> object: ...
+    def flush(self) -> None: ...
+    def close(self) -> None: ...
+
+
+def create_producer(config: KafkaRuntimeConfig) -> KafkaProducerProtocol:
     """Create a Kafka producer using shared runtime configuration."""
 
     try:
@@ -26,7 +46,10 @@ def create_producer(config: KafkaRuntimeConfig):
     )
 
 
-def create_consumer(config: KafkaRuntimeConfig, topics: Iterable[str] | None = None):
+def create_consumer(
+    config: KafkaRuntimeConfig,
+    topics: Iterable[str] | None = None,
+) -> KafkaConsumerProtocol:
     """Create a Kafka consumer and optionally subscribe it to topics."""
 
     try:
@@ -43,19 +66,22 @@ def create_consumer(config: KafkaRuntimeConfig, topics: Iterable[str] | None = N
     return consumer
 
 
-def consumer_subscribe_rag(consumer) -> None:
+def consumer_subscribe_rag(consumer: KafkaConsumerProtocol) -> None:
     """Subscribe the consumer to the inbound RAG topic."""
 
     consumer.subscribe([PlannerTopics.RAG.value])
 
 
-def poll_records(consumer, timeout_ms: int) -> dict[Any, list[Any]]:
+def poll_records(
+    consumer: KafkaConsumerProtocol,
+    timeout_ms: int,
+) -> dict[object, list[ConsumerRecordProtocol]]:
     """Poll Kafka for a batch of records."""
 
     return consumer.poll(timeout_ms=timeout_ms)
 
 
-def publish_rag_complete(producer, event: RAGCompletionEvent) -> None:
+def publish_rag_complete(producer: KafkaProducerProtocol, event: RAGCompletionEvent) -> None:
     """Publish a completion event to Kafka."""
 
     from project.topics import RAGTopics
@@ -64,30 +90,36 @@ def publish_rag_complete(producer, event: RAGCompletionEvent) -> None:
     producer.flush()
 
 
-def bootstrap_topics(config: KafkaRuntimeConfig, topic_names: Iterable[str]) -> None:
-    """Call the backend topic API to ensure required topics exist."""
+def check_required_topics(
+    consumer: KafkaConsumerProtocol,
+    required_topics: Iterable[str],
+) -> TopicPresenceCheckResult:
+    """Check Kafka metadata for required topic presence."""
 
-    with httpx.Client(timeout=10.0) as client:
-        for topic_name in topic_names:
-            response = client.post(
-                config.topic_api_url,
-                json={
-                    "topic_name": topic_name,
-                    "num_partitions": 1,
-                    "replication_factor": 1,
-                },
-            )
-            response.raise_for_status()
+    required = list(required_topics)
+    existing = sorted(consumer.topics())
+    missing = sorted([topic for topic in required if topic not in existing])
+    warning_message = None
+    if missing:
+        warning_message = (
+            "Missing required Kafka topics at startup: " + ", ".join(missing)
+        )
+    return TopicPresenceCheckResult(
+        required_topics=required,
+        existing_topics=existing,
+        missing_topics=missing,
+        warning_message=warning_message,
+    )
 
 
-def close_consumer(consumer) -> None:
+def close_consumer(consumer: KafkaConsumerProtocol | None) -> None:
     """Close consumer if available."""
 
     if consumer is not None:
         consumer.close()
 
 
-def close_producer(producer) -> None:
+def close_producer(producer: KafkaProducerProtocol | None) -> None:
     """Flush and close producer if available."""
 
     if producer is not None:
