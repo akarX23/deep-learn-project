@@ -1,4 +1,4 @@
-# Data Model: RAG Kafka Event Integration
+# Data Model: RAG Kafka Worker Simplification
 
 ## Entities
 
@@ -12,10 +12,7 @@
   - created_at: str | None
   - source: str | None
 - Validation rules:
-  - request_id must be non-empty and correlation-safe.
-  - session_ctx must be present and JSON-serializable.
-  - user_request must be non-empty.
-  - file_paths must be non-empty.
+  - Required-field and payload-shape hardening beyond baseline schema checks is deferred in this phase (tracked as TODO in handler module).
 
 ### RAGCompletionEvent
 - Description: Outgoing Kafka event published to topic `rag-complete`.
@@ -33,21 +30,18 @@
   - duration_ms: int
   - source: str
 - Validation rules:
-  - request_id, session_ctx, user_prompt, and status are required.
-  - compiled_material may be empty only when status is `failed`.
-  - duration_ms must be >= 0.
+  - Completion payload preserves request correlation and status semantics for downstream handling.
 
 ### TopicRegistry
-- Description: Enum-based topic registry in `project/topics.py` for all agents/services.
+- Description: Enum-based topic registry in `project/topics.py`.
 - Fields:
   - planner.rag_request_topic: str (`rag`)
   - rag.rag_complete_topic: str (`rag-complete`)
-  - additional service topic enums as needed by repository conventions.
 - Validation rules:
-  - topic names must be non-empty and unique across enum values.
+  - Topic names remain non-empty and stable in centralized registry.
 
 ### KafkaRuntimeConfig
-- Description: Runtime configuration inherited from backend Kafka flags.
+- Description: Runtime configuration inherited from `BACKEND_KAFKA*` flags only.
 - Fields:
   - bootstrap_servers: str (`BACKEND_KAFKA_BOOTSTRAP_SERVERS`)
   - client_id: str (`BACKEND_KAFKA_CLIENT_ID` or service default)
@@ -56,56 +50,67 @@
   - sasl_username: str | None (`BACKEND_KAFKA_SASL_USERNAME`)
   - sasl_password: str | None (`BACKEND_KAFKA_SASL_PASSWORD`)
   - ssl_cafile: str | None (`BACKEND_KAFKA_SSL_CAFILE`)
-  - backend_api_topic_url: str (`BACKEND_API_TOPIC_URL`)
+  - consumer_group_id: str
+  - poll_timeout_ms: int
 - Validation rules:
-  - bootstrap_servers and backend_api_topic_url must be non-empty.
+  - `BACKEND_KAFKA_BOOTSTRAP_SERVERS` must be non-empty.
+  - No backend topic API URL is included in this model.
 
-### ConsumerLifecycleState
-- Description: Service runtime state for continuous polling and graceful operation.
+### WorkerRuntimeState
+- Description: Process-level state for standalone worker lifecycle.
 - Fields:
   - running: bool
-  - last_poll_at: str | None
-  - last_success_request_id: str | None
-  - consecutive_failures: int
+  - stop_event_set: bool
+  - poll_thread_alive: bool
+  - startup_topic_check_complete: bool
+  - startup_topic_check_warnings: list[str]
 - Validation rules:
-  - consecutive_failures must be >= 0.
+  - Worker continues running after non-fatal startup warnings.
+
+### TopicPresenceCheckResult
+- Description: Startup metadata check output for required topics.
+- Fields:
+  - required_topics: list[str]
+  - existing_topics: list[str]
+  - missing_topics: list[str]
+  - warning_message: str | None
+- Validation rules:
+  - Missing topics produce warning message but do not block worker startup.
 
 ### RequestLifecycleLogEntry
-- Description: Structured observability record for each stage in the request lifecycle.
+- Description: Structured observability record for startup and request lifecycle stages.
 - Fields:
   - request_id: str
-  - stage: str (`consumed` | `validated` | `processing_started` | `processing_completed` | `publish_completed` | `error`)
+  - stage: str (`startup_topic_check` | `consumed` | `processing_started` | `processing_completed` | `publish_completed` | `error`)
   - level: str
   - message: str
   - timestamp: str
   - metadata: dict[str, object]
 - Validation rules:
-  - stage and request_id are required for all request-scoped entries.
+  - Startup warnings and per-request failures must be represented with stage-scoped entries.
 
 ## Relationships
-- One `RAGRequestEvent` maps to one `RAGCompletionEvent`.
-- `KafkaRuntimeConfig` governs producer and consumer initialization in `rag_agent/kafka.py`.
-- `TopicRegistry` provides topic names used by consumer subscription and completion publishing.
-- `ConsumerLifecycleState` tracks runtime polling state across many `RAGRequestEvent` instances.
-- Multiple `RequestLifecycleLogEntry` records are emitted for each request lifecycle.
+- One `RAGRequestEvent` maps to one `RAGCompletionEvent` per terminal processing attempt.
+- `KafkaRuntimeConfig` governs producer/consumer creation and metadata checks in `rag_agent/kafka.py`.
+- `TopicRegistry` defines the required-topic set checked at startup and used during runtime publish/consume.
+- `WorkerRuntimeState` controls thread lifecycle and startup-check outcomes.
+- `TopicPresenceCheckResult` is produced at startup and emitted through structured logs.
 
 ## State Transitions
 
-### Request-level lifecycle
-1. consumed -> validated
-2. validated -> processing_started
-3. processing_started -> processing_completed
-4. processing_completed -> publish_completed
-5. any stage -> error (non-fatal, service keeps running)
+### Worker lifecycle
+1. starting -> checking_topics
+2. checking_topics -> running (with ready log or warning log)
+3. running -> stopping (shutdown signal)
+4. stopping -> stopped (poll thread joined, Kafka resources closed)
 
-### Service-level consumer state
-1. stopped -> running (FastAPI startup)
-2. running -> running (continuous poll loop)
-3. running -> stopped (FastAPI shutdown)
+### Request-level lifecycle
+1. consumed -> processing_started
+2. processing_started -> processing_completed
+3. processing_completed -> publish_completed
+4. any stage -> error (non-fatal, worker remains running)
 
 ## Derived Fields
 - `duration_ms` = `completed_at - started_at` (milliseconds)
-- `status` derives from RAG processing result semantics:
-  - `complete` for successful output without blocking failures
-  - `partial` for mixed outcomes with usable output
-  - `failed` for no usable output
+- `missing_topics` = `required_topics - existing_topics`
+- `status` is derived from `RAGAgent` result semantics (`complete` | `partial` | `failed`)

@@ -1,117 +1,118 @@
-# Feature Specification: RAG Kafka Event Integration
+# Feature Specification: RAG Kafka Worker Simplification
 
 **Feature Branch**: `[001-build-rag-retrieval-agent]`  
-**Created**: 2026-06-11  
+**Created**: 2026-06-12  
 **Status**: Draft  
-**Input**: User description: "I want the rag_agent to be able to communicate with Kafka. When the planner agent decides that RAG needs to be called, it will produce an event to a topic `rag` containing the `session_ctx` (object), user request and the `file_paths` properties. The RAG agent will subscribe to this topic and consume this event. On receiving the user request and file paths, the RAG agent will initiate the RAG pipeline to extract details from each page using the RAGAgent class. The RAG agent will then produce an event to a topic called `rag-complete` and pass the `session_ctx`, `user_prompt` and `compiled_material` along with other metadata to Kafka. The progress should be logged wherever necessary to track the flow of the request. Stay in the current branch. Use the `specs/001-rag-retrieval-agent` folder to update the spec and make this folder the active spec directory for this feature integration.""
+**Input**: User description: "The RAG agent should not be initialized as a FASTAPI service. Remove all code associated with FastAPI and have a separate thread running the consumer loop. Additionally, remove the topic creation logic on startup and just assume that all topics already exists. Keep a simple check at startup which connects to Kafka directly to check if topics are present in Kafka. If not, start the application but with a clear message. Remove any direct API calls to the backend and the variables associated with it.
+
+Simplify the RAGRequestEventHandler by only focusing on ingesting Kafka events and dispatching them to the RAG pipeline. All the validation and metric calculation can be put as TODOs and implemented later. Also, each function sohuld have type safety for arguments as well as output. Avoid the use of \"any\" type wherever possible."
 
 ## Clarifications
 
-### Session 2026-06-11
+### Session 2026-06-12
 
-- Q: Which specification folder should be used for this integration feature? → A: Reuse `specs/001-rag-retrieval-agent` and make it the active feature directory.
-- Q: Which branch should be used for this specification update? → A: Stay on the current branch (`001-build-rag-retrieval-agent`) and do not create/switch branches.
+- Q: Should this update create a new branch or a new feature directory? → A: No. Stay on current branch and update current feature directory in place.
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - Consume RAG Requests From Kafka (Priority: P1)
+### User Story 1 - Run RAG as a Kafka Worker Process (Priority: P1)
 
-As the planner-to-RAG integration flow, I need the RAG agent to consume events from topic `rag` and trigger retrieval processing so RAG can run automatically when requested.
+As a platform operator, I need the RAG integration to run as a standalone background worker process so event processing is decoupled from HTTP service lifecycle concerns.
 
-**Why this priority**: Without reliable request consumption, the integration cannot start and no downstream completion event can be produced.
+**Why this priority**: This is the core architecture constraint for the feature; all other behavior depends on this runtime model.
 
-**Independent Test**: Publish a valid request event to topic `rag` and verify the RAG pipeline is invoked once with matching request payload values.
+**Independent Test**: Start the worker process and verify a dedicated background consumer loop begins polling Kafka without requiring an HTTP service runtime.
 
 **Acceptance Scenarios**:
 
-1. **Given** a valid event on topic `rag` containing `session_ctx`, `user_request`, and `file_paths`, **When** the RAG consumer receives the event, **Then** the agent starts one RAG pipeline execution using those values.
-2. **Given** an event on topic `rag` with missing required fields, **When** the event is consumed, **Then** processing is not executed and an error outcome is logged with clear reason.
-3. **Given** an event with valid structure but unreadable file paths, **When** pipeline processing runs, **Then** request handling completes with failure metadata rather than crashing the consumer process.
+1. **Given** Kafka connectivity settings are present, **When** the worker starts, **Then** it initializes Kafka clients and starts a dedicated background consumer loop.
+2. **Given** the worker is running, **When** no events are available, **Then** the process remains alive and continues polling.
+3. **Given** a worker shutdown signal, **When** shutdown starts, **Then** the consumer loop exits and Kafka resources are closed cleanly.
 
 ---
 
-### User Story 2 - Publish RAG Completion Events (Priority: P2)
+### User Story 2 - Verify Topic Presence Without Topic Creation (Priority: P2)
 
-As downstream agents that depend on retrieval output, I need the RAG agent to publish completion events to topic `rag-complete` with compiled results and context so orchestrated flows can continue.
+As an operator, I need startup behavior to check whether required topics already exist while avoiding automatic topic creation or backend API dependencies.
 
-**Why this priority**: Downstream orchestration requires a stable completion event contract to continue planning and teaching steps.
+**Why this priority**: Startup should be lightweight and safe in environments where topic provisioning is managed externally.
 
-**Independent Test**: Trigger one valid `rag` request event and verify one `rag-complete` event is published containing required fields and retrieval output.
+**Independent Test**: Start the worker against a Kafka cluster with missing required topics and verify startup logs a clear warning while the worker still starts.
 
 **Acceptance Scenarios**:
 
-1. **Given** successful retrieval processing, **When** the run completes, **Then** the agent publishes one event on `rag-complete` containing `session_ctx`, `user_prompt`, `compiled_material`, and request metadata.
-2. **Given** retrieval processing that finishes with partial or failed output, **When** completion is emitted, **Then** the event still includes status and error metadata needed for downstream handling.
-3. **Given** multiple independent requests, **When** completion events are published, **Then** each completion event can be matched to its originating request context.
+1. **Given** all required topics exist, **When** startup topic check runs, **Then** startup logs topic readiness and processing continues.
+2. **Given** one or more required topics are missing, **When** startup topic check runs, **Then** startup logs a clear warning listing missing topics and continues running.
+3. **Given** startup succeeds, **When** configuration is loaded, **Then** no backend topic-creation endpoint is called and no backend topic API setting is required.
 
 ---
 
-### User Story 3 - Track End-to-End Progress Logs (Priority: P3)
+### User Story 3 - Use a Minimal Typed Event Handler (Priority: P3)
 
-As an operator, I need progress logs at key integration stages so I can trace each request lifecycle across consume, process, and publish steps.
+As a maintainer, I need a simplified request handler that focuses on ingesting Kafka events and dispatching to the RAG pipeline with strongly typed interfaces, while deferring advanced validation and metrics.
 
-**Why this priority**: Operational visibility is necessary to diagnose event flow issues and monitor throughput/reliability.
+**Why this priority**: A narrower handler surface improves maintainability and supports iterative delivery.
 
-**Independent Test**: Submit a request and verify logs include consistent progress milestones for consume, processing start/end, and completion publish with correlation metadata.
+**Independent Test**: Send an inbound request event and verify the handler maps it to a pipeline call and completion publication path, while deferred concerns are explicitly marked for follow-up.
 
 **Acceptance Scenarios**:
 
-1. **Given** a valid request event, **When** the lifecycle progresses, **Then** logs are recorded for event consumed, pipeline started, pipeline completed, and completion event published.
-2. **Given** processing or publishing failures, **When** the error occurs, **Then** logs include failure stage, request correlation details, and actionable error message.
+1. **Given** an inbound request event, **When** the handler receives it, **Then** it dispatches the event to the RAG pipeline path.
+2. **Given** the handler code path, **When** typed interfaces are reviewed, **Then** function inputs and outputs are explicitly typed and avoid untyped catch-all structures except where raw transport input is unavoidable.
+3. **Given** advanced validation and metrics are deferred, **When** maintainers inspect handler flow, **Then** explicit TODO markers identify deferred behavior without blocking core dispatch.
 
 ---
 
 ### Edge Cases
 
-- Incoming `rag` event payload has malformed JSON or incompatible schema shape.
-- Incoming `rag` event omits `file_paths` or provides an empty list.
-- `session_ctx` is present but not serializable in completion event form.
-- RAG extraction succeeds for some files but fails for others in the same request.
-- Kafka publish to `rag-complete` fails after RAG processing has finished.
-- Duplicate `rag` events are delivered for the same request context.
+- Kafka is reachable at startup but metadata fetch for topics partially fails.
+- Required topics are absent at startup but appear later while worker is already running.
+- Consumer receives malformed event payloads while strict validation is deferred.
+- Duplicate request events arrive for the same request identifier.
+- RAG pipeline execution fails for one event while worker must continue processing subsequent events.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: The system MUST subscribe to Kafka topic `rag` to receive RAG request events.
-- **FR-002**: The system MUST validate incoming `rag` events for required fields: `session_ctx`, `user_request`, and `file_paths`.
-- **FR-003**: The system MUST invoke the existing RAG pipeline using the RAGAgent class when a valid `rag` event is consumed.
-- **FR-004**: The system MUST map incoming `user_request` to the RAG user prompt used for retrieval processing.
-- **FR-005**: The system MUST publish a completion event to Kafka topic `rag-complete` after processing attempts finish.
-- **FR-006**: The completion event MUST include `session_ctx`, `user_prompt`, `compiled_material`, processing status, and request correlation metadata.
-- **FR-007**: The completion event MUST include error metadata when processing completes with partial or failed outcomes.
-- **FR-008**: The system MUST preserve request-to-completion traceability so each completion event can be matched to its triggering request.
-- **FR-009**: The system MUST record progress logs for key lifecycle stages: event consume, validation outcome, pipeline start, pipeline end, and completion publish.
-- **FR-010**: The system MUST log errors with stage context and correlation metadata for consume, processing, and publish failures.
-- **FR-011**: The system MUST continue running after individual message failures and avoid terminating the consumer service on single-request errors.
-- **FR-012**: The system MUST define consistent event payload contracts for incoming `rag` and outgoing `rag-complete` messages.
-- **FR-013**: The system MUST define measurable performance and reliability expectations for consume-to-complete processing latency and successful completion emission.
-- **FR-014**: The system MUST define observability consistency requirements so log records use predictable stage naming and correlation fields across the integration flow.
+- **FR-001**: The system MUST run RAG Kafka integration as a standalone worker process and MUST NOT require an HTTP service runtime to process events.
+- **FR-002**: The system MUST start and manage a dedicated background consumer loop thread for continuous Kafka polling.
+- **FR-003**: The system MUST remove startup topic-creation behavior and MUST NOT perform external backend API calls for topic provisioning.
+- **FR-004**: The system MUST perform a startup check against Kafka metadata to determine whether required topics exist.
+- **FR-005**: If required topics are missing at startup, the system MUST log a clear actionable warning and continue starting.
+- **FR-006**: The system MUST consume request events from topic `rag` and dispatch them to the existing RAG pipeline path.
+- **FR-007**: The system MUST publish completion events to topic `rag-complete` after each processing attempt reaches terminal state.
+- **FR-008**: The request handler MUST prioritize ingestion and dispatch behavior; non-critical validation and metrics work MAY be deferred and explicitly marked for later implementation.
+- **FR-009**: Public function interfaces in the worker, Kafka gateway, and handler modules MUST use explicit typed inputs and outputs and SHOULD avoid untyped generic placeholders.
+- **FR-010**: The worker MUST continue processing after single-event failures and MUST log error stages without terminating the process.
+- **FR-011**: The system MUST support clean shutdown by stopping the consumer loop thread and closing Kafka producer/consumer resources.
+- **FR-012**: The system MUST define stable event contract expectations for inbound request and outbound completion messages.
+- **FR-013**: The system MUST define measurable performance and reliability expectations for poll-to-completion throughput and emission success.
+- **FR-014**: The system MUST define observability requirements for lifecycle stages across startup checks, consume, process, publish, and failures.
 
 ### Key Entities *(include if feature involves data)*
 
-- **RAGRequestEvent**: Incoming message from topic `rag` containing `session_ctx`, `user_request`, `file_paths`, and request correlation metadata.
-- **RAGCompletionEvent**: Outgoing message to topic `rag-complete` containing `session_ctx`, `user_prompt`, `compiled_material`, status, errors, and completion metadata.
-- **SessionContext**: Opaque object passed through unchanged for downstream orchestration continuity.
-- **RAGProcessingResult**: Internal result object summarizing retrieval output, status (`complete`, `partial`, `failed`), timing, and error details.
-- **RequestLifecycleLogEntry**: Structured log record capturing lifecycle stage, correlation metadata, timestamp, and message.
+- **RAGRequestEvent**: Inbound Kafka message payload consumed from `rag`, including request correlation and retrieval inputs.
+- **RAGCompletionEvent**: Outbound Kafka message payload produced to `rag-complete`, including result status and response content.
+- **WorkerRuntimeState**: Process-level state tracking loop status, startup topic check outcome, and shutdown signals.
+- **TopicPresenceCheckResult**: Startup check output identifying required topics, discovered topics, and missing-topic warnings.
+- **RequestLifecycleLogEntry**: Structured lifecycle record with request correlation and stage metadata.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: 100% of valid events published to topic `rag` are consumed and acknowledged by the RAG integration flow.
-- **SC-002**: At least 99% of valid consumed requests emit exactly one corresponding completion event on topic `rag-complete`.
-- **SC-003**: 100% of completion events include required fields `session_ctx`, `user_prompt`, `compiled_material` (or explicit empty value), status, and correlation metadata.
-- **SC-004**: 100% of malformed or invalid request events are rejected with logged validation failure details without crashing the consumer process.
-- **SC-005**: For representative request loads, p95 consume-to-complete latency remains within the agreed performance budget for this integration.
-- **SC-006**: 100% of request lifecycles have logs covering consume, process start/end, and publish outcome with correlation identifiers.
+- **SC-001**: 100% of worker starts attempt Kafka topic presence checks and emit a startup readiness or warning message.
+- **SC-002**: 100% of valid consumed `rag` events are dispatched into the RAG pipeline path.
+- **SC-003**: At least 99% of terminal processing attempts emit a corresponding `rag-complete` event.
+- **SC-004**: 100% of single-event failures are logged without terminating the worker process.
+- **SC-005**: Under representative load, p95 poll-to-completion latency remains within the agreed budget for this integration.
+- **SC-006**: 100% of exported function boundaries in worker Kafka modules are type-annotated in implementation review.
 
 ## Assumptions
 
-- Planner and RAG components share Kafka connectivity and can access topics `rag` and `rag-complete` in the target environment.
-- `session_ctx` is passed through as an opaque object and is not transformed by the RAG integration layer beyond serialization requirements.
-- Existing RAGAgent retrieval behavior remains the source of compiled output; this feature adds event-driven invocation and completion publishing.
-- Message ordering guarantees are handled by Kafka/topic configuration and are outside this feature’s scope.
-- Security, authentication, and topic ACL provisioning for Kafka are managed by environment/platform configuration outside this feature.
+- Topic provisioning is handled externally by infrastructure or deployment workflows.
+- Kafka cluster credentials and connectivity are available at worker startup.
+- Existing RAG pipeline behavior remains unchanged; this feature focuses on runtime structure and dispatch flow.
+- Deferred validation/metrics TODOs are acceptable for this phase as long as they are explicitly tracked.
+- Current branch and feature directory remain unchanged for this update.

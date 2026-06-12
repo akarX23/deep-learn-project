@@ -1,4 +1,4 @@
-# Quickstart: RAG Kafka Event Integration
+# Quickstart: RAG Kafka Worker Simplification
 
 ## 1. Install dependencies
 
@@ -10,15 +10,14 @@ pip install -r requirements.txt
 
 ## 2. Configure environment
 
-Set Kafka and startup API settings in `.env.local`:
+Set Kafka runtime settings in `.env.local`:
 
 ```env
 BACKEND_KAFKA_BOOTSTRAP_SERVERS=localhost:9092
 BACKEND_KAFKA_CLIENT_ID=rag-service
-BACKEND_API_TOPIC_URL=http://localhost:8001/api/v1/topics
 ```
 
-Optional secure-cluster settings (inherited from backend contract):
+Optional secure-cluster settings:
 
 ```env
 BACKEND_KAFKA_SECURITY_PROTOCOL=
@@ -28,15 +27,11 @@ BACKEND_KAFKA_SASL_PASSWORD=
 BACKEND_KAFKA_SSL_CAFILE=
 ```
 
-## 3. Ensure backend topic API is running
+Important:
+- Do not set or depend on `BACKEND_API_TOPIC_URL` for this feature phase.
+- Topics are assumed to be provisioned externally.
 
-Start backend service so RAG startup can call topic creation endpoint:
-
-```bash
-python -m backend_service.app.main
-```
-
-## 4. Start Kafka infrastructure
+## 3. Start Kafka infrastructure
 
 If using local compose stack:
 
@@ -44,21 +39,22 @@ If using local compose stack:
 docker compose up -d kafka kafka-ui
 ```
 
-## 5. Run RAG FastAPI service
+## 4. Run RAG worker process
 
-Run lightweight service entrypoint (planned module):
+Run worker entrypoint (thread-based consumer loop runtime):
 
 ```bash
-python -m rag_agent.service
+python -m rag_agent.worker
 ```
 
 Expected startup flow:
-- service reads `BACKEND_KAFKA*` config
-- service calls `BACKEND_API_TOPIC_URL` to ensure required topics
-- service initializes producer and consumer via `rag_agent/kafka.py`
-- consumer loop starts continuous polling on topic `rag`
+- worker reads `BACKEND_KAFKA*` config
+- worker initializes producer and consumer via `rag_agent/kafka.py`
+- worker checks required-topic presence via Kafka metadata query
+- if topics are missing, worker logs clear warning and continues startup
+- dedicated consumer loop thread starts polling topic `rag`
 
-## 6. Publish test request event
+## 5. Publish test request event
 
 Publish an event to topic `rag`:
 
@@ -72,11 +68,10 @@ Publish an event to topic `rag`:
 ```
 
 Expected behavior:
-- event consumed and validated
-- `RAGAgent` pipeline executed
+- event consumed and dispatched to `RAGAgent`
 - completion event published to `rag-complete`
 
-## 7. Verify completion event shape
+## 6. Verify completion event shape
 
 Confirm output event includes:
 - `session_ctx`
@@ -86,25 +81,31 @@ Confirm output event includes:
 - `errors`
 - request correlation metadata (`request_id`)
 
-## 8. Verify logs
+## 7. Verify logs
 
-Ensure structured progress logs include stages:
-- consumed
-- validated
-- processing_started
-- processing_completed
-- publish_completed
-- error (when applicable)
+Ensure lifecycle logs include:
+- `startup_topic_check`
+- `consumed`
+- `processing_started`
+- `processing_completed`
+- `publish_completed`
+- `error` (when applicable)
 
-## 9. Run test suite
-
-Run RAG and integration-facing tests:
+## 8. Run targeted test suite
 
 ```bash
-pytest rag_agent/tests -q
+.venv/bin/python -m pytest -q rag_agent/tests/test_request_event.py rag_agent/tests/test_completion_event.py rag_agent/tests/test_logging.py rag_agent/tests/test_kafka_integration.py
+```
+
+## 9. Quality checks
+
+```bash
+.venv/bin/ruff check project rag_agent
+.venv/bin/ruff format --check project rag_agent
+.venv/bin/python -m compileall project rag_agent
 ```
 
 ## 10. Scope reminder
 
-This feature only integrates RAG service consume/process/publish behavior.
-Planner agent functionality is explicitly out of scope.
+This phase focuses on worker runtime simplification and typed ingest/dispatch behavior.
+Planner logic and advanced handler validation/metrics are out of scope.

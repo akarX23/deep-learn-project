@@ -1,11 +1,12 @@
-# Contract: RAG Kafka Service Integration
+# Contract: RAG Kafka Worker Integration
 
 ## Purpose
-Defines the event and startup contracts for Kafka-integrated RAG service behavior.
+
+Defines event, startup, typing, and runtime contracts for the standalone Kafka worker-based RAG integration.
 
 ## Environment Contract
 
-RAG Kafka runtime must inherit backend Kafka flags:
+RAG worker runtime inherits backend Kafka transport flags only:
 - `BACKEND_KAFKA_BOOTSTRAP_SERVERS` (required)
 - `BACKEND_KAFKA_CLIENT_ID` (optional)
 - `BACKEND_KAFKA_SECURITY_PROTOCOL` (optional)
@@ -14,32 +15,45 @@ RAG Kafka runtime must inherit backend Kafka flags:
 - `BACKEND_KAFKA_SASL_PASSWORD` (optional)
 - `BACKEND_KAFKA_SSL_CAFILE` (optional)
 
-Additional required startup dependency:
-- `BACKEND_API_TOPIC_URL` (required, used to call backend topic-creation API during startup)
+Explicit removals for this feature phase:
+- No `BACKEND_API_TOPIC_URL`
+- No backend topic-creation API call at startup
 
 ## Topic Registry Contract
 
-Topic names are centrally defined in `project/topics.py` using enums.
-Minimum required enum values for this feature:
+Topic names are centralized in `project/topics.py`:
 - request topic: `rag`
 - completion topic: `rag-complete`
 
-No hardcoded topic string usage is allowed outside the topic registry and Kafka gateway module.
+Hardcoded topic strings outside topic registry and Kafka gateway are disallowed.
 
 ## Kafka Gateway Module Contract
 
-All Kafka interactions must route through `rag_agent/kafka.py`:
-- connection/bootstrap logic
-- producer initialization
-- consumer initialization/subscription
-- send functions for outgoing events
-- receive/dispatch controller functions for incoming events
+All Kafka interactions route through `rag_agent/kafka.py`:
+- producer and consumer initialization
+- consumer subscription and polling wrappers
+- completion publish wrappers
+- startup metadata query wrappers for topic presence checks
 
-No direct producer/consumer calls are permitted in unrelated service modules.
+No direct Kafka client calls in unrelated modules.
+
+## Startup Contract (Worker Runtime)
+
+Worker startup behavior:
+1. load Kafka runtime config
+2. initialize producer/consumer via `rag_agent/kafka.py`
+3. check required-topic presence via Kafka metadata query
+4. if topics are missing, log clear warning and continue startup
+5. start dedicated consumer loop thread
+
+Worker shutdown behavior:
+- signal loop stop
+- join consumer thread
+- close consumer and producer resources
 
 ## Incoming Event Contract: Topic `rag`
 
-Required fields:
+Baseline event shape:
 ```json
 {
   "request_id": "string",
@@ -49,20 +63,20 @@ Required fields:
 }
 ```
 
-Validation semantics:
-- Missing required fields -> event rejected and logged
-- Invalid payload shape -> processing skipped, service continues polling
-- Valid payload -> dispatch to RAG processing handler
+Handler semantics in this phase:
+- prioritize ingest + dispatch path
+- strict validation hardening beyond schema baseline is deferred (TODO)
+- malformed payload handling remains non-fatal and logged
 
 ## Processing Contract
 
-For valid events:
+For consumed request events:
 1. map `user_request` to RAG `user_prompt`
-2. call existing `RAGAgent` pipeline with provided `file_paths`
-3. capture processing result (status, compiled material, counters, errors)
+2. invoke existing `RAGAgent` pipeline with `file_paths`
+3. map output into completion payload
 4. publish completion event to `rag-complete`
 
-No Planner functionality is implemented inside RAG service.
+Planner behavior is out of scope and must not be implemented here.
 
 ## Outgoing Event Contract: Topic `rag-complete`
 
@@ -83,37 +97,31 @@ Required fields:
 }
 ```
 
-Completion semantics:
-- Success and non-success outcomes both publish completion events when processing reaches terminal state.
-- Publish failure must be logged with request correlation and error detail.
+Completion emission semantics:
+- publish for terminal processing attempts
+- on publish failure, log request-scoped error and continue worker operation
 
-## Startup and Runtime Contract
+## Type Safety Contract
 
-FastAPI startup behavior:
-1. initialize service context
-2. call `BACKEND_API_TOPIC_URL` to create/ensure required topics
-3. initialize Kafka producer/consumer via `rag_agent/kafka.py`
-4. start continuous consumer poll loop
-
-Shutdown behavior:
-- stop poll loop cleanly
-- flush/close Kafka producer
-- close Kafka consumer
+Public function signatures in `rag_agent/kafka.py`, `rag_agent/worker.py`, and `rag_agent/handlers.py` must:
+- provide explicit typed inputs and outputs
+- avoid broad untyped placeholder use wherever practical
+- keep TODO markers explicit where behavior is intentionally deferred
 
 ## Logging and Observability Contract
 
-Required progress stages:
+Required stages:
+- `startup_topic_check`
 - `consumed`
-- `validated`
 - `processing_started`
 - `processing_completed`
 - `publish_completed`
 - `error`
 
-Each request-scoped log must include correlation metadata (at minimum `request_id`; include topic/stage details where relevant).
+Each request-scoped log includes correlation metadata (`request_id` at minimum).
 
 ## Failure Handling Contract
 
-- Single-event failures must not terminate service process.
-- Validation failures, RAG processing failures, and publish failures are logged with stage context.
-- Consumer loop remains active after non-fatal request errors.
+- single-event failures are non-fatal
+- startup missing-topic detection is warning-level, not startup-blocking
+- worker loop stays active after non-fatal request errors
