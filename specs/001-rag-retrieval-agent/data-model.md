@@ -1,120 +1,116 @@
-# Data Model: RAG Retrieval Agent
+# Data Model: RAG Kafka Worker Simplification
 
 ## Entities
 
-### RAGAgentInput
-- Description: Request payload received by the RAG agent.
+### RAGRequestEvent
+- Description: Incoming Kafka event consumed from topic `rag`.
 - Fields:
-  - request_id: str (UUID string)
-  - user_prompt: str
+  - request_id: str
+  - session_ctx: dict[str, object]
+  - user_request: str
   - file_paths: list[str]
-  - include_tables: bool (default true)
-  - include_images: bool (default true)
-  - relevance_threshold: float (default 0.6)
-  - schema_version: str (default "1.0")
+  - created_at: str | None
+  - source: str | None
 - Validation rules:
-  - request_id must be a valid UUID string.
-  - file_paths must be non-empty.
-  - relevance_threshold must be in [0.0, 1.0].
-  - schema_version must be non-empty.
+  - Required-field and payload-shape hardening beyond baseline schema checks is deferred in this phase (tracked as TODO in handler module).
 
-### PageExtractionStatus (Enum)
-- Description: Per-page extraction outcome.
-- Allowed values:
-  - SUCCESS
-  - SKIPPED_IRRELEVANT
-  - FAILED_EXTRACTION
-
-### ExtractedPage
-- Description: Audit record for one processed page. Does not contain assembled page text; that is internal-only.
+### RAGCompletionEvent
+- Description: Outgoing Kafka event published to topic `rag-complete`.
 - Fields:
-  - file_name: str
-  - page_number: int (1-based)
-  - relevance_score: float
-  - status: PageExtractionStatus
-  - ocr_used: bool (always false in v1)
-  - errors: list[str]
-- Validation rules:
-  - page_number must be >= 1.
-  - relevance_score must be in [0.0, 1.0].
-
-### RetainedPageContent (Internal, not in output)
-- Description: Assembled per-page text used internally for final compilation only.
-- Fields:
-  - file_name: str
-  - page_number: int
-  - content: str
-
-### ModalityLLMConfig (Runtime Config)
-- Description: Modality-specific LiteLLM configuration object used for text, VLM, and embedding calls.
-- Fields:
-  - provider: str (default `hosted_vllm`)
-  - model: str
-  - api_base: str | None
-  - api_key: str | None
-  - temperature: float | None
-  - max_tokens: int | None
-- Derived field:
-  - routed_model: str = `<provider>/<model>`
-- Validation rules:
-  - provider must be non-empty.
-  - model must be non-empty.
-
-### RAGRuntimeConfig
-- Description: Aggregated runtime config for all model modalities.
-- Fields:
-  - text: ModalityLLMConfig
-  - vlm: ModalityLLMConfig
-  - embedding: ModalityLLMConfig
-- Env mapping:
-  - text.provider <- RAG_TEXT_PROVIDER (default hosted_vllm)
-  - vlm.provider <- RAG_VLM_PROVIDER (default hosted_vllm)
-  - embedding.provider <- RAG_EMBEDDING_PROVIDER (default hosted_vllm)
-
-### RAGAgentOutput
-- Description: Agent response contract returned to Planner.
-- Fields:
-  - request_id: str (mirrored)
-  - user_prompt: str (mirrored)
-  - schema_version: str (mirrored)
+  - request_id: str
+  - session_ctx: dict[str, object]
+  - user_prompt: str
   - compiled_material: str
-  - extracted_pages: list[ExtractedPage]
+  - status: str (`complete` | `partial` | `failed`)
+  - errors: list[str]
   - total_pages_processed: int
   - total_pages_included: int
-  - errors: list[str]
-  - status: str (complete | partial | failed)
+  - started_at: str
+  - completed_at: str
+  - duration_ms: int
+  - source: str
 - Validation rules:
-  - total_pages_processed >= total_pages_included >= 0.
-  - status is complete when successful extraction/compilation occurs without blocking errors.
-  - status is partial when mixed success/failure occurs with usable output.
-  - status is failed when no usable output can be produced.
+  - Completion payload preserves request correlation and status semantics for downstream handling.
+
+### TopicRegistry
+- Description: Enum-based topic registry in `project/topics.py`.
+- Fields:
+  - planner.rag_request_topic: str (`rag`)
+  - rag.rag_complete_topic: str (`rag-complete`)
+- Validation rules:
+  - Topic names remain non-empty and stable in centralized registry.
+
+### KafkaRuntimeConfig
+- Description: Runtime configuration inherited from `BACKEND_KAFKA*` flags only.
+- Fields:
+  - bootstrap_servers: str (`BACKEND_KAFKA_BOOTSTRAP_SERVERS`)
+  - client_id: str (`BACKEND_KAFKA_CLIENT_ID` or service default)
+  - security_protocol: str | None (`BACKEND_KAFKA_SECURITY_PROTOCOL`)
+  - sasl_mechanism: str | None (`BACKEND_KAFKA_SASL_MECHANISM`)
+  - sasl_username: str | None (`BACKEND_KAFKA_SASL_USERNAME`)
+  - sasl_password: str | None (`BACKEND_KAFKA_SASL_PASSWORD`)
+  - ssl_cafile: str | None (`BACKEND_KAFKA_SSL_CAFILE`)
+  - consumer_group_id: str
+  - poll_timeout_ms: int
+- Validation rules:
+  - `BACKEND_KAFKA_BOOTSTRAP_SERVERS` must be non-empty.
+  - No backend topic API URL is included in this model.
+
+### WorkerRuntimeState
+- Description: Process-level state for standalone worker lifecycle.
+- Fields:
+  - running: bool
+  - stop_event_set: bool
+  - poll_thread_alive: bool
+  - startup_topic_check_complete: bool
+  - startup_topic_check_warnings: list[str]
+- Validation rules:
+  - Worker continues running after non-fatal startup warnings.
+
+### TopicPresenceCheckResult
+- Description: Startup metadata check output for required topics.
+- Fields:
+  - required_topics: list[str]
+  - existing_topics: list[str]
+  - missing_topics: list[str]
+  - warning_message: str | None
+- Validation rules:
+  - Missing topics produce warning message but do not block worker startup.
+
+### RequestLifecycleLogEntry
+- Description: Structured observability record for startup and request lifecycle stages.
+- Fields:
+  - request_id: str
+  - stage: str (`startup_topic_check` | `consumed` | `processing_started` | `processing_completed` | `publish_completed` | `error`)
+  - level: str
+  - message: str
+  - timestamp: str
+  - metadata: dict[str, object]
+- Validation rules:
+  - Startup warnings and per-request failures must be represented with stage-scoped entries.
 
 ## Relationships
-- One RAGAgentInput maps to one RAGAgentOutput.
-- One RAGAgentOutput contains zero or more ExtractedPage records.
-- Each ExtractedPage has exactly one PageExtractionStatus.
-- One request execution uses one RAGRuntimeConfig containing three modality configs.
+- One `RAGRequestEvent` maps to one `RAGCompletionEvent` per terminal processing attempt.
+- `KafkaRuntimeConfig` governs producer/consumer creation and metadata checks in `rag_agent/kafka.py`.
+- `TopicRegistry` defines the required-topic set checked at startup and used during runtime publish/consume.
+- `WorkerRuntimeState` controls thread lifecycle and startup-check outcomes.
+- `TopicPresenceCheckResult` is produced at startup and emitted through structured logs.
 
 ## State Transitions
 
-### Request-level state
-1. received -> processing_pages
-2. processing_pages -> compiling_material (if retained pages > 0)
-3. processing_pages -> failed (if no usable page content exists)
-4. compiling_material -> complete (usable compiled output with no blocking error)
-5. compiling_material -> partial (usable output plus non-fatal errors)
-6. any state -> failed (fatal exception path)
+### Worker lifecycle
+1. starting -> checking_topics
+2. checking_topics -> running (with ready log or warning log)
+3. running -> stopping (shutdown signal)
+4. stopping -> stopped (poll thread joined, Kafka resources closed)
 
-### Page-level state
-1. started -> FAILED_EXTRACTION (missing or unusable extraction)
-2. started -> SKIPPED_IRRELEVANT (score < threshold)
-3. started -> SUCCESS (score >= threshold and retained content available)
+### Request-level lifecycle
+1. consumed -> processing_started
+2. processing_started -> processing_completed
+3. processing_completed -> publish_completed
+4. any stage -> error (non-fatal, worker remains running)
 
 ## Derived Fields
-- total_pages_processed: count of all attempted pages.
-- total_pages_included: count of pages with SUCCESS status.
-- compiled_material context: built from internal RetainedPageContent records for SUCCESS pages only.
-- routed model IDs:
-  - text_routed_model = `<RAG_TEXT_PROVIDER>/<RAG_TEXT_MODEL>`
-  - vlm_routed_model = `<RAG_VLM_PROVIDER>/<RAG_VLM_MODEL>`
-  - embedding_routed_model = `<RAG_EMBEDDING_PROVIDER>/<RAG_EMBEDDING_MODEL>`
+- `duration_ms` = `completed_at - started_at` (milliseconds)
+- `missing_topics` = `required_topics - existing_topics`
+- `status` is derived from `RAGAgent` result semantics (`complete` | `partial` | `failed`)

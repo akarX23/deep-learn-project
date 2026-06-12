@@ -1,94 +1,117 @@
-# Quickstart: RAG Retrieval Agent
+# Quickstart: RAG Kafka Worker Simplification
 
 ## 1. Install dependencies
 
-Install project dependencies from repository root:
+From repository root:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Core runtime dependencies for this feature include:
-- pydantic>=2
-- pymupdf
-- litellm
-- langgraph
-- pytest
+## 2. Configure environment
 
-## 2. Configure environment variables
+Set Kafka runtime settings in `.env.local`:
 
-Use one project-level `.env.local` and place RAG settings in the RAG section.
-
-### Text model
-- `RAG_TEXT_PROVIDER` (default: `hosted_vllm`)
-- `RAG_TEXT_MODEL`
-- `RAG_TEXT_API_BASE` (optional for local endpoints)
-- `RAG_TEXT_API_KEY` (optional for unauthenticated local endpoints)
-- `RAG_TEXT_TEMPERATURE` (optional)
-- `RAG_TEXT_MAX_TOKENS` (optional)
-
-### Vision model
-- `RAG_VLM_PROVIDER` (default: `hosted_vllm`)
-- `RAG_VLM_MODEL`
-- `RAG_VLM_API_BASE` (optional)
-- `RAG_VLM_API_KEY` (optional)
-- `RAG_VLM_TEMPERATURE` (optional)
-- `RAG_VLM_MAX_TOKENS` (optional)
-- `RAG_VLM_BATCH_SIZE` (optional, default from config)
-
-### Embedding model
-- `RAG_EMBEDDING_PROVIDER` (default: `hosted_vllm`)
-- `RAG_EMBEDDING_MODEL`
-- `RAG_EMBEDDING_API_BASE` (optional)
-- `RAG_EMBEDDING_API_KEY` (optional)
-- `RAG_EMBEDDING_MAX_TOKENS` (optional)
-
-LiteLLM routing composes each call model as `<provider>/<model>`.
-
-## 3. Prepare sample input
-
-Use fixture input from:
-- `rag_agent/tests/inputs/sample_input.json`
-- `rag_agent/tests/inputs/sample.pdf`
-
-Verify `file_paths` in JSON point to valid files in your checkout.
-
-## 4. Run the agent
-
-From repository root:
-
-```bash
-python -m rag_agent.agent --input rag_agent/tests/inputs/sample_input.json
+```env
+BACKEND_KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+BACKEND_KAFKA_CLIENT_ID=rag-service
 ```
 
-Expected outcome:
-- Schema-valid `RAGAgentOutput`
-- `status` in `{complete, partial}` for non-fatal mixed outcomes
-- Non-empty `compiled_material` when at least one relevant page is retained
+Optional secure-cluster settings:
 
-## 5. Run tests
-
-```bash
-pytest rag_agent/tests/test_rag_agent.py -q
+```env
+BACKEND_KAFKA_SECURITY_PROTOCOL=
+BACKEND_KAFKA_SASL_MECHANISM=
+BACKEND_KAFKA_SASL_USERNAME=
+BACKEND_KAFKA_SASL_PASSWORD=
+BACKEND_KAFKA_SSL_CAFILE=
 ```
 
-## 6. Verify strict threshold behavior
+Important:
+- No backend topic bootstrap API is used by this worker runtime.
+- Topics are assumed to be provisioned externally.
 
-Set `relevance_threshold` to `1.0` in sample input and run again.
+## 3. Start Kafka infrastructure
 
-Expected:
-- `total_pages_included == 0`
-- all page statuses are `SKIPPED_IRRELEVANT`
+If using local compose stack:
 
-## 7. Operational notes
+```bash
+docker compose up -d kafka kafka-ui
+```
 
-- Source PDFs are opened once per request and reused via request-scoped `fitz.Document` handles.
-- `extracted_pages` contains audit metadata only; assembled text is returned only in `compiled_material`.
-- OCR remains out of scope for this feature iteration.
-- Ensure embedding env vars are set before running (`RAG_EMBEDDING_PROVIDER`, `RAG_EMBEDDING_MODEL`, and either `RAG_EMBEDDING_API_BASE` or `RAG_EMBEDDING_API_KEY`).
+## 4. Run RAG worker process
 
-## 8. Validation snapshot
+Run worker entrypoint (thread-based consumer loop runtime):
 
-- Validated on 2026-06-08 with `rag_agent/tests/inputs/sample_input.json`
-- Runtime baseline: 1.93 seconds
-- Observed output: `status=complete`, `total_pages_processed=6`, `total_pages_included=5`
+```bash
+python -m rag_agent.worker
+```
+
+Expected startup flow:
+- worker reads `BACKEND_KAFKA*` config
+- worker initializes producer and consumer via `rag_agent/kafka.py`
+- worker checks required-topic presence via Kafka metadata query
+- if topics are missing, worker logs clear warning and continues startup
+- dedicated consumer loop thread starts polling topic `rag`
+
+## 5. Publish test request event
+
+Publish an event to topic `rag`:
+
+```json
+{
+  "request_id": "demo-001",
+  "session_ctx": {"session_id": "s-1"},
+  "user_request": "Summarize the uploaded chapter",
+  "file_paths": ["rag_agent/tests/inputs/sample.pdf"]
+}
+```
+
+Expected behavior:
+- event consumed and dispatched to `RAGAgent`
+- completion event published to `rag-complete`
+
+## 6. Verify completion event shape
+
+Confirm output event includes:
+- `session_ctx`
+- `user_prompt`
+- `compiled_material`
+- `status`
+- `errors`
+- request correlation metadata (`request_id`)
+
+## 7. Verify logs
+
+Ensure lifecycle logs include:
+- `startup_topic_check`
+- `consumed`
+- `processing_started`
+- `processing_completed`
+- `publish_completed`
+- `error` (when applicable)
+
+## 8. Run targeted test suite
+
+```bash
+.venv/bin/python -m pytest -q rag_agent/tests/test_request_event.py rag_agent/tests/test_completion_event.py rag_agent/tests/test_logging.py rag_agent/tests/test_kafka_integration.py
+```
+
+## 9. Quality checks
+
+```bash
+.venv/bin/ruff check project rag_agent
+.venv/bin/ruff format --check project rag_agent
+.venv/bin/python -m compileall project rag_agent
+```
+
+Latest local results:
+- `.venv/bin/ruff check project rag_agent` passed.
+- `.venv/bin/ruff format --check project rag_agent` reported formatting drift in existing files.
+- `.venv/bin/python -m compileall project rag_agent` passed.
+- `.venv/bin/python -m pytest -q rag_agent/tests/test_worker_runtime.py rag_agent/tests/test_kafka_integration.py` passed.
+
+## 10. Scope reminder
+
+This phase focuses on worker runtime simplification and typed ingest/dispatch behavior.
+Planner logic and advanced handler validation/metrics are out of scope.

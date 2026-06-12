@@ -1,65 +1,59 @@
-# Research: RAG Retrieval Agent
+# Research: RAG Kafka Worker Simplification
 
-## Decision 1: PDF Extraction Library
-- Decision: Use PyMuPDF (`fitz`) for page count, text extraction, table extraction, and image extraction.
-- Rationale: One dependency covers all required per-page operations with good performance and direct page access.
-- Alternatives considered: `pdfplumber` (good tables but weaker image flow integration), `pypdf` (lighter but insufficient extraction coverage).
+## Decision 1: Worker Runtime Model
+- Decision: Run Kafka integration as a standalone worker process with a dedicated consumer thread instead of a FastAPI lifecycle host.
+- Rationale: Aligns directly with scope constraints, reduces moving parts, and avoids HTTP runtime coupling for background event processing.
+- Alternatives considered: Keep FastAPI lifecycle orchestration (violates new requirements), use synchronous blocking loop on main thread (harder graceful shutdown and control).
 
-## Decision 2: Orchestration Runtime
-- Decision: Use LangGraph for deterministic page-processing flow with explicit state transitions.
-- Rationale: StateGraph provides clear control over page iteration, conditional continuation, and final compilation.
-- Alternatives considered: Hand-rolled loops (less structured), generic agent executors (less explicit state control).
+## Decision 2: Startup Topic Presence Check
+- Decision: Replace topic-creation startup flow with direct Kafka metadata checks for required topics and log warnings if missing.
+- Rationale: Supports externally managed topic provisioning while preserving operator visibility at startup.
+- Alternatives considered: Auto-create topics on startup (explicitly out of scope), fail hard on missing topics (contradicts continue-with-warning requirement).
 
-## Decision 3: LLM Invocation Layer
-- Decision: Route text, VLM, and embedding calls through a unified LiteLLM client abstraction.
-- Rationale: Keeps provider integration consistent and reduces SDK-specific branching.
-- Alternatives considered: Provider-specific SDKs (more lock-in, duplicated code paths).
+## Decision 3: Remove Backend Topic API Dependency
+- Decision: Eliminate direct backend topic API calls and remove associated runtime variables from worker startup contract.
+- Rationale: Removes cross-service startup dependency and simplifies configuration surface.
+- Alternatives considered: Keep optional backend bootstrap call (unnecessary coupling), keep variable but unused (configuration ambiguity).
 
-## Decision 4: Embedding Source
-- Decision: Use remote LiteLLM-backed embedding API as the primary relevance scoring source.
-- Rationale: Aligns embedding configuration and operational model with text/VLM flows and avoids local model distribution overhead.
-- Alternatives considered: Local sentence-transformers as primary path (extra model management), hybrid dual-path fallback (higher complexity).
+## Decision 4: Kafka Gateway Responsibilities
+- Decision: Keep Kafka transport concerns in `rag_agent/kafka.py` and add typed helper functions for metadata checks, polling, and publish flows.
+- Rationale: Preserves a single integration boundary and keeps worker orchestration code concise.
+- Alternatives considered: Spread Kafka client operations across worker and handler modules (reduced maintainability).
 
-## Decision 5: Provider Key Strategy
-- Decision: Define separate provider environment variables for each modality:
-  - `RAG_TEXT_PROVIDER`
-  - `RAG_VLM_PROVIDER`
-  - `RAG_EMBEDDING_PROVIDER`
-- Rationale: Allows independent routing across providers per modality while preserving a uniform call interface.
-- Alternatives considered: Single global provider variable (insufficient flexibility), mandatory explicit provider with no default (higher setup friction).
+## Decision 5: Simplified Request Handler Scope
+- Decision: Keep `RAGRequestEventHandler` focused on ingesting events and dispatching to `RAGAgent`, with advanced validation and metrics marked as TODO for later.
+- Rationale: Delivers core behavior quickly while making deferred concerns explicit and traceable.
+- Alternatives considered: Implement full validation/metrics now (larger scope than requested), remove TODO markers (loses clarity on deferred work).
 
-## Decision 6: Provider Default Value
-- Decision: Default each modality provider to `hosted_vllm` when not explicitly set.
-- Rationale: Provides a predictable baseline configuration and keeps existing setups working without extra env edits.
-- Alternatives considered: No default (fail-fast but less ergonomic), defaulting to provider-specific names tied to one vendor.
+## Decision 6: Type Safety Emphasis
+- Decision: Use explicit type annotations for public function inputs/outputs in worker, Kafka, and handler modules, avoiding untyped generic placeholders wherever practical.
+- Rationale: Improves reviewability and reduces runtime ambiguity in event-processing boundaries.
+- Alternatives considered: Preserve broad untyped signatures (faster short-term but less maintainable).
 
-## Decision 7: Model Routing Composition
-- Decision: Compose LiteLLM model identifiers as `<provider>/<model>` for text, VLM, and embedding calls.
-- Rationale: Explicit composition preserves compatibility with provider-routed LiteLLM backends and avoids ambiguous model resolution.
-- Alternatives considered: Passing raw model name only (insufficient for provider-keyed routing).
+## Decision 7: Failure Semantics
+- Decision: Keep per-event failures non-fatal; log stage-scoped errors and continue consumer loop operation.
+- Rationale: Matches resilience requirements and avoids worker downtime from isolated bad events.
+- Alternatives considered: Fail-fast on handler exceptions (poor availability), silent retries without logs (weak observability).
 
-## Decision 8: Document Handle Lifecycle
-- Decision: Open each source PDF once per request and cache handles as `dict[str, fitz.Document]` on `RAGAgent`, outside serializable LangGraph state.
-- Rationale: `fitz.Document` is non-serializable; request-scoped cache avoids repeated open overhead and prevents graph state serialization issues.
-- Alternatives considered: Re-open per page (performance penalty), placing handles in graph state (serialization risk).
+## Decision 8: Logging Strategy
+- Decision: Maintain structured lifecycle logging with startup check stages and request processing stages (`consumed`, `processing_started`, `processing_completed`, `publish_completed`, `error`).
+- Rationale: Supports operator diagnostics while fitting simplified handler scope.
+- Alternatives considered: Freeform logs only (harder filtering/analysis), no startup-stage logs (poor readiness visibility).
 
-## Decision 9: Image Description Batching
-- Decision: Batch image description calls per page using `VLM_BATCH_SIZE`, preserving image order and page association.
-- Rationale: Reduces API round trips while maintaining deterministic provenance at page granularity.
-- Alternatives considered: One call per image (higher latency), cross-page batching (context/provenance ambiguity).
+## Decision 9: Scope Guardrail
+- Decision: Continue excluding planner-side logic; only consume planner-produced events and emit RAG completion events.
+- Rationale: Keeps this feature bounded to RAG runtime behavior.
+- Alternatives considered: planner-side fallback behavior inside worker (scope violation).
 
-## Decision 10: Output Payload Shape
-- Decision: Exclude retained page content from `extracted_pages`; return compiled text only in `compiled_material`.
-- Rationale: Prevents payload bloat while preserving the audit record required by Planner.
-- Alternatives considered: Retaining page text in response (larger payload, redundant content).
+## Implementation Evidence
+- Replaced FastAPI service lifecycle with standalone worker runtime in `rag_agent/worker.py`.
+- Removed backend topic API startup dependency from config and environment templates.
+- Added Kafka topic presence metadata checks that warn-and-continue on missing topics.
+- Added structured startup-stage logging (`startup_topic_check`) and kept request lifecycle stages.
+- Added worker runtime test coverage for lifecycle, idle loop continuity, startup topic checks, and non-fatal per-event failures.
+- Added typed handler contract and TODO-marker tests for deferred validation/metrics scope.
 
-## Implementation Outcomes (2026-06-08)
-- Provider-aware routing is now applied across text, VLM, and embedding calls via `<provider>/<model>` composition.
-- Default provider value `hosted_vllm` is active for all three modalities when provider env vars are unset.
-- Request execution now loads runtime model configs once per run and reuses open `fitz.Document` handles for page processing.
-- Full regression suite passes (`pytest -q`: 21 passed).
-- Representative runtime validation completed on sample input: 1.93s, `status=complete`, 6 pages processed, 5 included.
-
-## Tradeoffs Observed
-- Requiring explicit embedding model configuration improves correctness but introduces startup failure when env is missing.
-- Embedding and LLM calls remain network/service dependent; fallback logic keeps pipeline non-fatal for per-page relevance when embedding calls fail.
+## Deferred TODO Scope
+- Advanced semantic/event validation in `RAGRequestEventHandler.parse_event`.
+- Metrics instrumentation (timing/throughput counters) in `RAGRequestEventHandler.process_request`.
+- Full local end-to-end quickstart validation against a running Kafka stack remains environment-dependent.

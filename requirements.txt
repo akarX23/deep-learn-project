@@ -14,8 +14,6 @@ langgraph>=0.2.0
 # Add teaching-specific dependencies here.
 
 # --- Backend Service (Kafka) ---
-fastapi>=0.111.0
-uvicorn>=0.30.0
 kafka-python>=2.0.2
 
 # --- Development / Testing ---

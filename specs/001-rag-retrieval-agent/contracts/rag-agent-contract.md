@@ -1,91 +1,127 @@
-# Contract: RAG Agent Planner Interface
+# Contract: RAG Kafka Worker Integration
 
 ## Purpose
-Defines the request and response contract between Planner and the RAG Retrieval Agent, plus runtime configuration expectations for LiteLLM routing.
 
-## Request Schema: RAGAgentInput
+Defines event, startup, typing, and runtime contracts for the standalone Kafka worker-based RAG integration.
 
+## Environment Contract
+
+RAG worker runtime inherits backend Kafka transport flags only:
+- `BACKEND_KAFKA_BOOTSTRAP_SERVERS` (required)
+- `BACKEND_KAFKA_CLIENT_ID` (optional)
+- `BACKEND_KAFKA_SECURITY_PROTOCOL` (optional)
+- `BACKEND_KAFKA_SASL_MECHANISM` (optional)
+- `BACKEND_KAFKA_SASL_USERNAME` (optional)
+- `BACKEND_KAFKA_SASL_PASSWORD` (optional)
+- `BACKEND_KAFKA_SSL_CAFILE` (optional)
+
+Explicit removals for this feature phase:
+- No `BACKEND_API_TOPIC_URL`
+- No backend topic-creation API call at startup
+
+## Topic Registry Contract
+
+Topic names are centralized in `project/topics.py`:
+- request topic: `rag`
+- completion topic: `rag-complete`
+
+Hardcoded topic strings outside topic registry and Kafka gateway are disallowed.
+
+## Kafka Gateway Module Contract
+
+All Kafka interactions route through `rag_agent/kafka.py`:
+- producer and consumer initialization
+- consumer subscription and polling wrappers
+- completion publish wrappers
+- startup metadata query wrappers for topic presence checks
+
+No direct Kafka client calls in unrelated modules.
+
+## Startup Contract (Worker Runtime)
+
+Worker startup behavior:
+1. load Kafka runtime config
+2. initialize producer/consumer via `rag_agent/kafka.py`
+3. check required-topic presence via Kafka metadata query
+4. if topics are missing, log clear warning and continue startup
+5. start dedicated consumer loop thread
+
+Worker shutdown behavior:
+- signal loop stop
+- join consumer thread
+- close consumer and producer resources
+
+## Incoming Event Contract: Topic `rag`
+
+Baseline event shape:
 ```json
 {
-  "request_id": "uuid-string",
-  "user_prompt": "Explain gradient descent from the uploaded chapter",
-  "file_paths": [
-    "rag_agent/tests/inputs/sample.pdf"
-  ],
-  "include_tables": true,
-  "include_images": true,
-  "relevance_threshold": 0.6,
-  "schema_version": "1.0"
+  "request_id": "string",
+  "session_ctx": {},
+  "user_request": "string",
+  "file_paths": ["string"]
 }
 ```
 
-### Field constraints
-- request_id: required UUID string.
-- user_prompt: required non-empty string.
-- file_paths: required non-empty array of PDF paths.
-- include_tables/include_images: optional booleans, default true.
-- relevance_threshold: optional float in [0.0, 1.0], default 0.6.
-- schema_version: optional string, default "1.0".
+Handler semantics in this phase:
+- prioritize ingest + dispatch path
+- strict validation hardening beyond schema baseline is deferred (TODO)
+- malformed payload handling remains non-fatal and logged
 
-## Response Schema: RAGAgentOutput
+## Processing Contract
 
+For consumed request events:
+1. map `user_request` to RAG `user_prompt`
+2. invoke existing `RAGAgent` pipeline with `file_paths`
+3. map output into completion payload
+4. publish completion event to `rag-complete`
+
+Planner behavior is out of scope and must not be implemented here.
+
+## Outgoing Event Contract: Topic `rag-complete`
+
+Required fields:
 ```json
 {
-  "request_id": "uuid-string",
-  "user_prompt": "Explain gradient descent from the uploaded chapter",
-  "schema_version": "1.0",
-  "compiled_material": "# Study Material\\n...",
-  "extracted_pages": [
-    {
-      "file_name": "sample.pdf",
-      "page_number": 1,
-      "relevance_score": 0.84,
-      "status": "SUCCESS",
-      "ocr_used": false,
-      "errors": []
-    }
-  ],
-  "total_pages_processed": 6,
-  "total_pages_included": 4,
+  "request_id": "string",
+  "session_ctx": {},
+  "user_prompt": "string",
+  "compiled_material": "string",
+  "status": "complete|partial|failed",
   "errors": [],
-  "status": "complete"
+  "total_pages_processed": 0,
+  "total_pages_included": 0,
+  "started_at": "timestamp",
+  "completed_at": "timestamp",
+  "duration_ms": 0
 }
 ```
 
-### extracted_pages item constraints
-- status enum: SUCCESS | SKIPPED_IRRELEVANT | FAILED_EXTRACTION.
-- page_number is 1-based.
-- relevance_score is normalized to [0.0, 1.0].
-- ocr_used is always false in v1.
-- retained_content is intentionally excluded from the response.
+Completion emission semantics:
+- publish for terminal processing attempts
+- on publish failure, log request-scoped error and continue worker operation
 
-## Status semantics
-- complete: all reachable files/pages processed with usable output and no blocking errors.
-- partial: some pages/files failed, but usable compiled material exists.
-- failed: no usable compiled material can be produced.
+## Type Safety Contract
 
-## Error handling contract
-- Non-fatal issues are accumulated in response.errors and/or per-page errors.
-- Fatal runtime errors raise exceptions and may be translated to failed status by caller boundary.
+Public function signatures in `rag_agent/kafka.py`, `rag_agent/worker.py`, and `rag_agent/handlers.py` must:
+- provide explicit typed inputs and outputs
+- avoid broad untyped placeholder use wherever practical
+- keep TODO markers explicit where behavior is intentionally deferred
 
-## Runtime Configuration Contract (LiteLLM)
+## Logging and Observability Contract
 
-### Provider and model routing
-- Text routing model: `<RAG_TEXT_PROVIDER>/<RAG_TEXT_MODEL>`
-- VLM routing model: `<RAG_VLM_PROVIDER>/<RAG_VLM_MODEL>`
-- Embedding routing model: `<RAG_EMBEDDING_PROVIDER>/<RAG_EMBEDDING_MODEL>`
+Required stages:
+- `startup_topic_check`
+- `consumed`
+- `processing_started`
+- `processing_completed`
+- `publish_completed`
+- `error`
 
-### Provider defaults
-- `RAG_TEXT_PROVIDER` default: `hosted_vllm`
-- `RAG_VLM_PROVIDER` default: `hosted_vllm`
-- `RAG_EMBEDDING_PROVIDER` default: `hosted_vllm`
+Each request-scoped log includes correlation metadata (`request_id` at minimum).
 
-### Required env groups
-- Text: `RAG_TEXT_PROVIDER`, `RAG_TEXT_MODEL`, `RAG_TEXT_API_BASE`, `RAG_TEXT_API_KEY`
-- Vision: `RAG_VLM_PROVIDER`, `RAG_VLM_MODEL`, `RAG_VLM_API_BASE`, `RAG_VLM_API_KEY`
-- Embedding: `RAG_EMBEDDING_PROVIDER`, `RAG_EMBEDDING_MODEL`, `RAG_EMBEDDING_API_BASE`, `RAG_EMBEDDING_API_KEY`, `RAG_EMBEDDING_MAX_TOKENS`
+## Failure Handling Contract
 
-## Determinism and ordering
-- Processing and extraction audit semantics are deterministic at schema level.
-- Internal tool scheduling may vary but must preserve response contract guarantees.
-- Image-description calls are batched per page via `VLM_BATCH_SIZE`; batching does not alter output schema.
+- single-event failures are non-fatal
+- startup missing-topic detection is warning-level, not startup-blocking
+- worker loop stays active after non-fatal request errors
