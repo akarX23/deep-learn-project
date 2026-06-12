@@ -1,26 +1,22 @@
-"""LiteLLM wrapper for all model calls."""
+"""Simplified LLM and embedding call wrappers for the RAG agent."""
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
-from rag_agent.config import EmbeddingConfig, LLMConfig
+from rag_agent.utils.helpers import EmbeddingConfig, LLMConfig
+
+logger = logging.getLogger(__name__)
 
 
 def call_llm(messages: list[dict[str, Any]], config: LLMConfig) -> str:
     """Execute a LiteLLM chat completion and return text content."""
 
-    # Prevent accidental remote calls with missing credentials during local/offline runs.
-    if not config.api_base and not config.api_key:
-        raise RuntimeError(
-            "No api_base or api_key configured for model call. "
-            "Set environment variables or provide a local model endpoint."
-        )
+    # TODO: Add credential validation guard (check api_base / api_key present)
+    # TODO: Handle missing litellm gracefully with a clear error message
 
-    try:
-        from litellm import completion
-    except Exception as exc:
-        raise RuntimeError("LiteLLM is required for model calls") from exc
+    from litellm import completion
 
     kwargs: dict[str, Any] = {
         "model": config.routed_model,
@@ -33,6 +29,7 @@ def call_llm(messages: list[dict[str, Any]], config: LLMConfig) -> str:
     if config.api_key:
         kwargs["api_key"] = config.api_key
 
+    # TODO: Validate response format before returning
     response = completion(**kwargs)
     return response.choices[0].message.content or ""
 
@@ -40,16 +37,10 @@ def call_llm(messages: list[dict[str, Any]], config: LLMConfig) -> str:
 def call_embedding(text: str, config: EmbeddingConfig) -> list[float]:
     """Execute a LiteLLM embedding call and return embedding vector."""
 
-    if not config.api_base and not config.api_key:
-        raise RuntimeError(
-            "No api_base or api_key configured for embedding call. "
-            "Set environment variables or provide a local model endpoint."
-        )
+    # TODO: Add credential validation guard (check api_base / api_key present)
+    # TODO: Handle missing litellm gracefully with a clear error message
 
-    try:
-        from litellm import embedding
-    except Exception as exc:
-        raise RuntimeError("LiteLLM is required for embedding calls") from exc
+    from litellm import embedding
 
     kwargs: dict[str, Any] = {
         "model": config.routed_model,
@@ -60,5 +51,6 @@ def call_embedding(text: str, config: EmbeddingConfig) -> list[float]:
     if config.api_key:
         kwargs["api_key"] = config.api_key
 
+    # TODO: Validate response format before returning
     response = embedding(**kwargs)
     return response["data"][0]["embedding"]
