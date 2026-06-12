@@ -65,7 +65,7 @@ class KafkaRuntimeConfig:
         if not bootstrap_servers:
             raise RuntimeError("BACKEND_KAFKA_BOOTSTRAP_SERVERS is required")
 
-        client_id = _read_optional("BACKEND_KAFKA_CLIENT_ID") or "rag-service"
+        client_id = "rag-service"
         consumer_group_id = f"{client_id}-consumer"
         return cls(
             bootstrap_servers=bootstrap_servers,
