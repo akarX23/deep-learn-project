@@ -16,5 +16,8 @@ langgraph>=0.2.0
 # --- Backend Service (Kafka) ---
 kafka-python>=2.0.2
 
+# --- Backend Service (WebSocket) ---
+python-socketio>=5.11
+
 # --- Development / Testing ---
 pytest>=8.0.0

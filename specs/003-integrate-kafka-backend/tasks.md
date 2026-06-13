@@ -17,8 +17,8 @@
 
 **Purpose**: Shared contract and dependency groundwork for the backend Kafka and WebSocket features
 
-- [ ] T001 [P] Add `python-socketio` to `requirements.txt` so `backend_service` can mount a Socket.IO ASGI server
-- [ ] T002 [P] Create `project/events.py` with shared WebSocket event-name constants, including `STREAM_TOKENS`, as a `str` Enum
+- [X] T001 [P] Add `python-socketio` to `requirements.txt` so `backend_service` can mount a Socket.IO ASGI server
+- [X] T002 [P] Create `project/events.py` with shared WebSocket event-name constants, including `STREAM_TOKENS`, as a `str` Enum
 
 ---
 
@@ -29,8 +29,8 @@
 **Checkpoint**: The backend app can host optional Socket.IO wiring while preserving the existing Kafka startup lifecycle and API router behavior
 
 - [ ] T003 [P] Add `backend_service/tests/conftest.py` fixtures for reusable FastAPI app, Kafka admin, and Socket.IO test doubles used by later story tests
-- [ ] T004 [P] Update `backend_service/app/main.py` application factory to support mounting the Socket.IO ASGI app without changing the existing Kafka startup flow or topics router registration
-- [ ] T005 [P] Add `backend_service/app/connection_manager.py` and `backend_service/app/socket.py` scaffolding for later session routing and emit wiring, keeping behavior minimal for now
+- [X] T004 [P] Update `backend_service/app/main.py` application factory to support mounting the Socket.IO ASGI app without changing the existing Kafka startup flow or topics router registration
+- [X] T005 [P] Add `backend_service/app/connection_manager.py` and `backend_service/app/socket.py` scaffolding for later session routing and emit wiring, keeping behavior minimal for now
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -44,14 +44,14 @@
 
 ### Tests for User Story 1
 
-- [ ] T006 [P] [US1] Extend `backend_service/tests/test_startup.py` with bootstrap success coverage for topic creation, idempotent existing-topic handling, and empty-registry behavior
-- [ ] T007 [P] [US1] Extend `backend_service/tests/test_startup.py` with startup retry and failure coverage for unreachable Kafka and exhausted retry limits
+- [X] T006 [P] [US1] Extend `backend_service/tests/test_startup.py` with bootstrap success coverage for topic creation, idempotent existing-topic handling, and empty-registry behavior
+- [X] T007 [P] [US1] Extend `backend_service/tests/test_startup.py` with startup retry and failure coverage for unreachable Kafka and exhausted retry limits
 
 ### Implementation for User Story 1
 
-- [ ] T008 [US1] Extend `backend_service/app/kafka_admin.py` with `bootstrap_topics()` aggregation that records created topics, already-existing topics, and non-fatal errors in `StartupTopicBootstrapResult`
-- [ ] T009 [US1] Wire `project.topics.get_all_topic_names()` into `backend_service/app/main.py` lifespan so topic bootstrap runs after Kafka admin connect and before `yield`
-- [ ] T010 [US1] Update `backend_service/app/main.py` startup logging and `backend_service/app/kafka_admin.py` warning paths so bootstrap attempts, summaries, and deferred TODO behavior are visible in logs
+- [X] T008 [US1] Extend `backend_service/app/kafka_admin.py` with `bootstrap_topics()` aggregation that records created topics, already-existing topics, and non-fatal errors in `StartupTopicBootstrapResult`
+- [X] T009 [US1] Wire `project.topics.get_all_topic_names()` into `backend_service/app/main.py` lifespan so topic bootstrap runs after Kafka admin connect and before `yield`
+- [X] T010 [US1] Update `backend_service/app/main.py` startup logging and `backend_service/app/kafka_admin.py` warning paths so bootstrap attempts, summaries, and deferred TODO behavior are visible in logs
 
 **Checkpoint**: User Story 1 should now bootstrap Kafka topics on startup and remain independently testable
 
@@ -65,15 +65,15 @@
 
 ### Tests for User Story 2
 
-- [ ] T011 [P] [US2] Add contract coverage in `backend_service/tests/test_test_events_api.py` for `/api/v1/test-events/rag`, including environment gating, direct RAG request-body validation, and success response shape
-- [ ] T012 [P] [US2] Add unit coverage in `backend_service/tests/test_utils.py` for `default_rag_test_event()` returning unique `uuid4`-backed request IDs and representative defaults
+- [X] T011 [P] [US2] Add contract coverage in `backend_service/tests/test_test_events_api.py` for `/api/v1/test-events/rag`, including environment gating, direct RAG request-body validation, and success response shape
+- [X] T012 [P] [US2] Add unit coverage in `backend_service/tests/test_utils.py` for `default_rag_test_event()` returning unique `uuid4`-backed request IDs and representative defaults
 
 ### Implementation for User Story 2
 
-- [ ] T013 [US2] Create `backend_service/app/utils.py` with `default_rag_test_event() -> RAGRequestEvent` using `uuid4().hex` for `request_id` and representative defaults for all required fields
-- [ ] T014 [US2] Implement the `rag` test-event router in `backend_service/app/api/test_events.py` with direct `RAGRequestEvent` request-body handling and publish validation before publish
-- [ ] T015 [US2] Update `backend_service/app/main.py` and `backend_service/app/config.py` so test-event routes are enabled by default in dev/test and require explicit opt-in in production
-- [ ] T016 [US2] Map Kafka producer acknowledgements to the normalized inline test-event response payload in `backend_service/app/api/test_events.py`, including optional metadata fields when available from the shared producer
+- [X] T013 [US2] Create `backend_service/app/utils.py` with `default_rag_test_event() -> RAGRequestEvent` using `uuid4().hex` for `request_id` and representative defaults for all required fields
+- [X] T014 [US2] Implement the `rag` test-event router in `backend_service/app/api/test_events.py` with direct `RAGRequestEvent` request-body handling and publish validation before publish
+- [X] T015 [US2] Update `backend_service/app/main.py` and `backend_service/app/config.py` so test-event routes are enabled by default in dev/test and require explicit opt-in in production
+- [X] T016 [US2] Map Kafka producer acknowledgements to the normalized inline test-event response payload in `backend_service/app/api/test_events.py`, including optional metadata fields when available from the shared producer
 
 **Checkpoint**: User Story 2 should now publish rag test events through a gated API and remain independently testable
 
@@ -87,15 +87,15 @@
 
 ### Tests for User Story 3
 
-- [ ] T017 [P] [US3] Add connection-manager coverage in `backend_service/tests/test_connection_manager.py` for minimal get/set behavior keyed by `session_id` and independent sessions
-- [ ] T018 [P] [US3] Add Socket.IO coverage in `backend_service/tests/test_socket.py` for connect registration, `emit_event` routing by `session_id`, and `STREAM_TOKENS` constant usage from `project/events.py`
+- [X] T017 [P] [US3] Add connection-manager coverage in `backend_service/tests/test_connection_manager.py` for minimal get/set behavior keyed by `session_id` and independent sessions
+- [X] T018 [P] [US3] Add Socket.IO coverage in `backend_service/tests/test_socket.py` for connect registration, `emit_event` routing by `session_id`, and `STREAM_TOKENS` constant usage from `project/events.py`
 
 ### Implementation for User Story 3
 
-- [ ] T019 [P] [US3] Create `backend_service/app/connection_manager.py` with a minimal `ConnectionManager` class exposing `get` and `set`
-- [ ] T020 [P] [US3] Create `backend_service/app/socket.py` with the Socket.IO server, lightweight listeners, and `emit_event(event, payload, session_id)`
-- [ ] T021 [US3] Mount the Socket.IO ASGI app in `backend_service/app/main.py` and register the shared connection manager for session routing
-- [ ] T022 [US3] Add TODO-marked stubs in `backend_service/app/socket.py` for disconnect cleanup, missing-session handling, auth, and back-pressure edge cases
+- [X] T019 [P] [US3] Create `backend_service/app/connection_manager.py` with a minimal `ConnectionManager` class exposing `get` and `set`
+- [X] T020 [P] [US3] Create `backend_service/app/socket.py` with the Socket.IO server, lightweight listeners, and `emit_event(event, payload, session_id)`
+- [X] T021 [US3] Mount the Socket.IO ASGI app in `backend_service/app/main.py` and register the shared connection manager for session routing
+- [X] T022 [US3] Add TODO-marked stubs in `backend_service/app/socket.py` for disconnect cleanup, missing-session handling, auth, and back-pressure edge cases
 
 **Checkpoint**: User Story 3 should now provide the session-routed WebSocket channel and remain independently testable
 
@@ -105,11 +105,11 @@
 
 **Purpose**: Finish, verify, and harden the feature across all user stories
 
-- [ ] T023 [P] Validate the full `backend_service` test suite with `pytest backend_service/tests -q` and confirm all tests including `test_utils.py`, `test_socket.py`, and `test_connection_manager.py` pass
-- [ ] T024 [P] Run `ruff check project backend_service` and `ruff format --check project backend_service` to confirm code quality and formatting
-- [ ] T025 [P] Run `python -m compileall project backend_service` to confirm syntax integrity
-- [ ] T026 [P] Update `specs/003-integrate-kafka-backend/quickstart.md` to reflect the final startup, rag publish, and WebSocket connection/emit flows
-- [ ] T027 [P] Review logging and docstrings in `backend_service/app/main.py`, `backend_service/app/api/test_events.py`, `backend_service/app/socket.py`, `backend_service/app/kafka_admin.py`, `backend_service/app/utils.py`, and `project/events.py` for clarity and maintainability
+- [X] T023 [P] Validate the full `backend_service` test suite with `pytest backend_service/tests -q` and confirm all tests including `test_utils.py`, `test_socket.py`, and `test_connection_manager.py` pass
+- [X] T024 [P] Run `ruff check project backend_service` and `ruff format --check project backend_service` to confirm code quality and formatting
+- [X] T025 [P] Run `python -m compileall project backend_service` to confirm syntax integrity
+- [X] T026 [P] Update `specs/003-integrate-kafka-backend/quickstart.md` to reflect the final startup, rag publish, and WebSocket connection/emit flows
+- [X] T027 [P] Review logging and docstrings in `backend_service/app/main.py`, `backend_service/app/api/test_events.py`, `backend_service/app/socket.py`, `backend_service/app/kafka_admin.py`, `backend_service/app/utils.py`, and `project/events.py` for clarity and maintainability
 
 ---
 
