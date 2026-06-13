@@ -2,11 +2,11 @@
 
 ## Purpose
 
-Defines event, startup, typing, and runtime contracts for the standalone Kafka worker-based RAG integration.
+Define runtime and event contracts for the simplified worker architecture where `worker.py` orchestrates consume/process/publish directly, `kafka.py` owns Kafka transport functions, and `agent.py` remains Kafka-agnostic.
 
 ## Environment Contract
 
-RAG worker runtime inherits backend Kafka transport flags only:
+`kafka.py` reads Kafka settings from environment values directly:
 - `BACKEND_KAFKA_BOOTSTRAP_SERVERS` (required)
 - `BACKEND_KAFKA_CLIENT_ID` (optional)
 - `BACKEND_KAFKA_SECURITY_PROTOCOL` (optional)
@@ -15,77 +15,38 @@ RAG worker runtime inherits backend Kafka transport flags only:
 - `BACKEND_KAFKA_SASL_PASSWORD` (optional)
 - `BACKEND_KAFKA_SSL_CAFILE` (optional)
 
-Explicit removals for this feature phase:
-- No `BACKEND_API_TOPIC_URL`
-- No backend topic-creation API call at startup
+Removed from active contract:
+- backend topic bootstrap API URL dependencies
+- startup topic creation flow
 
-## Topic Registry Contract
+## Topic Contract
 
-Topic names are centralized in `project/topics.py`:
+Topic names come from centralized registry in `project/topics.py`:
 - request topic: `rag`
 - completion topic: `rag-complete`
 
-Hardcoded topic strings outside topic registry and Kafka gateway are disallowed.
+## Runtime Flow Contract
 
-## Module Structure Contract (Updated — Simplification Phase)
+Primary flow:
+1. `worker.py` starts
+2. `worker.py` invokes `kafka.py` env/config + producer/consumer setup helpers
+3. `worker.py` runs startup topic presence check via `kafka.py`
+4. worker logs warning and continues if topics are missing
+5. threaded consumer loop polls events from `rag`
+6. consumer loop calls `agent.py` directly
+7. consumer loop publishes completion to `rag-complete` via `kafka.py`
 
-After simplification the active module layout is:
+## Module Ownership Contract
 
-```text
-rag_agent/
-├── agent.py       # Orchestration — basic exception handling only
-├── handlers.py    # Ingest/dispatch — basic exception handling only
-├── kafka.py       # Kafka transport and metadata checks
-├── worker.py      # Consumer loop thread entry point
-└── utils/
-    ├── __init__.py
-    ├── helpers.py    # Pure helpers + merged LLM config + call_llm/call_embedding
-    ├── llm_client.py # Simplified LLM/embedding wrappers (TODOs for guards)
-    ├── prompts.py    # Prompt templates
-    └── tools.py      # PDF extraction tools
-```
+- `worker.py`: startup orchestration, thread lifecycle, and consume/process/publish loop control
+- `kafka.py`: Kafka connector init, producer/consumer objects, and helper functions for consume/publish/check
+- `agent.py`: processing logic only; returns output payload data and does not publish to Kafka
+- `helpers.py`: environment extraction helper functions only; no classes and no validators in this phase
 
-Deleted modules (contract obligations discharged):
-- `rag_agent/service.py` — removed
-- `rag_agent/logging.py` — `StructuredLogger` replaced by standard `logging.getLogger(__name__)`
+## Incoming Event Contract (`rag`)
 
-## Logging Module Contract
+Baseline request payload:
 
-All modules MUST use:
-```python
-import logging
-logger = logging.getLogger(__name__)
-```
-
-Entry point (`worker.py`) calls `logging.basicConfig(...)` once at startup. No custom logger class is permitted.
-
-## Kafka Gateway Module Contract
-
-All Kafka interactions route through `rag_agent/kafka.py`:
-- producer and consumer initialization
-- consumer subscription and polling wrappers
-- completion publish wrappers
-- startup metadata query wrappers for topic presence checks
-
-No direct Kafka client calls in unrelated modules.
-
-## Startup Contract (Worker Runtime)
-
-Worker startup behavior:
-1. load Kafka runtime config
-2. initialize producer/consumer via `rag_agent/kafka.py`
-3. check required-topic presence via Kafka metadata query
-4. if topics are missing, log clear warning and continue startup
-5. start dedicated consumer loop thread
-
-Worker shutdown behavior:
-- signal loop stop
-- join consumer thread
-- close consumer and producer resources
-
-## Incoming Event Contract: Topic `rag`
-
-Baseline event shape:
 ```json
 {
   "request_id": "string",
@@ -95,24 +56,10 @@ Baseline event shape:
 }
 ```
 
-Handler semantics in this phase:
-- prioritize ingest + dispatch path
-- strict validation hardening beyond schema baseline is deferred (TODO)
-- malformed payload handling remains non-fatal and logged
+## Outgoing Event Contract (`rag-complete`)
 
-## Processing Contract
+Baseline completion payload:
 
-For consumed request events:
-1. map `user_request` to RAG `user_prompt`
-2. invoke existing `RAGAgent` pipeline with `file_paths`
-3. map output into completion payload
-4. publish completion event to `rag-complete`
-
-Planner behavior is out of scope and must not be implemented here.
-
-## Outgoing Event Contract: Topic `rag-complete`
-
-Required fields:
 ```json
 {
   "request_id": "string",
@@ -129,31 +76,12 @@ Required fields:
 }
 ```
 
-Completion emission semantics:
-- publish for terminal processing attempts
-- on publish failure, log request-scoped error and continue worker operation
-
 ## Type Safety Contract
 
-Public function signatures in `rag_agent/kafka.py`, `rag_agent/worker.py`, and `rag_agent/handlers.py` must:
-- provide explicit typed inputs and outputs
-- avoid broad untyped placeholder use wherever practical
-- keep TODO markers explicit where behavior is intentionally deferred
+Public function boundaries in `worker.py`, `kafka.py`, `agent.py`, and helper modules use explicit type annotations and avoid untyped placeholders where practical.
 
-## Logging and Observability Contract
+## Failure and Deferred Scope Contract
 
-Required stages:
-- `startup_topic_check`
-- `consumed`
-- `processing_started`
-- `processing_completed`
-- `publish_completed`
-- `error`
-
-Each request-scoped log includes correlation metadata (`request_id` at minimum).
-
-## Failure Handling Contract
-
-- single-event failures are non-fatal
-- startup missing-topic detection is warning-level, not startup-blocking
-- worker loop stays active after non-fatal request errors
+- Per-event failures are non-fatal; loop continues.
+- Missing topics at startup are warning-level only.
+- Advanced validation, edge-case hardening, and deep exception handling are deferred and represented by TODO tasks in implementation.

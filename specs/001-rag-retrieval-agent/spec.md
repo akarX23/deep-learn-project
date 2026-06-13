@@ -15,7 +15,16 @@ Simplify the RAGRequestEventHandler by only focusing on ingesting Kafka events a
 - Q: Should logging use a dedicated logger class or standard module logging? → A: Use standard `logging` module with `basicConfig(...)` and per-file `logging.getLogger(__name__)`; remove dedicated logger class.
 - Q: How should the runtime/module layout be simplified? → A: Remove `service.py`; add a `utils/` directory and place helper-oriented modules there (`helpers.py`, `llm_client.py`, `prompts.py`, `tools.py`).
 - Q: How should LLM and config logic be structured? → A: Simplify LLM operations to basic embedding + completion calls, defer complex validation/exception logic as TODOs, and consolidate `llm_client` + `config` responsibilities into `helpers.py`.
-- Q: How should handler and agent error handling be scoped? → A: Keep only basic exception handling in request handler and `agent.py`; defer extensive validation/error orchestration as explicit TODOs.
+- Q: How should consumer-loop and agent error handling be scoped? → A: Keep only basic exception handling in the consumer loop and `agent.py`; defer extensive validation/error orchestration as explicit TODOs.
+
+### Session 2026-06-13
+
+- Q: Should this clarification switch branches or create a new feature directory? → A: No. Stay on the current branch and continue in feature directory `001-rag-retrieval-agent`.
+- Q: How should runtime startup flow be simplified? → A: Start from `worker.py`, initialize the threaded consumer loop, and perform only a direct Kafka topic presence check at startup.
+- Q: Where should Kafka connection and client creation live? → A: Keep Kafka connector initialization in `kafka.py` using environment variables directly, and create producer/consumer there.
+- Q: Should handler and factory abstractions remain? → A: No. Remove handler abstraction and factory structure; consumer loop calls `agent.py` directly and publishes output via `kafka.py` functions.
+- Q: Should `agent.py` publish to Kafka directly? → A: No. `agent.py` only returns processing output; the consumer loop publishes the completion event.
+- Q: How should `helpers.py` be simplified? → A: Keep only environment-variable extraction helper functions; remove classes and validators, and defer advanced validation/exception behavior as TODO tasks.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -51,19 +60,19 @@ As an operator, I need startup behavior to check whether required topics already
 
 ---
 
-### User Story 3 - Use a Minimal Typed Event Handler (Priority: P3)
+### User Story 3 - Use Direct Consumer-to-Agent Flow Without Handler Abstraction (Priority: P3)
 
-As a maintainer, I need a simplified request handler that focuses on ingesting Kafka events and dispatching to the RAG pipeline with strongly typed interfaces, while deferring advanced validation and metrics.
+As a maintainer, I need the consumer loop to call the RAG agent directly and publish completion events itself, so the runtime removes unnecessary handler and factory indirection while keeping typed interfaces.
 
-**Why this priority**: A narrower handler surface improves maintainability and supports iterative delivery.
+**Why this priority**: Removing intermediary abstractions makes event flow easier to reason about and reduces maintenance overhead.
 
-**Independent Test**: Send an inbound request event and verify the handler maps it to a pipeline call and completion publication path, while deferred concerns are explicitly marked for follow-up.
+**Independent Test**: Send an inbound request event and verify the consumer loop maps it directly to an `agent.py` call, receives output, and publishes `rag-complete` using `kafka.py` producer functions.
 
 **Acceptance Scenarios**:
 
-1. **Given** an inbound request event, **When** the handler receives it, **Then** it dispatches the event to the RAG pipeline path.
-2. **Given** the handler code path, **When** typed interfaces are reviewed, **Then** function inputs and outputs are explicitly typed and avoid untyped catch-all structures except where raw transport input is unavoidable.
-3. **Given** advanced validation and metrics are deferred, **When** maintainers inspect handler flow, **Then** explicit TODO markers identify deferred behavior without blocking core dispatch.
+1. **Given** an inbound request event on `rag`, **When** the consumer loop processes it, **Then** it directly calls `agent.py` with typed inputs and no handler layer.
+2. **Given** `agent.py` processing completes, **When** output is returned, **Then** the consumer loop publishes the completion payload to `rag-complete` through `kafka.py` producer helpers.
+3. **Given** advanced validation and edge-case handling are out of scope for this phase, **When** maintainers inspect the flow, **Then** explicit TODO markers identify deferred validation, metrics, and exception-hardening work.
 
 ---
 
@@ -86,16 +95,16 @@ As a maintainer, I need a simplified request handler that focuses on ingesting K
 - **FR-005**: If required topics are missing at startup, the system MUST log a clear actionable warning and continue starting.
 - **FR-006**: The system MUST consume request events from topic `rag` and dispatch them to the existing RAG pipeline path.
 - **FR-007**: The system MUST publish completion events to topic `rag-complete` after each processing attempt reaches terminal state.
-- **FR-008**: The request handler MUST prioritize ingestion and dispatch behavior with only basic exception handling in this iteration; advanced validation, metrics, and deeper error orchestration MUST be deferred and marked with TODOs.
-- **FR-009**: Public function interfaces in the worker, Kafka gateway, and handler modules MUST use explicit typed inputs and outputs and SHOULD avoid untyped generic placeholders.
+- **FR-008**: The system MUST remove the request handler abstraction; the consumer loop MUST ingest Kafka events and dispatch directly to `agent.py`.
+- **FR-009**: Public function interfaces in the worker, `kafka.py`, `agent.py`, and helper modules MUST use explicit typed inputs and outputs and SHOULD avoid untyped generic placeholders.
 - **FR-010**: The worker MUST continue processing after single-event failures and MUST log error stages without terminating the process.
 - **FR-011**: The system MUST support clean shutdown by stopping the consumer loop thread and closing Kafka producer/consumer resources.
 - **FR-012**: The runtime MUST remove non-functional `service.py` from active structure and rely on a simplified worker-centric module layout.
-- **FR-013**: The module structure MUST include a `utils/` directory that contains helper-oriented files, including `helpers.py`, `llm_client.py`, `prompts.py`, and `tools.py`.
-- **FR-014**: LLM integration MUST be simplified to essential embedding and completion calls only; complex validation and exception handling in that path MUST be deferred as TODOs.
-- **FR-015**: Configuration loading MUST be simplified to a single env-read function that returns a config object, with advanced config validation deferred as TODOs.
-- **FR-016**: The design SHOULD consolidate `llm_client` and `config` responsibilities into `helpers.py` to reduce indirection, while preserving core pipeline behavior.
-- **FR-017**: The `agent.py` flow MUST keep basic exception handling only in this phase, with extended exception taxonomy, retry policy, and deeper validation explicitly deferred as TODOs.
+- **FR-013**: The worker startup path in `worker.py` MUST initialize the threaded consumer loop and perform a direct Kafka topic presence check before entering steady-state polling.
+- **FR-014**: The `kafka.py` module MUST initialize Kafka connector settings from environment variables directly and MUST expose producer/consumer creation functions.
+- **FR-015**: Producer/consumer-associated helper functions MUST live only in `kafka.py`; other modules MUST use those functions rather than owning Kafka client lifecycle.
+- **FR-016**: The `agent.py` module MUST remain Kafka-agnostic and MUST only return processing output; it MUST NOT publish events directly.
+- **FR-017**: `helpers.py` MUST be simplified to environment-variable extraction functions only; classes and validator abstractions are out of scope for this phase and should be tracked as TODO tasks if needed later.
 - **FR-018**: The system MUST define stable event contract expectations for inbound request and outbound completion messages.
 - **FR-019**: The system MUST define measurable performance and reliability expectations for poll-to-completion throughput and emission success.
 - **FR-020**: The system MUST define observability requirements for lifecycle stages across startup checks, consume, process, publish, and failures.
@@ -107,6 +116,7 @@ As a maintainer, I need a simplified request handler that focuses on ingesting K
 - **WorkerRuntimeState**: Process-level state tracking loop status, startup topic check outcome, and shutdown signals.
 - **TopicPresenceCheckResult**: Startup check output identifying required topics, discovered topics, and missing-topic warnings.
 - **RequestLifecycleLogEntry**: Structured lifecycle record with request correlation and stage metadata.
+- **KafkaRuntimeGateway**: Functions in `kafka.py` responsible for env-based connector initialization and for creating/using producer and consumer objects.
 
 ## Success Criteria *(mandatory)*
 

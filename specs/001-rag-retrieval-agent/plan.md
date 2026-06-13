@@ -1,112 +1,94 @@
-# Implementation Plan: [FEATURE]
+# Implementation Plan: RAG Kafka Worker Simplification
 
-**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
-**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
+**Branch**: `001-build-rag-retrieval-agent` | **Date**: 2026-06-13 | **Spec**: `specs/001-rag-retrieval-agent/spec.md`
+**Input**: Feature specification from `/specs/001-rag-retrieval-agent/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
 
 ## Summary
 
-[Extract from feature spec: primary requirement + technical approach from research]
+Simplify the RAG runtime to a direct worker-driven Kafka flow: `worker.py` initializes Kafka and starts the threaded consumer loop, verifies required topics exist (warn-and-continue if missing), consumes request events, calls `agent.py` directly, and publishes completion events through `kafka.py`. Remove handler and factory abstractions from active flow. Keep `agent.py` Kafka-agnostic and keep `helpers.py` limited to environment-value extraction functions. Advanced validation, edge-case hardening, and deeper exception taxonomy are deferred as TODO tasks.
 
 ## Technical Context
 
-<!--
-  ACTION REQUIRED: Replace the content in this section with the technical details
-  for the project. The structure here is presented in advisory capacity to guide
-  the iteration process.
--->
-
-**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
-**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
-**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
-**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
-**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]  
-**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
-**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
-**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
+**Language/Version**: Python 3.11+
+**Primary Dependencies**: kafka-python, pydantic v2, litellm, sentence-transformers, pymupdf
+**Storage**: N/A (Kafka is external transport)
+**Testing**: pytest
+**Target Platform**: Linux worker runtime
+**Project Type**: Background worker service
+**Performance Goals**: Keep current poll-to-completion behavior within existing SC-005 budget; no regression from abstraction removal
+**Constraints**: No FastAPI runtime; no topic creation at startup; no handler/factory indirection; no classes/validators in `helpers.py`; defer advanced validation/error hardening with TODOs
+**Scale/Scope**: Single-worker process consuming `rag` and producing `rag-complete`; no planner-side logic changes
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- Code Quality Gate: Define linting/formatting/static analysis checks and failure policy.
-- Testing Gate: Define required unit/integration/contract coverage for this feature and
-  regression test expectations.
-- UX Consistency Gate: Document which existing UX patterns, accessibility requirements, and
-  acceptance criteria apply.
-- Performance Gate: Define measurable budgets (latency/throughput/memory/render/startup as
-  applicable) and validation approach.
-- Maintainability Gate: Confirm observability and documentation updates for non-obvious
-  decisions.
+- Code Quality Gate: Run `ruff check project rag_agent`, `ruff format --check project rag_agent`, and `python -m compileall project rag_agent`.
+- Testing Gate: Run targeted and full `rag_agent/tests` suites for worker loop, Kafka integration, and request/completion flow.
+- UX Consistency Gate: Preserve current event contracts and message semantics (request-in, completion-out) for downstream consumers.
+- Performance Gate: Maintain current poll loop behavior and avoid additional blocking abstractions in consume/process/publish stages.
+- Maintainability Gate: Keep runtime ownership explicit (`worker.py` orchestration, `kafka.py` transport, `agent.py` processing, `helpers.py` env extraction).
+
+Post-Design Re-check (Phase 1): PASS
+- Design adheres to simplicity and observability principles.
+- Deferred validations and exception hardening are explicitly tracked as TODO scope.
 
 ## Project Structure
 
 ### Documentation (this feature)
 
 ```text
-specs/[###-feature]/
-├── plan.md              # This file (/speckit.plan command output)
-├── research.md          # Phase 0 output (/speckit.plan command)
-├── data-model.md        # Phase 1 output (/speckit.plan command)
-├── quickstart.md        # Phase 1 output (/speckit.plan command)
-├── contracts/           # Phase 1 output (/speckit.plan command)
-└── tasks.md             # Phase 2 output (/speckit.tasks command - NOT created by /speckit.plan)
+specs/001-rag-retrieval-agent/
+├── plan.md
+├── research.md
+├── data-model.md
+├── quickstart.md
+├── contracts/
+│   └── rag-agent-contract.md
+└── tasks.md
 ```
 
 ### Source Code (repository root)
-<!--
-  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
-  for this feature. Delete unused options and expand the chosen structure with
-  real paths (e.g., apps/admin, packages/something). The delivered plan must
-  not include Option labels.
--->
 
 ```text
-# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
-src/
-├── models/
-├── services/
-├── cli/
-└── lib/
+rag_agent/
+├── agent.py
+├── kafka.py
+├── worker.py
+└── utils/
+    └── helpers.py         # env extraction helpers only
 
-tests/
-├── contract/
-├── integration/
-└── unit/
-
-# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
-backend/
-├── src/
-│   ├── models/
-│   ├── services/
-│   └── api/
-└── tests/
-
-frontend/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── services/
-└── tests/
-
-# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
-api/
-└── [same as backend above]
-
-ios/ or android/
-└── [platform-specific structure: feature modules, UI flows, platform tests]
+project/
+├── schemas.py
+└── topics.py
 ```
 
-**Structure Decision**: [Document the selected structure and reference the real
-directories captured above]
+**Structure Decision**: Keep runtime flow explicit and linear: `worker.py` owns consumer thread and processing pipeline orchestration; `kafka.py` owns Kafka client lifecycle and produce/consume helper functions; `agent.py` performs retrieval logic only and returns output objects.
 
 ## Complexity Tracking
 
-> **Fill ONLY if Constitution Check has violations that must be justified**
-
 | Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
-| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
-| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
+|-----------|------------|--------------------------------------|
+| None | N/A | N/A |
+
+## Phase 0: Research Findings
+
+All open ambiguities from current scope are resolved in the clarification sessions. No additional NEEDS CLARIFICATION items remain.
+
+Research outcomes are documented in `specs/001-rag-retrieval-agent/research.md` with explicit decisions for:
+- direct worker startup and topic-presence check
+- `kafka.py`-owned env config and producer/consumer functions
+- direct consumer-loop call into `agent.py`
+- Kafka publication from consumer loop only
+- simplified `helpers.py` (env extraction only)
+
+## Phase 1: Design Artifacts
+
+Design outputs updated:
+- `specs/001-rag-retrieval-agent/data-model.md`
+- `specs/001-rag-retrieval-agent/contracts/rag-agent-contract.md`
+- `specs/001-rag-retrieval-agent/quickstart.md`
+
+No additional external API contracts are required beyond Kafka message and runtime module contracts.
