@@ -169,6 +169,29 @@
 
 ---
 
+### PlannerRequestEvent
+
+**Purpose**: Kafka event schema for user-initiated async work requests destined for the planner agent. Produced by the `/api/chat/request` endpoint after files are saved.
+
+| Field | Type | Description |
+|---|---|---|
+| `user_prompt` | `str` | End-user query text |
+| `user_level` | `list[str]` | User experience level labels |
+| `sid` | `str` | Session identifier for response routing |
+| `file_paths` | `list[str]` | Absolute file system paths to saved documents |
+
+**Validation rules**:
+- `user_prompt`, `sid` cannot be empty.
+- `user_level` is a list of strings (can be empty).
+- `file_paths` is a list of absolute paths as strings; no path validation is performed in this iteration.
+- No custom validators or exception handling.
+
+**Constraints**:
+- Paths are absolute (e.g., `/home/akarx/deep-learn-project/uploads/doc_abc123.pdf`).
+- No per-file metadata (name, size, type) is included — the planner receives only paths.
+
+---
+
 ### ConnectionManager
 
 **Purpose**: Minimal in-memory class mapping a `session_id` to its WebSocket connection so Kafka-driven results can be routed to the correct session.

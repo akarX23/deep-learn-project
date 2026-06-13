@@ -1,6 +1,6 @@
-# Tasks: Backend Kafka Startup Bootstrap + RAG Test-Event API + WebSocket Channel
+# Tasks: Backend Kafka Startup Bootstrap + RAG Test-Event API + WebSocket Channel + User-Request API
 
-**Input**: Design documents from /specs/003-integrate-kafka-backend/
+**Input**: Design documents from `/specs/003-integrate-kafka-backend/`
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
 
 **Tests**: Include test tasks by default.
@@ -10,7 +10,7 @@
 ## Format: [ID] [P?] [Story] Description
 
 - [P]: Can run in parallel (different files, no dependencies)
-- [Story]: Which user story this task belongs to (e.g., US1, US2)
+- [Story]: Which user story this task belongs to (e.g., US1, US2, US3)
 - Include exact file paths in descriptions
 
 ## Phase 1: Setup (Shared Infrastructure)
@@ -87,15 +87,47 @@
 
 ---
 
-## Phase 5: Polish and Cross-Cutting Concerns
+## Phase 5: User Story 3 - Ingest User Requests with File Uploads and Route to Planner (Priority: P3)
+
+**Goal**: Backend exposes `POST /api/chat/request` for accepting user queries with file uploads, saving files to configured directory, and publishing PlannerRequestEvent to Kafka.
+
+**Independent Test**: Call `POST /api/chat/request` with valid UserRequest and 1–3 files, verify files are saved to configured directory with absolute paths, PlannerRequestEvent is published to Kafka, and API responds with confirmation.
+
+### Tests for User Story 3
+
+- [ ] T025 [P] [US3] Add PlannerRequestEvent schema tests for required fields in backend_service/tests/test_utils.py
+- [ ] T026 [P] [US3] Add user-request API request validation tests in backend_service/tests/test_chat_request_api.py
+- [ ] T027 [P] [US3] Add file upload and save tests in backend_service/tests/test_chat_request_api.py
+- [ ] T028 [P] [US3] Add PlannerRequestEvent publish success/failure tests in backend_service/tests/test_chat_request_api.py
+- [ ] T029 [P] [US3] Add error response format tests (400/500) in backend_service/tests/test_chat_request_api.py
+
+### Implementation for User Story 3
+
+- [ ] T030 [US3] Add PlannerRequestEvent schema to project/schemas.py with fields user_prompt, user_level, sid, file_paths
+- [ ] T031 [US3] Add UPLOAD_DIR configuration in backend_service/app/config.py with default ./uploads
+- [ ] T032 [US3] Add ./uploads entry to .gitignore
+- [ ] T033 [P] [US3] Implement user-request API route POST /api/chat/request in backend_service/app/api/chat_request.py
+- [ ] T034 [P] [US3] Implement multipart form parsing for UserRequest + files in backend_service/app/api/chat_request.py
+- [ ] T035 [US3] Implement file saving to configured directory with absolute path tracking in backend_service/app/api/chat_request.py
+- [ ] T036 [US3] Implement file count check (max 3) with warning log in backend_service/app/api/chat_request.py
+- [ ] T037 [US3] Implement PlannerRequestEvent publishing to Kafka in backend_service/app/api/chat_request.py
+- [ ] T038 [US3] Implement success response (200 with message) in backend_service/app/api/chat_request.py
+- [ ] T039 [US3] Implement error responses (400/500 with {error: msg}) in backend_service/app/api/chat_request.py
+- [ ] T040 [P] [US3] Add TODO markers for future file validation, cleanup, and error handling enhancements in backend_service/app/api/chat_request.py
+
+**Checkpoint**: User Story 3 independently works and is testable.
+
+---
+
+## Phase 6: Polish and Cross-Cutting Concerns
 
 **Purpose**: Validate quality gates and update docs for release readiness.
 
-- [x] T025 [P] Run full backend test suite and verify schema coverage in backend_service/tests/test_startup.py and backend_service/tests/test_socket.py
-- [x] T026 [P] Run ruff check and ruff format checks for project/schemas.py and backend_service/app/main.py
-- [x] T027 [P] Run compileall validation for project/schemas.py and backend_service/app/socket.py
-- [x] T028 [P] Update quickstart usage for stream-tokens schema and UserRequest in specs/003-integrate-kafka-backend/quickstart.md
-- [x] T029 [P] Update websocket contract details for schema mapping in specs/003-integrate-kafka-backend/contracts/backend-websocket-contract.md
+- [ ] T041 [P] Run full backend test suite and verify schema coverage in backend_service/tests/
+- [ ] T042 [P] Run ruff check and ruff format on all modified files
+- [ ] T043 [P] Run compileall validation on project/ and backend_service/ modules
+- [ ] T044 [P] Update quickstart.md with user-request API usage examples in specs/003-integrate-kafka-backend/quickstart.md
+- [ ] T045 [P] Update backend-user-request-api-contract.md with complete API details in specs/003-integrate-kafka-backend/contracts/
 
 ---
 
@@ -106,12 +138,13 @@
 - Setup (Phase 1): No dependencies.
 - Foundational (Phase 2): Depends on Setup and blocks all user stories.
 - User Stories (Phase 3+): Depend on Foundational completion.
-- Polish (Phase 5): Depends on desired user stories complete.
+- Polish (Phase 6): Depends on desired user stories complete.
 
 ### User Story Dependencies
 
-- User Story 1 (P1): Starts after Foundational; no dependency on User Story 2.
-- User Story 2 (P2): Starts after Foundational; no dependency on User Story 1.
+- User Story 1 (P1): Starts after Foundational; no dependency on User Story 2 or 3.
+- User Story 2 (P2): Starts after Foundational; no dependency on User Story 1 or 3.
+- User Story 3 (P3): Starts after Foundational; no dependency on User Story 1 or 2.
 
 ### Within Each User Story
 
@@ -126,7 +159,9 @@
 - User Story 1 test tasks T009 to T011 can run in parallel.
 - User Story 2 test tasks T015 to T018 can run in parallel.
 - User Story 2 implementation tasks T019, T020, and T024 can run in parallel.
-- Polish tasks T025 to T029 can run in parallel where file overlap is avoided.
+- User Story 3 test tasks T025 to T029 can run in parallel.
+- User Story 3 implementation tasks T033, T034 can run in parallel; T035–T040 depend on config (T031–T032).
+- Polish tasks T041 to T045 can run in parallel where file overlap is avoided.
 
 ---
 
@@ -146,6 +181,14 @@ Task: Add UserRequest schema tests in backend_service/tests/test_utils.py
 Task: Implement minimal get/set ConnectionManager in backend_service/app/connection_manager.py
 ```
 
+## Parallel Example: User Story 3
+
+```bash
+Task: Add user-request API request validation tests in backend_service/tests/test_chat_request_api.py
+Task: Add file upload and save tests in backend_service/tests/test_chat_request_api.py
+Task: Implement multipart form parsing for UserRequest + files in backend_service/app/api/chat_request.py
+```
+
 ---
 
 ## Implementation Strategy
@@ -160,12 +203,13 @@ Task: Implement minimal get/set ConnectionManager in backend_service/app/connect
 
 1. Deliver User Story 1 and validate.
 2. Deliver User Story 2 and validate.
-3. Run polish and release checks.
+3. Deliver User Story 3 and validate.
+4. Run polish and release checks.
 
 ### Parallel Team Strategy
 
 1. Team finishes Setup and Foundational together.
-2. One developer handles User Story 1 while another handles User Story 2.
+2. One developer handles User Story 1 while another handles User Story 2 while a third handles User Story 3 (if available).
 3. Converge for polish and verification.
 
 ---
@@ -175,3 +219,4 @@ Task: Implement minimal get/set ConnectionManager in backend_service/app/connect
 - Keep tasks small and file-specific.
 - Preserve TODO markers where edge cases are explicitly deferred.
 - Keep schema handling minimal with no extra custom validation logic in this iteration.
+- User Story 3 (US3) is optional MVP scope; deploy US1 + US2 first, then add US3 if capacity allows.

@@ -198,6 +198,80 @@ req = UserRequest(
 )
 ```
 
+## 9. Ingest user requests with file uploads
+
+The backend exposes `POST /api/chat/request` for accepting user queries and file uploads from the frontend. Files are saved to the configured directory (default `./uploads`) and a `PlannerRequestEvent` is published to Kafka for planner processing.
+
+### Configure upload directory (optional)
+
+```env
+UPLOAD_DIR=./uploads
+```
+
+The configured directory is automatically added to `.gitignore` to prevent accidental commits of uploaded files.
+
+### Upload a request with files
+
+```bash
+curl -X POST http://localhost:8001/api/chat/request \
+  -F 'request={"user_prompt":"Explain neural networks","user_level":["beginner"],"file_data":null,"sid":"session-123"}' \
+  -F 'files[]=@document1.pdf' \
+  -F 'files[]=@document2.txt'
+```
+
+Expected successful response (200 OK):
+
+```json
+{
+  "message": "Request accepted and queued for planner processing"
+}
+```
+
+On validation failure (400 Bad Request):
+
+```json
+{
+  "error": "Missing required field: user_prompt"
+}
+```
+
+On server error (500 Internal Server Error):
+
+```json
+{
+  "error": "Failed to save uploaded files"
+}
+```
+
+### Verify file upload
+
+Files are saved to `./uploads/` with absolute paths passed to the planner:
+
+```bash
+ls -la ./uploads/
+```
+
+### PlannerRequestEvent schema
+
+The event published to Kafka `planner` topic includes:
+
+```python
+from project.schemas import PlannerRequestEvent
+
+event = PlannerRequestEvent(
+	user_prompt="Explain neural networks",
+	user_level=["beginner"],
+	sid="session-123",
+	file_paths=[
+		"/home/akarx/deep-learn-project/uploads/document1.pdf",
+		"/home/akarx/deep-learn-project/uploads/document2.txt"
+	]
+)
+```
+
+Note: Only absolute file paths are included; no per-file metadata is transmitted.
+
+
 No additional custom validation or exception handling is required for this schema in the current iteration.
 
 > Note: Listener bodies and the full `stream-tokens` emission flow are lightweight stubs in this iteration; edge cases (disconnect cleanup, missing session, auth, back-pressure) are marked TODO.

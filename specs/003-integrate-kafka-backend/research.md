@@ -74,3 +74,34 @@
 - **Decision**: Do not add custom validation or exception-handling logic for `stream-tokens` event body schema and `UserRequest` in this iteration.
 - **Rationale**: Explicitly matches the feature constraint to keep implementation minimal and defer hardening to later TODO tasks (FR-029).
 - **Alternatives considered**: Strict validators now (extra boilerplate and premature complexity).
+
+## Decision 16: User-Request API Endpoint Path and Method
+- **Decision**: Use `POST /api/chat/request` for accepting user requests with optional file uploads from the frontend.
+- **Rationale**: Clear and namespaced under `/api/chat/` for cohesive routing of conversation-related API routes; POST reflects state mutation (storing files and publishing an event).
+- **Alternatives considered**: `/api/requests` (less domain-specific), `/api/user-requests` (more verbose).
+
+## Decision 17: File Upload Constraints and Logging
+- **Decision**: Check for a maximum of 3 files per request; if exceeded, log a warning but do not reject the request.
+- **Rationale**: Satisfies FR-034's requirement for a simple count-based check while avoiding strict validation failures—allows logging of potential misuse without service interruption.
+- **Alternatives considered**: Silent ignore of extra files (insufficient diagnostics), strict 413 rejection (violates spec's simple, non-strict approach).
+
+## Decision 18: PlannerRequestEvent Schema and File Paths
+- **Decision**: Define `PlannerRequestEvent` in `project/schemas.py` with fields `user_prompt`, `user_level` (`list[str]`), `sid`, and `file_paths` (`list[str]` of absolute paths only). No per-file metadata is included.
+- **Rationale**: Meets FR-037 with minimal schema surface; absolute paths are sufficient for the planner to locate files without needing name/size metadata.
+- **Alternatives considered**: Include per-file metadata objects (unnecessary scope), relative paths (ambiguous when planner runs in different environment).
+
+## Decision 19: File Upload Directory Configuration and .gitignore
+- **Decision**: Store uploaded files in a directory configurable via the `UPLOAD_DIR` environment variable, defaulting to `./uploads`. Add `./uploads` to `.gitignore` to prevent accidental commits.
+- **Rationale**: Satisfies FR-032 and FR-033 with standard environment-based configuration and explicit version-control exclusion.
+- **Alternatives considered**: Hard-coded path only (no flexibility), no .gitignore entry (risk of accidental file commits).
+
+## Decision 20: Error Response Structure for User-Request API
+- **Decision**: Use a simple error response structure `{error: "<message>"}` with appropriate HTTP status codes (400 for validation failure, 500 for server errors).
+- **Rationale**: Matches FR-036 and keeps error handling consistent with the spec's stated "simple" approach while still providing diagnostic information.
+- **Alternatives considered**: Complex error objects with error codes and details (over-engineered for current scope), no structured error response (insufficient API clarity).
+
+## Decision 21: File Retention and Cleanup Policy
+- **Decision**: Retain uploaded files indefinitely in the `./uploads` directory in this iteration; cleanup policies and retention strategies are explicitly deferred to future iterations.
+- **Rationale**: Satisfies FR-038's requirement for a simple implementation by removing the cleanup concern from scope; retained files allow the planner to process requests asynchronously without time-pressure.
+- **Alternatives considered**: Auto-cleanup after planner processing (adds tracking complexity), time-based expiration (adds scheduler complexity and requires monitoring).
+

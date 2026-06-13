@@ -26,10 +26,11 @@ class ConnectionManager:
     def get(self, session_id: str) -> Any | None:
         """Return the connection for a session, or ``None`` if absent."""
         return self._connections.get(session_id)
-    
+
     def remove(self, session_id: str) -> None:
         """Remove the connection for a session."""
         if session_id in self._connections:
             del self._connections[session_id]
+
 
 # TODO: Add thread/async safety if accessed from multiple loops.
