@@ -135,6 +135,45 @@ curl -s -X POST http://localhost:8001/api/v1/test-events/rag \
 - Schema defaults are applied where fields are omitted.
 - Final payload is validated against `RAGRequestEvent` before publish.
 
+## 8a. Connect to the WebSocket channel (Socket.IO)
+
+The backend mounts a Socket.IO server on the FastAPI app. The frontend connects as a Socket.IO client and is assigned a `sid`, which IS the application `session_id`.
+
+```python
+import socketio
+
+sio = socketio.Client()
+
+@sio.on("stream-tokens")
+def on_stream_tokens(data):
+    print("stream-tokens:", data)
+
+sio.connect("http://localhost:8001")
+print("session_id (sid):", sio.sid)
+sio.wait()
+```
+
+Shared event names live in `project/events.py` and are importable by both frontend and backend:
+
+```python
+from project.events import WebSocketEvents
+
+print(WebSocketEvents.STREAM_TOKENS.value)  # "stream-tokens"
+```
+
+## 8b. Emit an event to a session from the backend
+
+From backend code, route a payload to a specific session via its `session_id` (== `sid`):
+
+```python
+from backend_service.app.socket import emit_event
+from project.events import WebSocketEvents
+
+await emit_event(WebSocketEvents.STREAM_TOKENS, {"token": "hello"}, session_id)
+```
+
+> Note: Listener bodies and the full `stream-tokens` emission flow are lightweight stubs in this iteration; edge cases (disconnect cleanup, missing session, auth, back-pressure) are marked TODO.
+
 ## 9. Run tests
 
 ```bash

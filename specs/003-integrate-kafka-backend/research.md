@@ -39,3 +39,28 @@
 - **Decision**: Keep startup summary logs at INFO, detailed outcomes at DEBUG, and validate two budgets: startup bootstrap <= 5s and test publish response <= 2s p95 in local dev.
 - **Rationale**: Satisfies observability and performance gates from constitution and spec success criteria.
 - **Alternatives considered**: Minimal logs only (insufficient traceability), no explicit response-time budget (performance gate miss).
+
+## Decision 9: WebSocket Transport
+- **Decision**: Use Socket.IO via `python-socketio` (ASGI) mounted onto the FastAPI app for the frontend WebSocket channel.
+- **Rationale**: Native named-event listeners (`@sio.on(...)`) and `sio.emit(event, data, to=sid)` map directly to the spec's "lightweight listeners + emit named events" design and provide per-connection routing with minimal boilerplate (FR-020).
+- **Alternatives considered**: FastAPI/Starlette native `WebSocket` endpoints (requires a custom event-name dispatch layer), raw ASGI WebSocket (more boilerplate, no built-in event model).
+
+## Decision 10: Shared Event-Name Contract Location
+- **Decision**: Define WebSocket event names in `project/events.py` as a `str` Enum of name constants only (including `stream-tokens`); payload shapes stay in `schemas.py`.
+- **Rationale**: Names are the cross-language contract both frontend and backend must agree on; keeping the shared surface to names only avoids leaking backend-only payload models and keeps `events.py` importable by the frontend (FR-021, FR-022).
+- **Alternatives considered**: Names plus payload Pydantic models (couples frontend to backend models), handler registry metadata (over-engineered for current scope).
+
+## Decision 11: Session Identity and Connection Manager
+- **Decision**: Treat the application `session_id` as identical to the Socket.IO-generated `sid`; a simple `ConnectionManager` class maps `session_id -> connection` with minimal `get`/`set` methods. A user may own multiple independent sessions; each session is routed independently.
+- **Rationale**: All inbound data carries a `session_id`, so keying directly on `sid` removes any translation layer and keeps routing to a single lookup (FR-023, FR-024). Independence avoids cross-session leakage.
+- **Alternatives considered**: Separate app `session_id` mapped to `sid` (extra indirection), `user_id`-keyed many-to-one mapping (sessions are independent here, so not needed), Socket.IO rooms (unnecessary abstraction when `sid` already identifies the target).
+
+## Decision 12: Listener Placement and Emit Signature
+- **Decision**: Place lightweight Socket.IO listeners in a dedicated `backend_service/app/socket.py`, and expose `emit_event(event, payload, session_id)` in the same file to emit a named event to the connection identified by `session_id`. Listeners and `stream-tokens` emission logic are stubbed for later implementation.
+- **Rationale**: Centralizes WebSocket wiring in one file with a single emit entry point routed by `session_id` (== `sid`), matching FR-025 and FR-026 while keeping boilerplate minimal.
+- **Alternatives considered**: `emit_event(event, payload, user_id)` (routing is per-session, not per-user), spreading listeners across modules (harder to locate), fully implementing listeners now (spec defers behavior via TODO).
+
+## Decision 13: Deferred WebSocket Edge Cases
+- **Decision**: Defer disconnect cleanup, missing-`session_id` handling, concurrent-emit ordering/back-pressure, and WebSocket authentication via explicit TODO markers.
+- **Rationale**: Spec FR-027 mandates the simplest approach with minimum boilerplate; deferring non-essential resilience keeps the first iteration small and reviewable.
+- **Alternatives considered**: Implementing full lifecycle/auth now (scope creep against the spec's stated simplicity goal).

@@ -116,6 +116,77 @@
 
 ---
 
+---
+
+### WebSocketEvents
+
+**Purpose**: Shared `project/events.py` module defining WebSocket event-name constants importable by both frontend and backend. Contains names only — no payload models (those stay in `project/schemas.py`).
+
+**Representation**: A `str` Enum so values compare/serialize as plain strings.
+
+| Member | Value | Description |
+|---|---|---|
+| `STREAM_TOKENS` | `"stream-tokens"` | Server → client token stream event; emission logic implemented later (TODO) |
+
+**Validation rules**:
+- Values are stable string literals — renaming a value is a breaking contract change for the frontend.
+- Module import must have no side effects (no Socket.IO or network calls) so the frontend toolchain can read names safely.
+
+**Extension rule**: New WebSocket events are added as new enum members here and referenced by both sides.
+
+---
+
+### ConnectionManager
+
+**Purpose**: Minimal in-memory class mapping a `session_id` to its WebSocket connection so Kafka-driven results can be routed to the correct session.
+
+| Field | Type | Description |
+|---|---|---|
+| `_connections` | `dict[str, Any]` | Maps `session_id` (== Socket.IO `sid`) to the connection/handle used for emitting |
+
+**Methods**:
+
+```
+set(session_id: str, connection: Any) -> None   # register/overwrite a session connection
+get(session_id: str) -> Any | None              # fetch a session connection (None if absent)
+```
+
+**Validation rules**:
+- `session_id` IS the Socket.IO-generated `sid`; no separate identifier is introduced.
+- Sessions are independent — a single user may own multiple sessions, each stored under its own key.
+- No complex exception handling or lifecycle logic in this iteration.
+
+**TODO (deferred)**:
+- Removal/cleanup on disconnect.
+- Handling `get` for an unknown `session_id` beyond returning `None`.
+- Thread/async safety and back-pressure.
+
+---
+
+### SocketModule
+
+**Purpose**: The dedicated `backend_service/app/socket.py` file that owns the Socket.IO server instance, lightweight event listeners, and the emit entry point.
+
+**Key elements**:
+
+| Element | Signature | Description |
+|---|---|---|
+| `sio` | `socketio.AsyncServer` (ASGI) | Socket.IO server mounted onto the FastAPI app in `main.py` |
+| `connect` listener | `async def connect(sid, environ, auth)` | Lightweight; registers `sid` in `ConnectionManager` (implemented later — TODO) |
+| `disconnect` listener | `async def disconnect(sid)` | Lightweight stub; cleanup deferred (TODO) |
+| `emit_event` | `emit_event(event, payload, session_id) -> None` | Emits `event` with `payload` to the connection identified by `session_id` (== `sid`) |
+
+**Validation rules**:
+- `event` values come from `project/events.py` (e.g. `STREAM_TOKENS`).
+- `emit_event` routes solely by `session_id`; `user_id` is not used for routing.
+- Listeners are lightweight stubs; full behavior (including `stream-tokens` emission flow) is implemented later.
+
+**TODO (deferred)**:
+- Full listener bodies and `stream-tokens` emission logic.
+- Missing-session handling, authentication, concurrent-emit ordering.
+
+---
+
 ### TopicRegistry (read-only, external)
 
 **Purpose**: The `project/topics` module acting as the authoritative list of Kafka topic names required by the system.

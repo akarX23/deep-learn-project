@@ -25,6 +25,11 @@
 
 - Q: Where should the default input factory for the test-event API live? → A: In `backend_service/app/utils.py` — one level above the `api/` package, shared across all app modules.
 - Q: What should the `request_id` default value be in the factory? → A: Generate a fresh `uuid4`-based string per call (e.g. `f"test-{uuid4().hex}"`) to guarantee uniqueness.
+- Q: Which WebSocket transport should the backend use for frontend connections? → A: Socket.IO via `python-socketio` mounted on the FastAPI ASGI app — native named-event listeners and `emit` match the design.
+- Q: How are users and sessions related for event routing? → A: A user may own multiple sessions, but each session is independent; all inbound data carries a `session_id` and is routed independently by it.
+- Q: How does the application `session_id` relate to the Socket.IO connection id? → A: They are the same — the `session_id` IS the Socket.IO-generated `sid`.
+- Q: What should the shared `project/events.py` define? → A: Event-name string constants only (a `str` Enum of event names such as `stream-tokens`); payload shapes stay in `schemas.py`.
+- Q: What is the emit function signature? → A: `emit_event(event, payload, session_id)` — routed by `session_id` (== `sid`); `user_id` is not needed for routing.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -44,6 +49,23 @@ As a platform developer, I need the backend service to automatically create all 
 
 ---
 
+### User Story 2 - Real-Time WebSocket Channel for Frontend Session Routing (Priority: P2)
+
+As a frontend client, I need to connect to the backend over a WebSocket so that asynchronous results produced from Kafka events can be streamed back to my specific session in real time, without polling.
+
+**Why this priority**: User requests are asynchronous and processed via Kafka; results must be routed back to the originating session. A WebSocket channel with per-session routing is the delivery mechanism that makes async agent responses usable by the frontend.
+
+**Independent Test**: Can be tested by connecting a Socket.IO client to the backend, capturing the assigned `session_id` (`sid`), and verifying that a payload emitted via `emit_event` with that `session_id` is delivered only to that connection.
+
+**Acceptance Scenarios**:
+
+1. **Given** the backend service is running, **When** a frontend client opens a Socket.IO connection, **Then** the connection is registered in the connection manager keyed by the Socket.IO-generated `session_id` (`sid`).
+2. **Given** an active session is registered, **When** the backend calls `emit_event(event, payload, session_id)`, **Then** the payload is emitted to that session only and not to other connected sessions.
+3. **Given** a single user has opened multiple independent sessions, **When** an event is emitted for one `session_id`, **Then** only that session receives it — sessions are handled independently.
+4. **Given** a connected session, **When** the backend emits a `stream-tokens` event, **Then** the event name and payload match the constant defined in `project/events.py`.
+
+---
+
 ### Edge Cases
 
 - One or more topics from the registry already exist in Kafka — creation must be idempotent.
@@ -51,6 +73,10 @@ As a platform developer, I need the backend service to automatically create all 
 - Kafka admin connection is established but topic creation encounters a transient broker error — current behavior logs and continues; full error-handling strategy is deferred as a TODO.
 - Topics registry grows: new entries added in future must be created automatically on next startup without code changes beyond registry updates.
 - `rag` test-event publish succeeds but broker metadata is partially unavailable — API still returns normalized success with nullable metadata fields.
+- A `session_id` is not present in the connection manager when `emit_event` is called — handling deferred as a TODO (simplest approach for now).
+- A client disconnects mid-stream — cleanup/removal from the connection manager deferred as a TODO.
+- Concurrent emits to the same session — ordering/back-pressure concerns deferred as a TODO.
+- Authentication/authorization of WebSocket connections — deferred as a TODO.
 
 ## Requirements *(mandatory)*
 
@@ -75,6 +101,14 @@ As a platform developer, I need the backend service to automatically create all 
 - **FR-017**: The backend service MUST use a single shared producer owned by the Kafka admin layer; the test-events API MUST reuse that producer rather than constructing a separate one in main.py.
 - **FR-018**: A per-topic default input factory function MUST be provided in `backend_service/app/utils.py`; each factory returns a fully initialized, type-safe instance of the topic's input schema with sensible default values and no validators or exception handling.
 - **FR-019**: The `rag` default factory in `backend_service/app/utils.py` MUST return a `RAGRequestEvent` with a dynamically generated `request_id` (using `uuid4`) and all other required fields set to representative default values.
+- **FR-020**: The backend service MUST expose a WebSocket interface using Socket.IO (`python-socketio`) mounted on the FastAPI ASGI app, to which the frontend connects.
+- **FR-021**: All shared WebSocket event names MUST be defined in a `project/events.py` module as a string Enum of event-name constants, importable by both frontend and backend; payload shapes MUST NOT be added to this module.
+- **FR-022**: `project/events.py` MUST define a `stream-tokens` event constant; its emission logic is to be implemented later (TODO).
+- **FR-023**: The backend service MUST provide a simple connection manager class that maintains a mapping of `session_id` to connection, exposing minimal `get` and `set` functions; complex exception handling and lifecycle logic are deferred as TODOs.
+- **FR-024**: The connection manager MUST key connections by `session_id`, where the `session_id` IS the Socket.IO-generated `sid`. Sessions MUST be treated independently even when a single user owns multiple sessions.
+- **FR-025**: WebSocket event listeners MUST be placed in a dedicated `socket.py` file as lightweight listeners; their full behavior is to be implemented later (TODO).
+- **FR-026**: `socket.py` MUST provide an `emit_event(event, payload, session_id)` function that emits the given event with the payload to the connection identified by `session_id`.
+- **FR-027**: The WebSocket integration MUST favor the simplest approach with minimum boilerplate; advanced exceptional handling and edge cases MUST be deferred via TODO markers.
 
 ### Key Entities
 
@@ -84,6 +118,9 @@ As a platform developer, I need the backend service to automatically create all 
 - **TestEventPublishResult**: API response payload containing request identifier, target topic, publish status, and an inline optional Kafka metadata object; no dedicated metadata schema is introduced.
 - **KafkaProducerHandle**: Shared producer instance exposed by the Kafka admin layer and reused by the test-events API.
 - **TestEventDefaultFactory**: Pure functions in `backend_service/app/utils.py`, one per topic, that return a fully initialized default instance of each topic's input schema. No validators, no exception handling — type-safe initialized values only. The `rag` factory returns `RAGRequestEvent` with a fresh `uuid4`-based `request_id` on every call.
+- **WebSocketEvents**: The shared `project/events.py` module — a string Enum of WebSocket event-name constants (including `stream-tokens`) importable by both frontend and backend. Contains names only, no payload models.
+- **ConnectionManager**: A simple class mapping `session_id` (== Socket.IO `sid`) to its connection, with minimal `get`/`set` functions and no complex logic. Sessions are independent even when owned by the same user.
+- **SocketModule**: The dedicated `socket.py` file holding lightweight Socket.IO event listeners (implemented later) and the `emit_event(event, payload, session_id)` function that routes a payload to a session.
 
 ## Success Criteria *(mandatory)*
 
@@ -95,6 +132,9 @@ As a platform developer, I need the backend service to automatically create all 
 - **SC-004**: Startup logs always include a record of the topic bootstrap attempt and its outcome.
 - **SC-005**: 100% of successful `rag` test-event API calls return a normalized publish-result envelope with request_id, topic, and publish_status.
 - **SC-006**: For successful `rag` test-event API calls, Kafka broker metadata fields are returned whenever the producer result exposes them.
+- **SC-007**: A frontend Socket.IO client can establish a WebSocket connection to the backend and be registered in the connection manager keyed by its `session_id` (`sid`).
+- **SC-008**: A payload emitted via `emit_event(event, payload, session_id)` is delivered only to the connection mapped to that `session_id` and to no other session.
+- **SC-009**: The shared `project/events.py` defines the `stream-tokens` event constant and is importable by both frontend and backend without backend-only dependencies.
 
 ## Assumptions
 
