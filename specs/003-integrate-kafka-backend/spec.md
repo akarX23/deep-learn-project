@@ -1,124 +1,79 @@
-# Feature Specification: Kafka Backend Integration Service
+# Feature Specification: Backend Kafka Startup Topic Bootstrap
 
-**Feature Branch**: `[003-integrate-kafka-backend]`  
-**Created**: 2026-06-08  
+**Feature Branch**: `001-build-rag-retrieval-agent`  
+**Created**: 2026-06-12  
 **Status**: Draft  
-**Input**: User description: "Integrate a Backend microservice as a separate folder in the project root. The backend service should be a FAST API service that needs to connect to a running Kafka cluster. The various env variables for cluster connectivity should be initialized in the .env.example. The backend service should initialize the kafka admin object and connect to the Kafka cluster on start_up, with a retry count and retry timeout (all from env). The backend service should expose an API to create a topic which the other agents and services can use. In the project root, a docker-compose.yaml should be initialized with a Kafka service only, along with any environment variables required."
+**Input**: User description: "The backend service should get the topic list from project/topics and create all the topics on start-up. Any additional validation checks can be put as TODOs. The core functionality of creating topics only should be integrated into the start-up function."
 
 ## Clarifications
 
 ### Session 2026-06-08
 
 - Q: How should Kafka environment variables be loaded at runtime? → A: Load from `.env.local` when present, then allow already-initialized process environment variables to override.
-- Q: What additional local infrastructure should docker-compose include? → A: Include Kafka UI using `provectuslabs/kafka-ui:latest` and connect it to the Kafka container.
-- Q: How should FastAPI exceptions be handled? → A: Add global exception handlers for validation errors, HTTP exceptions, and unhandled exceptions that always return one structured error payload shape.
-- Q: Which FastAPI lifecycle mechanism should be used? → A: Use FastAPI lifespan events only; do not use deprecated lifecycle APIs such as `on_event` handlers.
+- Q: Which FastAPI lifecycle mechanism should be used? → A: Use FastAPI lifespan events only; do not use deprecated lifecycle APIs.
 
-### Session 2026-06-09
+### Session 2026-06-12
 
-- Q: Which Apache Kafka image tag should docker-compose use? → A: Use `apache/kafka:4.2.1`.
+- Q: Where should topic names be sourced? → A: Read from `project/topics` module (the centralized topic registry) — not from environment variables or external APIs.
+- Q: What happens if a topic already exists? → A: Topic creation should be idempotent — already-existing topics are not treated as errors.
+- Q: What level of validation is required now? → A: Only the core topic-creation behavior is required now; advanced validation (result inspection, per-topic error handling, health assertions) is deferred with TODO markers.
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - Initialize Backend Kafka Connectivity (Priority: P1)
+### User Story 1 - Bootstrap Kafka Topics from Project Registry on Startup (Priority: P1)
 
-As a platform developer, I need a dedicated backend service in the project root that establishes Kafka admin connectivity during startup so other services can rely on a ready messaging control plane.
+As a platform developer, I need the backend service to automatically create all required Kafka topics on startup by reading them from the shared project topic registry, so that no external provisioning step is needed before agents can communicate.
 
-**Why this priority**: Startup Kafka connectivity is the prerequisite for any topic-management workflow and cross-service integration.
+**Why this priority**: Without the required topics present, agents cannot produce or consume events. Automating topic creation on startup eliminates a manual setup step and makes the system self-provisioning.
 
-**Independent Test**: Can be fully tested by starting the backend service with valid Kafka environment values and verifying successful startup after initializing Kafka admin with configured retry behavior.
-
-**Acceptance Scenarios**:
-
-1. **Given** valid Kafka connectivity environment variables, **When** the backend service starts, **Then** it initializes Kafka admin and reports startup success.
-2. **Given** an unavailable Kafka cluster at startup, **When** the service attempts connection, **Then** it retries using configured retry count and retry timeout values before reporting startup failure.
-3. **Given** missing required Kafka connection settings, **When** the service starts, **Then** it fails fast with clear configuration error messaging.
-
----
-
-### User Story 2 - Create Kafka Topics via API (Priority: P2)
-
-As an internal operator or automation client, I need an API endpoint to create Kafka topics so topic provisioning is centralized without using this backend as a message relay.
-
-**Why this priority**: Topic provisioning enables practical integration for other agents and microservices after connectivity is in place.
-
-**Independent Test**: Can be tested by calling the topic-creation API with a valid topic name and confirming the topic is created; no message routing through this backend is required.
+**Independent Test**: Can be fully tested by starting the backend service against a connected Kafka cluster and verifying that all topics returned by `project/topics` are present in the cluster after startup completes.
 
 **Acceptance Scenarios**:
 
-1. **Given** a connected backend service and a new valid topic request, **When** the API is called, **Then** the topic is created successfully and a success response is returned.
-2. **Given** a request for an already existing topic, **When** the API is called, **Then** the response indicates the topic already exists without causing service failure.
-3. **Given** an invalid topic request payload, **When** the API is called, **Then** the response returns a validation error with actionable details.
-
----
-
-### User Story 3 - Provide Local Kafka Infrastructure Bootstrap (Priority: P3)
-
-As a developer, I need a root-level Docker Compose file that runs Kafka plus Kafka UI infrastructure and aligned environment examples so I can bring up and inspect local messaging dependencies consistently.
-
-**Why this priority**: Local infrastructure support improves onboarding and repeatability but can follow after service and API behavior are defined.
-
-**Independent Test**: Can be tested by running Docker Compose from project root and validating both Kafka and Kafka UI start with documented environment values and connectivity.
-
-**Acceptance Scenarios**:
-
-1. **Given** Docker is available, **When** Docker Compose is run from project root, **Then** Kafka and Kafka UI services start successfully with required runtime variables and UI-to-Kafka connectivity.
-2. **Given** the environment example file, **When** a developer configures local values from it, **Then** the backend service can use those variables to attempt Kafka startup connectivity.
+1. **Given** a connected Kafka cluster and a populated `project/topics` registry, **When** the backend service starts, **Then** all topics returned by the registry are created before the service becomes ready.
+2. **Given** topics that already exist in Kafka, **When** the backend service starts, **Then** the startup topic-creation step completes without errors — existing topics are not treated as failures.
+3. **Given** a Kafka cluster that is not reachable, **When** the backend service starts, **Then** Kafka admin connection is retried per configured limits and startup fails with a clear message if the cluster remains unavailable.
 
 ---
 
 ### Edge Cases
 
-- Kafka cluster becomes reachable only after several retries but before retry exhaustion.
-- Kafka cluster remains unavailable beyond retry limit.
-- Retry count or retry timeout values are invalid (negative, zero where disallowed, or non-numeric).
-- Topic creation request contains unsupported topic names or invalid partition/replication settings.
-- Topic creation is requested concurrently for the same topic.
-- Kafka admin initialization succeeds but transient broker errors occur during topic creation.
+- One or more topics from the registry already exist in Kafka — creation must be idempotent.
+- The project topic registry returns an empty list — startup proceeds without creating any topics.
+- Kafka admin connection is established but topic creation encounters a transient broker error — current behavior logs and continues; full error-handling strategy is deferred as a TODO.
+- Topics registry grows: new entries added in future must be created automatically on next startup without code changes beyond registry updates.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: The system MUST include a dedicated backend microservice as a separate top-level folder in the project root.
-- **FR-002**: The backend microservice MUST expose only the topic-creation HTTP API in this feature scope.
-- **FR-003**: The backend microservice MUST load Kafka cluster connectivity settings from `.env.local` when present and support already-initialized process environment variables.
-- **FR-004**: The backend microservice MUST initialize a Kafka admin client during service startup.
-- **FR-005**: The backend microservice MUST attempt Kafka startup connection using configurable retry count and retry timeout values sourced from environment variables.
-- **FR-006**: The backend microservice MUST return clear startup failure behavior when Kafka connectivity cannot be established within configured retry limits.
-- **FR-007**: The backend microservice MUST provide a single API endpoint to create Kafka topics.
-- **FR-008**: The topic-creation API MUST validate input and return structured errors for invalid requests.
-- **FR-009**: The topic-creation API MUST handle already-existing topics safely without crashing the service.
-- **FR-010**: The project root MUST contain a `docker-compose.yaml` defining Kafka and Kafka UI services, with Kafka using image `apache/kafka:4.2.1` and Kafka UI using image `provectuslabs/kafka-ui:latest` configured to connect to the Kafka service.
-- **FR-011**: The environment documentation MUST define all required Kafka connectivity and retry variables used by the backend service and include `.env.local` examples.
-- **FR-012**: The system MUST define UX consistency requirements, including predictable API response structure and clear error messaging for startup and topic creation flows.
-- **FR-013**: The system MUST define measurable performance requirements for startup retry handling and topic-creation response latency under expected local-development load.
-- **FR-014**: The backend service MUST use FastAPI lifespan events (non-deprecated API) to manage startup Kafka-admin initialization and shutdown resource cleanup, and MUST NOT use deprecated lifecycle handlers such as `on_event`.
-- **FR-015**: The backend service MUST implement global FastAPI exception handlers for request validation errors (422), HTTP exceptions (4xx/5xx), and unhandled exceptions (500), and MUST return a single structured error response shape across these paths.
+- **FR-001**: The backend service MUST read the full list of required Kafka topics from the shared `project/topics` registry module on startup.
+- **FR-002**: The backend service MUST create all topics returned by `project/topics` using the Kafka admin client during the startup lifecycle function.
+- **FR-003**: The topic creation step MUST be idempotent — topics that already exist MUST NOT cause startup to fail.
+- **FR-004**: The topic creation step MUST be integrated into the existing FastAPI lifespan startup function, after Kafka admin connectivity is established.
+- **FR-005**: The backend service MUST use FastAPI lifespan events (non-deprecated API) to manage the startup sequence: admin connect → topic bootstrap → yield → admin close.
+- **FR-006**: Topic-creation logic MUST NOT include advanced per-topic validation, result assertion, or health-check behavior in this iteration — these concerns MUST be marked as TODO for later implementation.
+- **FR-007**: The backend service MUST log a clear message for the topic bootstrap step at startup, including the list of topics attempted.
+- **FR-008**: The backend service MUST continue startup even if topic bootstrap encounters non-fatal errors, and MUST log any such errors clearly.
 
-### Key Entities *(include if feature involves data)*
+### Key Entities
 
-- **KafkaConnectionConfig**: Environment-driven configuration containing broker endpoints, authentication/security settings (if used), retry count, and retry timeout.
-- **StartupConnectionState**: Service startup state representing Kafka admin initialization progress, retry attempts, success state, or terminal failure.
-- **TopicCreateRequest**: API payload describing topic name and optional provisioning attributes required for creation.
-- **TopicCreateResult**: API response entity indicating topic creation success, already-exists condition, or validation/processing failure.
+- **TopicRegistry**: The `project/topics` module providing the list of topic names the system requires; the backend service reads from it at startup without modification.
+- **StartupTopicBootstrapResult**: The outcome of the startup topic-creation pass — topics created, topics already existing, and any errors encountered.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: 100% of backend service startups with valid Kafka configuration initialize Kafka admin connectivity successfully.
-- **SC-002**: 100% of backend service startups with unreachable Kafka clusters stop retrying at configured limits and return explicit startup failure diagnostics.
-- **SC-003**: At least 95% of valid topic-creation API calls complete successfully within 2 seconds in local development conditions.
-- **SC-004**: 100% of invalid topic-creation requests return structured validation errors without service termination.
-- **SC-005**: 100% of duplicate topic-creation requests return deterministic already-exists outcomes.
-- **SC-006**: Developers can start local Kafka and Kafka UI infrastructure from the root `docker-compose.yaml` in a single command, reach running Kafka in under 2 minutes, and access Kafka UI connected to the Kafka service.
-- **SC-007**: 100% of request-validation, HTTP, and unhandled API failures return the documented structured error payload shape without crashing the service.
+- **SC-001**: 100% of backend service startups with a reachable Kafka cluster result in all topics from `project/topics` being present in the cluster after startup completes.
+- **SC-002**: 100% of backend service startups where all required topics already exist complete the topic bootstrap step without errors or service interruption.
+- **SC-003**: The topic bootstrap step completes within 5 seconds in a local development environment with a connected Kafka cluster.
+- **SC-004**: Startup logs always include a record of the topic bootstrap attempt and its outcome.
 
 ## Assumptions
 
-- Kafka cluster details for each environment are provided externally through environment variables and not hardcoded.
-- Initial scope supports one Kafka cluster target per service instance.
-- Authentication and TLS settings, if needed, are provided through environment variables in the same configuration model.
-- This feature focuses on backend service integration and topic provisioning only; message production/consumption APIs are out of scope for this version.
-- This backend is not used for inter-service communication or message forwarding; it is limited to Kafka admin initialization and topic creation.
+- The `project/topics` registry returns a stable, deterministic list of topic names; the backend service treats this list as authoritative and does not filter or transform it.
+- Topic partition count and replication factor use safe defaults appropriate for local and development environments; production tuning is out of scope.
+- The Kafka admin connectivity and retry behavior from the prior feature iteration remain unchanged; this spec only adds the topic bootstrap step on top.
+- Authentication/TLS settings for Kafka are already handled in environment configuration and do not require changes in this scope.
+- This feature covers topic creation at startup only; topic deletion, listing, and runtime topic management APIs are out of scope.

@@ -111,7 +111,27 @@ Latest local results:
 - `.venv/bin/python -m compileall project rag_agent` passed.
 - `.venv/bin/python -m pytest -q rag_agent/tests/test_worker_runtime.py rag_agent/tests/test_kafka_integration.py` passed.
 
-## 10. Scope reminder
+## 10. Module structure after simplification
 
-This phase focuses on worker runtime simplification and typed ingest/dispatch behavior.
-Planner logic and advanced handler validation/metrics are out of scope.
+```text
+rag_agent/
+├── agent.py          # Basic exception handling only; TODOs for inner guards
+├── handlers.py       # Dispatch-focused; no StructuredLogger; TODOs for validation/metrics
+├── kafka.py          # Kafka transport and metadata checks
+├── worker.py         # Consumer loop thread entry point
+├── utils/
+│   ├── __init__.py
+│   ├── helpers.py    # Pure helpers + merged LLM config + call_llm/call_embedding
+│   ├── llm_client.py # Simplified basic LLM/embedding wrappers (TODOs for guards)
+│   ├── prompts.py    # Prompt templates
+│   └── tools.py      # PDF extraction tools
+└── tests/
+```
+
+Deleted in this phase:
+- `rag_agent/service.py` — compatibility shim removed
+- `rag_agent/logging.py` — `StructuredLogger` replaced by `logging.getLogger(__name__)`
+
+## 11. Scope reminder
+
+This phase focuses on module simplification, standard logging, `utils/` restructuring, and basic exception handling. Planner logic, advanced handler validation/metrics, and credential guards in LLM calls are deferred as TODOs.

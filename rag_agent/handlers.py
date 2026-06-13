@@ -5,10 +5,13 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime, timezone
 
+import logging
+
 from project.schemas import RAGAgentInput, RAGCompletionEvent, RAGRequestEvent, RAGAgentOutput
 from rag_agent.agent import RAGAgent
 from rag_agent.kafka import KafkaProducerProtocol, publish_rag_complete
-from rag_agent.logging import StructuredLogger
+
+logger = logging.getLogger(__name__)
 
 
 class RAGRequestEventHandler:
@@ -19,12 +22,10 @@ class RAGRequestEventHandler:
         agent_factory: Callable[[], RAGAgent] = RAGAgent,
         publisher: Callable[[KafkaProducerProtocol, RAGCompletionEvent], None] = publish_rag_complete,
         clock: Callable[[], datetime] | None = None,
-        lifecycle_logger: StructuredLogger | None = None,
     ) -> None:
         self._agent_factory = agent_factory
         self._publisher = publisher
         self._clock = clock or (lambda: datetime.now(timezone.utc))
-        self._logger = lifecycle_logger or StructuredLogger()
 
     def parse_event(self, payload: dict[str, object]) -> RAGRequestEvent:
         """Parse inbound payload into request event schema."""
@@ -67,13 +68,8 @@ class RAGRequestEventHandler:
         try:
             event = self.parse_event(payload)
         except Exception as exc:
-            self._logger.emit(
-                request_id=raw_request_id,
-                stage="error",
-                level="ERROR",
-                message="Rejected invalid RAG request event",
-                metadata={"failure_stage": "validation", "error": str(exc)},
-            )
+            logger.error("rejected invalid RAG request event request_id=%s error=%s", raw_request_id, exc)
+            # TODO: Add specific exception handling for validation errors
             return None
 
         started_at = self._clock()
@@ -83,24 +79,14 @@ class RAGRequestEventHandler:
             file_paths=event.file_paths,
         )
         agent = self._agent_factory()
-        self._logger.emit(
-            request_id=event.request_id,
-            stage="processing_started",
-            message="Starting RAG pipeline execution",
-            metadata={"file_count": len(event.file_paths)},
-        )
+        logger.info("processing_started request_id=%s file_count=%d", event.request_id, len(event.file_paths))
         # TODO: Add timing and throughput metrics counters in a follow-up task.
         try:
             result = agent.run(request)
         except Exception as exc:
             completed_at = self._clock()
-            self._logger.emit(
-                request_id=event.request_id,
-                stage="error",
-                level="ERROR",
-                message="RAG pipeline execution failed",
-                metadata={"failure_stage": "processing", "error": str(exc)},
-            )
+            logger.error("processing_failed request_id=%s error=%s", event.request_id, exc)
+            # TODO: Add specific exception handling for pipeline failures
             completion_event = RAGCompletionEvent(
                 request_id=event.request_id,
                 session_ctx=event.session_ctx,
@@ -117,31 +103,16 @@ class RAGRequestEventHandler:
         else:
             completed_at = self._clock()
             completion_event = self.build_completion_event(event, result, started_at, completed_at)
-            self._logger.emit(
-                request_id=event.request_id,
-                stage="processing_completed",
-                message="RAG pipeline execution completed",
-                metadata={"status": completion_event.status},
-            )
+            logger.info("processing_completed request_id=%s status=%s", event.request_id, completion_event.status)
 
         if producer is not None:
             try:
                 self._publisher(producer, completion_event)
             except Exception as exc:
-                self._logger.emit(
-                    request_id=event.request_id,
-                    stage="error",
-                    level="ERROR",
-                    message="Failed to publish RAG completion event",
-                    metadata={"failure_stage": "publish", "error": str(exc)},
-                )
+                logger.error("publish_failed request_id=%s error=%s", event.request_id, exc)
+                # TODO: Add specific exception handling for publish failures
             else:
-                self._logger.emit(
-                    request_id=event.request_id,
-                    stage="publish_completed",
-                    message="Published RAG completion event",
-                    metadata={"status": completion_event.status},
-                )
+                logger.info("publish_completed request_id=%s status=%s", event.request_id, completion_event.status)
         return completion_event
 
 

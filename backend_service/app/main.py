@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from backend_service.app.api.topics import router as topics_router
 from backend_service.app.config import KafkaSettings
 from backend_service.app.kafka_admin import KafkaAdminService
+from project.topics import get_all_topic_names
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -43,6 +44,17 @@ def create_app(
                         f"Kafka startup connection failed after {max_attempts} attempts: {last_error}"
                     )
                 time.sleep(resolved_settings.startup_retry_timeout_seconds)
+
+        # Bootstrap topics from project registry
+        topic_names = get_all_topic_names()
+        logger.info("Bootstrapping Kafka topics: %s", topic_names)
+        result = app.state.kafka_admin.bootstrap_topics(topic_names)
+        logger.info(
+            "Topic bootstrap complete: %d created, %d already existed, %d errors",
+            len(result.created),
+            len(result.already_existed),
+            len(result.errors),
+        )
 
         try:
             yield

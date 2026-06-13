@@ -12,6 +12,10 @@ Simplify the RAGRequestEventHandler by only focusing on ingesting Kafka events a
 ### Session 2026-06-12
 
 - Q: Should this update create a new branch or a new feature directory? → A: No. Stay on current branch and update current feature directory in place.
+- Q: Should logging use a dedicated logger class or standard module logging? → A: Use standard `logging` module with `basicConfig(...)` and per-file `logging.getLogger(__name__)`; remove dedicated logger class.
+- Q: How should the runtime/module layout be simplified? → A: Remove `service.py`; add a `utils/` directory and place helper-oriented modules there (`helpers.py`, `llm_client.py`, `prompts.py`, `tools.py`).
+- Q: How should LLM and config logic be structured? → A: Simplify LLM operations to basic embedding + completion calls, defer complex validation/exception logic as TODOs, and consolidate `llm_client` + `config` responsibilities into `helpers.py`.
+- Q: How should handler and agent error handling be scoped? → A: Keep only basic exception handling in request handler and `agent.py`; defer extensive validation/error orchestration as explicit TODOs.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -82,13 +86,19 @@ As a maintainer, I need a simplified request handler that focuses on ingesting K
 - **FR-005**: If required topics are missing at startup, the system MUST log a clear actionable warning and continue starting.
 - **FR-006**: The system MUST consume request events from topic `rag` and dispatch them to the existing RAG pipeline path.
 - **FR-007**: The system MUST publish completion events to topic `rag-complete` after each processing attempt reaches terminal state.
-- **FR-008**: The request handler MUST prioritize ingestion and dispatch behavior; non-critical validation and metrics work MAY be deferred and explicitly marked for later implementation.
+- **FR-008**: The request handler MUST prioritize ingestion and dispatch behavior with only basic exception handling in this iteration; advanced validation, metrics, and deeper error orchestration MUST be deferred and marked with TODOs.
 - **FR-009**: Public function interfaces in the worker, Kafka gateway, and handler modules MUST use explicit typed inputs and outputs and SHOULD avoid untyped generic placeholders.
 - **FR-010**: The worker MUST continue processing after single-event failures and MUST log error stages without terminating the process.
 - **FR-011**: The system MUST support clean shutdown by stopping the consumer loop thread and closing Kafka producer/consumer resources.
-- **FR-012**: The system MUST define stable event contract expectations for inbound request and outbound completion messages.
-- **FR-013**: The system MUST define measurable performance and reliability expectations for poll-to-completion throughput and emission success.
-- **FR-014**: The system MUST define observability requirements for lifecycle stages across startup checks, consume, process, publish, and failures.
+- **FR-012**: The runtime MUST remove non-functional `service.py` from active structure and rely on a simplified worker-centric module layout.
+- **FR-013**: The module structure MUST include a `utils/` directory that contains helper-oriented files, including `helpers.py`, `llm_client.py`, `prompts.py`, and `tools.py`.
+- **FR-014**: LLM integration MUST be simplified to essential embedding and completion calls only; complex validation and exception handling in that path MUST be deferred as TODOs.
+- **FR-015**: Configuration loading MUST be simplified to a single env-read function that returns a config object, with advanced config validation deferred as TODOs.
+- **FR-016**: The design SHOULD consolidate `llm_client` and `config` responsibilities into `helpers.py` to reduce indirection, while preserving core pipeline behavior.
+- **FR-017**: The `agent.py` flow MUST keep basic exception handling only in this phase, with extended exception taxonomy, retry policy, and deeper validation explicitly deferred as TODOs.
+- **FR-018**: The system MUST define stable event contract expectations for inbound request and outbound completion messages.
+- **FR-019**: The system MUST define measurable performance and reliability expectations for poll-to-completion throughput and emission success.
+- **FR-020**: The system MUST define observability requirements for lifecycle stages across startup checks, consume, process, publish, and failures.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -115,4 +125,5 @@ As a maintainer, I need a simplified request handler that focuses on ingesting K
 - Kafka cluster credentials and connectivity are available at worker startup.
 - Existing RAG pipeline behavior remains unchanged; this feature focuses on runtime structure and dispatch flow.
 - Deferred validation/metrics TODOs are acceptable for this phase as long as they are explicitly tracked.
+- Simplification and consolidation of module responsibilities are prioritized over introducing new abstraction layers in this iteration.
 - Current branch and feature directory remain unchanged for this update.

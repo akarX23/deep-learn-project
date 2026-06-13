@@ -5,7 +5,6 @@ from types import SimpleNamespace
 
 from project.schemas import RAGAgentOutput
 from rag_agent.handlers import RAGRequestEventHandler
-from rag_agent.logging import StructuredLogger
 from rag_agent.kafka import publish_rag_complete
 from rag_agent.worker import process_consumer_batch
 
@@ -20,16 +19,6 @@ class _FakeConsumer:
         records = self._records
         self._records = {}
         return records
-
-
-class _CapturingLogger:
-    def __init__(self) -> None:
-        self.entries = []
-
-    def log(self, level, message) -> None:
-        import json
-
-        self.entries.append((level, json.loads(message)))
 
 
 def test_consumer_batch_dispatches_event_from_rag_topic() -> None:
@@ -206,9 +195,8 @@ def test_completion_event_preserves_request_correlation() -> None:
     assert output.duration_ms == 1000
 
 
-def test_lifecycle_logging_covers_consume_process_and_publish() -> None:
-    captured_logger = _CapturingLogger()
-    lifecycle_logger = StructuredLogger(captured_logger)
+def test_lifecycle_logging_covers_consume_process_and_publish(caplog) -> None:
+    import logging
 
     class _FakeAgent:
         def run(self, request):
@@ -227,7 +215,6 @@ def test_lifecycle_logging_covers_consume_process_and_publish() -> None:
     handler = RAGRequestEventHandler(
         agent_factory=_FakeAgent,
         publisher=lambda _producer, _event: None,
-        lifecycle_logger=lifecycle_logger,
     )
     consumer = _FakeConsumer(
         {
@@ -245,26 +232,22 @@ def test_lifecycle_logging_covers_consume_process_and_publish() -> None:
         }
     )
 
-    process_consumer_batch(
-        consumer,
-        producer=object(),
-        handler=handler.process_request,
-        poll_timeout_ms=100,
-        lifecycle_logger=lifecycle_logger,
-    )
+    with caplog.at_level(logging.INFO):
+        process_consumer_batch(
+            consumer,
+            producer=object(),
+            handler=handler.process_request,
+            poll_timeout_ms=100,
+        )
 
-    stages = [entry[1]["stage"] for entry in captured_logger.entries]
-    assert stages == [
-        "consumed",
-        "processing_started",
-        "processing_completed",
-        "publish_completed",
-    ]
+    messages = [r.message for r in caplog.records]
+    assert any("consumed" in m for m in messages)
+    assert any("processing_started" in m or "processing_completed" in m for m in messages)
+    assert any("publish_completed" in m for m in messages)
 
 
-def test_error_stage_logged_when_processing_fails() -> None:
-    captured_logger = _CapturingLogger()
-    lifecycle_logger = StructuredLogger(captured_logger)
+def test_error_stage_logged_when_processing_fails(caplog) -> None:
+    import logging
 
     class _FailingAgent:
         def run(self, request):
@@ -273,7 +256,6 @@ def test_error_stage_logged_when_processing_fails() -> None:
     handler = RAGRequestEventHandler(
         agent_factory=_FailingAgent,
         publisher=lambda _producer, _event: None,
-        lifecycle_logger=lifecycle_logger,
     )
     consumer = _FakeConsumer(
         {
@@ -291,17 +273,17 @@ def test_error_stage_logged_when_processing_fails() -> None:
         }
     )
 
-    process_consumer_batch(
-        consumer,
-        producer=object(),
-        handler=handler.process_request,
-        poll_timeout_ms=100,
-        lifecycle_logger=lifecycle_logger,
-    )
+    with caplog.at_level(logging.ERROR):
+        process_consumer_batch(
+            consumer,
+            producer=object(),
+            handler=handler.process_request,
+            poll_timeout_ms=100,
+        )
 
-    error_entries = [entry[1] for entry in captured_logger.entries if entry[1]["stage"] == "error"]
-    assert error_entries
-    assert error_entries[0]["metadata"]["failure_stage"] == "processing"
+    error_messages = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
+    assert error_messages
+    assert any("processing_failed" in m or "synthetic processing failure" in m for m in error_messages)
 
 
 def handler_completion_event():

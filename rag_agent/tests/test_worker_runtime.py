@@ -1,20 +1,11 @@
 from __future__ import annotations
 
-import json
 import time
 from dataclasses import dataclass
 
-from rag_agent.config import KafkaRuntimeConfig
-from rag_agent.logging import StructuredLogger
+from rag_agent.utils.helpers import KafkaRuntimeConfig
 from rag_agent.worker import RAGWorker, process_consumer_batch
 
-
-class _FakeLogger:
-    def __init__(self) -> None:
-        self.entries: list[dict[str, object]] = []
-
-    def log(self, _level: int, message: str) -> None:
-        self.entries.append(json.loads(message))
 
 
 @dataclass
@@ -85,7 +76,6 @@ def _make_config() -> KafkaRuntimeConfig:
 
 
 def test_worker_startup_and_shutdown_lifecycle() -> None:
-    fake_logger = _FakeLogger()
     fake_consumer = _FakeConsumer(topics={"rag", "rag-complete"}, responses=[{}])
     fake_producer = _FakeProducer()
 
@@ -94,7 +84,6 @@ def test_worker_startup_and_shutdown_lifecycle() -> None:
         producer_factory=lambda _config: fake_producer,
         consumer_factory=lambda _config: fake_consumer,
         handler_factory=lambda: _Handler(),
-        lifecycle_logger=StructuredLogger(fake_logger),
     )
 
     worker.start()
@@ -155,7 +144,6 @@ def test_process_batch_continues_after_single_event_failure() -> None:
 
 
 def test_startup_topic_check_passes_when_topics_exist() -> None:
-    fake_logger = _FakeLogger()
     fake_consumer = _FakeConsumer(topics={"rag", "rag-complete"}, responses=[{}])
     fake_producer = _FakeProducer()
 
@@ -164,19 +152,17 @@ def test_startup_topic_check_passes_when_topics_exist() -> None:
         producer_factory=lambda _config: fake_producer,
         consumer_factory=lambda _config: fake_consumer,
         handler_factory=lambda: _Handler(),
-        lifecycle_logger=StructuredLogger(fake_logger),
     )
 
     worker.start()
+    state = worker.get_state()
     worker.stop()
 
-    startup_entries = [e for e in fake_logger.entries if e["stage"] == "startup_topic_check"]
-    assert startup_entries
-    assert startup_entries[0]["metadata"]["missing_topics"] == []
+    assert state.startup_topic_check_complete is True
+    assert state.startup_topic_check_warnings == []
 
 
 def test_missing_topics_warn_and_worker_continues() -> None:
-    fake_logger = _FakeLogger()
     fake_consumer = _FakeConsumer(topics={"rag"}, responses=[{}])
     fake_producer = _FakeProducer()
 
@@ -185,7 +171,6 @@ def test_missing_topics_warn_and_worker_continues() -> None:
         producer_factory=lambda _config: fake_producer,
         consumer_factory=lambda _config: fake_consumer,
         handler_factory=lambda: _Handler(),
-        lifecycle_logger=StructuredLogger(fake_logger),
     )
 
     worker.start()

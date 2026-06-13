@@ -9,10 +9,10 @@ import pytest
 
 from project.schemas import PageExtractionStatus, RAGAgentInput, RAGAgentOutput
 from rag_agent.agent import RAGAgent
-from rag_agent.config import EmbeddingConfig, LLMConfig, build_routed_model, get_text_llm_config
-from rag_agent.helpers import serialize_table_to_markdown
-from rag_agent.llm_client import call_embedding, call_llm
-from rag_agent.tools import (
+from rag_agent.utils.helpers import EmbeddingConfig, LLMConfig, build_routed_model, get_text_llm_config
+from rag_agent.utils.helpers import serialize_table_to_markdown
+from rag_agent.utils.llm_client import call_embedding, call_llm
+from rag_agent.utils.tools import (
     extract_images_from_page,
     extract_tables_from_page,
     extract_text_from_page,
@@ -158,7 +158,7 @@ def test_score_page_relevance_high(monkeypatch: pytest.MonkeyPatch):
             return vectors["content"]
         return vectors["prompt"]
 
-    monkeypatch.setattr("rag_agent.tools.call_embedding", _mock_call_embedding)
+    monkeypatch.setattr("rag_agent.utils.tools.call_embedding", _mock_call_embedding)
     cfg = EmbeddingConfig(model="m", provider="hosted_vllm", api_base="http://localhost:8000/v1")
     score = score_page_relevance(
         "Gradient descent is an optimizer that minimizes loss.",
@@ -174,7 +174,7 @@ def test_score_page_relevance_low(monkeypatch: pytest.MonkeyPatch):
             return [1.0, 0.0, 0.0]
         return [0.0, 1.0, 0.0]
 
-    monkeypatch.setattr("rag_agent.tools.call_embedding", _mock_call_embedding)
+    monkeypatch.setattr("rag_agent.utils.tools.call_embedding", _mock_call_embedding)
     cfg = EmbeddingConfig(model="m", provider="hosted_vllm", api_base="http://localhost:8000/v1")
     score = score_page_relevance(
         "Photosynthesis in plants depends on chlorophyll and sunlight.",
@@ -186,7 +186,7 @@ def test_score_page_relevance_low(monkeypatch: pytest.MonkeyPatch):
 
 def test_rag_agent_one_time_document_open(monkeypatch: pytest.MonkeyPatch, sample_input_data: dict):
     open_calls = {"count": 0}
-    from rag_agent import tools as tools_mod
+    from rag_agent.utils import tools as tools_mod
 
     real_open_pdf = tools_mod.open_pdf
 
@@ -194,9 +194,9 @@ def test_rag_agent_one_time_document_open(monkeypatch: pytest.MonkeyPatch, sampl
         open_calls["count"] += 1
         return real_open_pdf(file_path)
 
-    monkeypatch.setattr("rag_agent.agent.open_pdf", _counted_open)
+    monkeypatch.setattr("rag_agent.utils.tools.open_pdf", _counted_open)
     monkeypatch.setattr("rag_agent.agent.call_llm", lambda messages, config: "# Compiled")
-    monkeypatch.setattr("rag_agent.tools.call_llm", lambda messages, config: "Image summary")
+    monkeypatch.setattr("rag_agent.utils.tools.call_llm", lambda messages, config: "Image summary")
 
     agent = RAGAgent()
     payload = RAGAgentInput.model_validate(sample_input_data)
@@ -214,7 +214,7 @@ def test_rag_agent_single_final_compilation_call(monkeypatch: pytest.MonkeyPatch
         return "# Compiled\n\nOrganized notes"
 
     monkeypatch.setattr("rag_agent.agent.call_llm", _mock_compile)
-    monkeypatch.setattr("rag_agent.tools.call_llm", lambda messages, config: "Image summary")
+    monkeypatch.setattr("rag_agent.utils.tools.call_llm", lambda messages, config: "Image summary")
 
     agent = RAGAgent()
     payload = RAGAgentInput.model_validate(sample_input_data)
@@ -225,7 +225,7 @@ def test_rag_agent_single_final_compilation_call(monkeypatch: pytest.MonkeyPatch
 
 def test_rag_agent_output_schema(monkeypatch: pytest.MonkeyPatch, sample_input_data: dict):
     monkeypatch.setattr("rag_agent.agent.call_llm", lambda messages, config: "# Compiled\n\nOrganized notes")
-    monkeypatch.setattr("rag_agent.tools.call_llm", lambda messages, config: "Diagram shows optimization trajectory")
+    monkeypatch.setattr("rag_agent.utils.tools.call_llm", lambda messages, config: "Diagram shows optimization trajectory")
 
     agent = RAGAgent()
     payload = RAGAgentInput.model_validate(sample_input_data)
@@ -239,7 +239,7 @@ def test_rag_agent_output_schema(monkeypatch: pytest.MonkeyPatch, sample_input_d
 
 def test_rag_agent_partial_failure(monkeypatch: pytest.MonkeyPatch, sample_input_data: dict):
     monkeypatch.setattr("rag_agent.agent.call_llm", lambda messages, config: "# Compiled\n\nOrganized notes")
-    monkeypatch.setattr("rag_agent.tools.call_llm", lambda messages, config: "Image summary")
+    monkeypatch.setattr("rag_agent.utils.tools.call_llm", lambda messages, config: "Image summary")
 
     payload_data = dict(sample_input_data)
     payload_data["file_paths"] = [sample_input_data["file_paths"][0], "rag_agent/tests/inputs/missing.pdf"]
@@ -256,7 +256,7 @@ def test_failed_extraction_continues_processing(
     monkeypatch: pytest.MonkeyPatch, sample_input_data: dict
 ):
     monkeypatch.setattr("rag_agent.agent.call_llm", lambda messages, config: "# Compiled\n\nOrganized notes")
-    monkeypatch.setattr("rag_agent.tools.call_llm", lambda messages, config: "Image summary")
+    monkeypatch.setattr("rag_agent.utils.tools.call_llm", lambda messages, config: "Image summary")
 
     from rag_agent import agent as agent_mod
 
@@ -267,7 +267,7 @@ def test_failed_extraction_continues_processing(
             raise RuntimeError("synthetic extraction failure")
         return original_extract_text(pdf_source, page_number)
 
-    monkeypatch.setattr("rag_agent.agent.extract_text_from_page", _extract_with_one_failure)
+    monkeypatch.setattr("rag_agent.utils.tools.extract_text_from_page", _extract_with_one_failure)
 
     agent = RAGAgent()
     payload = RAGAgentInput.model_validate(sample_input_data)
@@ -282,7 +282,7 @@ def test_compiled_material_retains_table_and_image_context(
 ):
     # Force fallback markdown to verify retained context is preserved in compiled output.
     monkeypatch.setattr("rag_agent.agent.call_llm", lambda messages, config: "")
-    monkeypatch.setattr("rag_agent.tools.call_llm", lambda messages, config: "Image summary")
+    monkeypatch.setattr("rag_agent.utils.tools.call_llm", lambda messages, config: "Image summary")
 
     agent = RAGAgent()
     payload = RAGAgentInput.model_validate(sample_input_data)
@@ -294,7 +294,7 @@ def test_compiled_material_retains_table_and_image_context(
 
 def test_relevance_threshold_filtering(monkeypatch: pytest.MonkeyPatch, sample_input_data: dict):
     monkeypatch.setattr("rag_agent.agent.call_llm", lambda messages, config: "# Compiled\n\nOrganized notes")
-    monkeypatch.setattr("rag_agent.tools.call_llm", lambda messages, config: "Image summary")
+    monkeypatch.setattr("rag_agent.utils.tools.call_llm", lambda messages, config: "Image summary")
 
     payload_data = dict(sample_input_data)
     payload_data["relevance_threshold"] = 1.0
@@ -310,7 +310,7 @@ def test_relevance_threshold_filtering(monkeypatch: pytest.MonkeyPatch, sample_i
 
 def test_output_mirrors_request_metadata(monkeypatch: pytest.MonkeyPatch, sample_input_data: dict):
     monkeypatch.setattr("rag_agent.agent.call_llm", lambda messages, config: "# Compiled\n\nOrganized notes")
-    monkeypatch.setattr("rag_agent.tools.call_llm", lambda messages, config: "Image summary")
+    monkeypatch.setattr("rag_agent.utils.tools.call_llm", lambda messages, config: "Image summary")
 
     agent = RAGAgent()
     payload = RAGAgentInput.model_validate(sample_input_data)
@@ -323,7 +323,7 @@ def test_output_mirrors_request_metadata(monkeypatch: pytest.MonkeyPatch, sample
 
 def test_extracted_pages_are_audit_only(monkeypatch: pytest.MonkeyPatch, sample_input_data: dict):
     monkeypatch.setattr("rag_agent.agent.call_llm", lambda messages, config: "# Compiled\n\nOrganized notes")
-    monkeypatch.setattr("rag_agent.tools.call_llm", lambda messages, config: "Image summary")
+    monkeypatch.setattr("rag_agent.utils.tools.call_llm", lambda messages, config: "Image summary")
 
     agent = RAGAgent()
     payload = RAGAgentInput.model_validate(sample_input_data)

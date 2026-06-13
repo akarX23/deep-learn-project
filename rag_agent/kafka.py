@@ -6,9 +6,13 @@ import json
 from collections.abc import Iterable
 from typing import Protocol
 
+import logging
+
 from project.schemas import RAGCompletionEvent, TopicPresenceCheckResult
 from project.topics import PlannerTopics
-from rag_agent.config import KafkaRuntimeConfig
+from rag_agent.utils.helpers import KafkaRuntimeConfig
+
+logger = logging.getLogger(__name__)
 
 
 JsonPayload = dict[str, object]

@@ -30,6 +30,11 @@ class ScenarioAdmin:
             return "already_exists"
         return "created"
 
+    def bootstrap_topics(self, topic_names: list[str]):
+        from project.schemas import StartupTopicBootstrapResult
+
+        return StartupTopicBootstrapResult()
+
 
 def _build_client() -> TestClient:
     settings = KafkaSettings(

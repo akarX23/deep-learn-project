@@ -1,118 +1,149 @@
 # Tasks: RAG Kafka Worker Simplification
 
-**Input**: Design documents from `/specs/001-rag-retrieval-agent/`  
-**Branch**: `[001-build-rag-retrieval-agent]` | **Date**: 2026-06-12  
-**Prerequisites**: plan.md (required), spec.md (required), research.md, data-model.md, contracts/, quickstart.md
+**Input**: Design documents from `/specs/001-rag-retrieval-agent/`
+**Prerequisites**: plan.md ✓, spec.md ✓, research.md ✓, data-model.md ✓, contracts/ ✓, quickstart.md ✓
 
-**Tests**: Test tasks are included because the specification and constitution require automated verification for worker lifecycle behavior, startup topic checks, consume-dispatch flow, non-fatal failures, and typed interface regressions.
+**Tests**: Included — Constitution II requires automated verification for all changed behaviours. Existing tests updated to reflect new module paths; StructuredLogger tests removed or replaced.
+
+**Organization**: Three user stories (P1 worker runtime, P2 startup topic check, P3 handler simplification) with shared foundational restructuring.
+
+## Format: `[ID] [P?] [Story] Description`
+
+- **[P]**: Can run in parallel (different files, no blocking dependencies)
+- **[Story]**: Which user story this task belongs to (US1, US2, US3)
+
+---
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-**Purpose**: Align dependency/config surfaces with standalone worker runtime requirements.
+**Purpose**: Delete obsolete modules, create `utils/` directory, update imports and test infrastructure.
 
-- [X] T001 Remove FastAPI/uvicorn runtime dependency usage from `requirements.txt` and keep worker-relevant dependencies only
-- [X] T002 [P] Remove backend topic API variable references from `.env.local.example` and add worker startup notes
-- [X] T003 [P] Update runtime entrypoint documentation for worker process in `rag_agent/README.md`
-- [X] T004 Confirm centralized topic registry includes required worker topics in `project/topics.py`
+- [ ] T001 Delete `rag_agent/service.py` (was a compatibility shim; no callers)
+- [ ] T002 Delete `rag_agent/logging.py` (StructuredLogger replaced by standard logging)
+- [ ] T003 [P] Create `rag_agent/utils/__init__.py` (empty module marker for `utils/` package)
+- [ ] T004 [P] Move `rag_agent/prompts.py` → `rag_agent/utils/prompts.py` (no content changes)
+- [ ] T005 [P] Move `rag_agent/tools.py` → `rag_agent/utils/tools.py` (no content changes)
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-**Purpose**: Build core worker lifecycle and Kafka metadata check infrastructure that blocks all user stories.
+**Purpose**: Create `utils/helpers.py` with merged content from `helpers.py`, `llm_client.py`, and `config.py`; create simplified `utils/llm_client.py`; update all intra-package imports.
 
-**⚠️ CRITICAL**: No user story work can begin until this phase is complete.
+**⚠️ CRITICAL**: All US1–US3 tasks depend on the new `utils/` import paths being resolved first.
 
-- [X] T005 Remove `BACKEND_API_TOPIC_URL` and related startup API config from `rag_agent/config.py`
-- [X] T006 [P] Add typed `TopicPresenceCheckResult` and `WorkerRuntimeState` models in `project/schemas.py`
-- [X] T007 Add typed Kafka metadata topic-presence check helper in `rag_agent/kafka.py`
-- [X] T008 Create standalone worker runtime module with thread lifecycle (`start`, `run loop`, `stop`) in `rag_agent/worker.py`
-- [X] T009 Migrate or remove FastAPI lifecycle orchestration from `rag_agent/service.py` and rewire runtime entry to `rag_agent/worker.py`
-- [X] T010 [P] Add structured startup-stage logging (`startup_topic_check`) in `rag_agent/logging.py`
+- [ ] T006 Create `rag_agent/utils/helpers.py` that consolidates:
+  - Pure helper functions from `rag_agent/helpers.py` (`cosine_similarity`, `serialize_table_to_markdown`, `assemble_page_content`, `build_compilation_context`)
+  - Config dataclasses and env-read functions from `rag_agent/config.py` (`LLMConfig`, `EmbeddingConfig`, `KafkaRuntimeConfig`, `get_text_llm_config()`, `get_vlm_config()`, `get_vlm_batch_size()`, `get_embedding_config()`, `get_kafka_config()`)
+  - Module-level logger: `logger = logging.getLogger(__name__)`
+  - Docstring noting consolidated responsibilities
+- [ ] T007 Create `rag_agent/utils/llm_client.py` as simplified version of `rag_agent/llm_client.py`:
+  - Retain only essential `call_llm(messages, config)` and `call_embedding(text, config)` function bodies
+  - Remove credential-guard RuntimeError blocks — replace with `# TODO: Add credential validation guard`
+  - Remove import-error guard blocks — replace with `# TODO: Handle missing litellm gracefully`
+  - Remove response-format validation — replace with `# TODO: Validate response format`
+  - Add `logger = logging.getLogger(__name__)`
+- [ ] T008 Delete original `rag_agent/helpers.py` (content merged into `utils/helpers.py`)
+- [ ] T009 Delete original `rag_agent/config.py` (content merged into `utils/helpers.py`)
+- [ ] T010 Delete original `rag_agent/llm_client.py` (replaced by `utils/llm_client.py`)
+- [ ] T011 Update `rag_agent/agent.py` imports: change all `from rag_agent.helpers`, `from rag_agent.config`, `from rag_agent.llm_client`, `from rag_agent.prompts`, `from rag_agent.tools` to `from rag_agent.utils.*`
+- [ ] T012 [P] Update `rag_agent/worker.py` imports: change `from rag_agent.config` and any `from rag_agent.logging` to `from rag_agent.utils.helpers`; add `import logging; logger = logging.getLogger(__name__)`
+- [ ] T013 [P] Update `rag_agent/handlers.py` imports: change `from rag_agent.config`, `from rag_agent.llm_client`, `from rag_agent.logging` to `from rag_agent.utils.*`; add `import logging; logger = logging.getLogger(__name__)`
+- [ ] T014 [P] Update `rag_agent/kafka.py` imports: replace any `from rag_agent.config` with `from rag_agent.utils.helpers`; add `import logging; logger = logging.getLogger(__name__)`
+- [ ] T015 Update `rag_agent/tests/` imports in all test files that reference `rag_agent.helpers`, `rag_agent.config`, `rag_agent.llm_client`, `rag_agent.logging`, or `rag_agent.service` to use new `rag_agent.utils.*` paths
 
-**Checkpoint**: Worker foundation is ready; user story implementation can proceed.
+**Checkpoint**: All imports resolve; `python -m compileall rag_agent` passes
 
 ---
 
-## Phase 3: User Story 1 - Run RAG as a Kafka Worker Process (Priority: P1) 🎯 MVP
+## Phase 3: User Story 1 — Run RAG as a Kafka Worker Process (Priority: P1) 🎯 MVP
 
-**Goal**: Deliver a standalone background worker process that continuously consumes events without HTTP runtime dependency.
+**Goal**: Worker process runs without HTTP runtime, uses standard logging, passes all existing worker lifecycle tests.
 
-**Independent Test**: Start worker process, verify consumer thread enters polling loop, and verify clean shutdown closes Kafka resources.
+**Independent Test**: `pytest rag_agent/tests/test_worker_runtime.py -q` passes.
 
 ### Tests for User Story 1
 
-- [X] T011 [P] [US1] Add worker startup/shutdown lifecycle test in `rag_agent/tests/test_worker_runtime.py`
-- [X] T012 [P] [US1] Add consumer loop continues-when-idle test in `rag_agent/tests/test_worker_runtime.py`
-- [X] T013 [P] [US1] Add non-fatal per-event failure continuation test in `rag_agent/tests/test_worker_runtime.py`
+- [ ] T016 [P] [US1] Update `rag_agent/tests/test_worker_runtime.py`: replace any `StructuredLogger` mock/import with standard `logging` assertions (use `caplog` pytest fixture)
+- [ ] T017 [P] [US1] Update `rag_agent/tests/test_logging.py`: remove `StructuredLogger` class tests; add test confirming each module logger name matches `__name__` (e.g. `rag_agent.worker`, `rag_agent.agent`)
 
 ### Implementation for User Story 1
 
-- [X] T014 [US1] Implement dedicated poll thread bootstrap and stop signaling in `rag_agent/worker.py`
-- [X] T015 [US1] Implement typed single-batch poll dispatch helper for worker loop in `rag_agent/worker.py`
-- [X] T016 [US1] Wire worker entrypoint (`python -m rag_agent.worker`) for process startup in `rag_agent/worker.py`
-- [X] T017 [US1] Ensure graceful shutdown closes consumer and producer in `rag_agent/kafka.py` and `rag_agent/worker.py`
+- [ ] T018 [US1] Update `rag_agent/worker.py`:
+  - Remove all `StructuredLogger` import and usage
+  - Replace lifecycle log calls with `logger.info(...)`, `logger.warning(...)`, `logger.error(...)`
+  - Add `logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")` call in `main()` entry point (once)
+  - Ensure `logger = logging.getLogger(__name__)` at module scope
 
-**Checkpoint**: Worker runtime is independently functional and testable.
+**Checkpoint**: `pytest rag_agent/tests/test_worker_runtime.py -q` passes
 
 ---
 
-## Phase 4: User Story 2 - Verify Topic Presence Without Topic Creation (Priority: P2)
+## Phase 4: User Story 2 — Verify Topic Presence Without Topic Creation (Priority: P2)
 
-**Goal**: Perform startup topic metadata checks and warn on missing topics while continuing startup.
+**Goal**: Startup topic check runs via `rag_agent/kafka.py`, logs warnings for missing topics, no backend API calls.
 
-**Independent Test**: Start worker against mocked metadata showing missing topics and verify startup warning while worker remains running.
+**Independent Test**: `pytest rag_agent/tests/test_kafka_integration.py -q` passes.
 
 ### Tests for User Story 2
 
-- [X] T018 [P] [US2] Add startup topic check success test in `rag_agent/tests/test_worker_runtime.py`
-- [X] T019 [P] [US2] Add missing-topic warning-and-continue startup test in `rag_agent/tests/test_worker_runtime.py`
-- [X] T020 [P] [US2] Add regression test asserting no backend topic API call path is used in `rag_agent/tests/test_worker_runtime.py`
+- [ ] T019 [P] [US2] Update `rag_agent/tests/test_kafka_integration.py`: fix any import paths changed by foundational phase; confirm topic-check tests still cover warn-and-continue and all-present scenarios
 
 ### Implementation for User Story 2
 
-- [X] T021 [US2] Remove startup topic-creation API call behavior from `rag_agent/kafka.py`
-- [X] T022 [US2] Implement required-topic presence check on startup in `rag_agent/worker.py`
-- [X] T023 [US2] Emit clear actionable warning when required topics are missing in `rag_agent/logging.py`
-- [X] T024 [US2] Remove backend API dependency notes from runtime docs in `rag_agent/README.md` and `specs/001-rag-retrieval-agent/quickstart.md`
+- [ ] T020 [US2] Update `rag_agent/kafka.py`:
+  - Remove any `from rag_agent.logging import StructuredLogger` usage
+  - Add `import logging; logger = logging.getLogger(__name__)` at module scope
+  - Replace lifecycle log calls via `StructuredLogger` with `logger.info(...)` / `logger.warning(...)`
 
-**Checkpoint**: Startup topic verification flow is independently functional and testable.
+**Checkpoint**: `pytest rag_agent/tests/test_kafka_integration.py -q` passes
 
 ---
 
-## Phase 5: User Story 3 - Use a Minimal Typed Event Handler (Priority: P3)
+## Phase 5: User Story 3 — Minimal Typed Event Handler (Priority: P3)
 
-**Goal**: Keep event handling focused on ingest+dispatch with explicit typing and deferred TODO markers for advanced validation/metrics.
+**Goal**: `agent.py` and `handlers.py` have basic exception handling only; inner per-step guards replaced with `# TODO:`; no `StructuredLogger` dependency.
 
-**Independent Test**: Consume a request event and verify typed handler dispatches to RAG pipeline and completion publish path with TODO markers present for deferred concerns.
+**Independent Test**: `pytest rag_agent/tests/test_request_event.py rag_agent/tests/test_completion_event.py -q` passes.
 
 ### Tests for User Story 3
 
-- [X] T025 [P] [US3] Add typed-handler signature contract test in `rag_agent/tests/test_request_event.py`
-- [X] T026 [P] [US3] Add ingest-to-dispatch integration test in `rag_agent/tests/test_kafka_integration.py`
-- [X] T027 [P] [US3] Add TODO marker coverage test for deferred validation/metrics in `rag_agent/tests/test_request_event.py`
+- [ ] T021 [P] [US3] Update `rag_agent/tests/test_request_event.py`: fix import paths; confirm handler dispatch test still passes
+- [ ] T022 [P] [US3] Update `rag_agent/tests/test_completion_event.py`: fix import paths; confirm completion event tests still pass
 
 ### Implementation for User Story 3
 
-- [X] T028 [US3] Refactor `RAGRequestEventHandler` to minimal ingest+dispatch flow with explicit TODO markers in `rag_agent/handlers.py`
-- [X] T029 [US3] Replace broad untyped parameters and returns in handler interfaces with explicit types in `rag_agent/handlers.py`
-- [X] T030 [US3] Replace broad untyped worker/Kafka function signatures with explicit typed boundaries in `rag_agent/worker.py` and `rag_agent/kafka.py`
-- [X] T031 [US3] Keep completion mapping and publish flow tied to request correlation in `rag_agent/handlers.py`
+- [ ] T023 [US3] Simplify `rag_agent/handlers.py`:
+  - Remove `StructuredLogger` import and all `self._logger.emit(...)` calls
+  - Replace lifecycle log calls with `logger.info(...)` / `logger.error(...)`
+  - Remove inner per-step try/except blocks in `__call__()` beyond the top-level guard
+  - Add `# TODO: Add specific exception handling for <concern>` for each removed guard
+  - Add `# TODO: Add richer schema and semantic validation` for `parse_event()` defer
+  - Add `# TODO: Add metrics instrumentation` for metrics defer
+  - Preserve top-level `except Exception` guard that logs and continues
+- [ ] T024 [US3] Simplify `rag_agent/agent.py`:
+  - Remove inner per-step try/except blocks beyond top-level orchestration guard
+  - Add `# TODO: Add specific exception handling for page-extraction failures`
+  - Add `# TODO: Add retry policy for LLM call failures`
+  - Add `import logging; logger = logging.getLogger(__name__)` at module scope
+  - Remove any `StructuredLogger` references
 
-**Checkpoint**: Minimal typed handler flow is independently functional and testable.
+**Checkpoint**: `pytest rag_agent/tests/test_request_event.py rag_agent/tests/test_completion_event.py -q` passes
 
 ---
 
-## Phase 6: Polish & Cross-Cutting Concerns
+## Phase 6: Integration & Regression
 
-**Purpose**: Complete quality, performance, and end-to-end validation evidence.
+**Purpose**: Confirm full test suite passes on new module layout; no stale imports remain.
 
-- [X] T032 [P] Update architecture and operational docs for worker runtime in `rag_agent/README.md` and `specs/001-rag-retrieval-agent/quickstart.md`
-- [ ] T033 [P] Run quality checks (`.venv/bin/ruff check`, `.venv/bin/ruff format --check`, `.venv/bin/python -m compileall`) and capture output references in `specs/001-rag-retrieval-agent/quickstart.md`
-- [X] T034 Run targeted worker and Kafka integration tests via `.venv/bin/python -m pytest` in `rag_agent/tests/test_worker_runtime.py` and `rag_agent/tests/test_kafka_integration.py`
-- [X] T035 [P] Add poll-to-completion latency measurement script or test helper in `rag_agent/tests/test_worker_runtime.py`
-- [ ] T036 Validate quickstart end-to-end flow against local Kafka and record results in `specs/001-rag-retrieval-agent/quickstart.md`
-- [X] T037 Capture final implementation evidence and remaining deferred TODO scope in `specs/001-rag-retrieval-agent/research.md`
+- [ ] T025 Run `python -m compileall rag_agent` — must produce zero errors
+- [ ] T026 Run `pytest rag_agent/tests/ -q` — all tests must pass
+- [ ] T027 [P] Run `ruff check rag_agent` — must produce zero errors
+- [ ] T028 [P] Run `ruff format --check rag_agent` — apply format if needed, then re-check
+- [ ] T029 [US1] [US2] [US3] Confirm `rag_agent/utils/` directory exists with `__init__.py`, `helpers.py`, `llm_client.py`, `prompts.py`, `tools.py` and that `service.py` and `logging.py` are absent from `rag_agent/`
+- [ ] T030 Record quality-gate evidence in `specs/001-rag-retrieval-agent/quickstart.md` (ruff, compileall, pytest outputs)
+
+**Checkpoint**: All 6 phases complete — feature is production-ready
 
 ---
 
@@ -120,89 +151,71 @@
 
 ### Phase Dependencies
 
-- **Phase 1 (Setup)**: No dependencies.
-- **Phase 2 (Foundational)**: Depends on Phase 1; blocks all user stories.
-- **Phase 3 (US1)**: Depends on Phase 2.
-- **Phase 4 (US2)**: Depends on Phase 2; can proceed in parallel with US3 after foundation is complete.
-- **Phase 5 (US3)**: Depends on Phase 2; can proceed in parallel with US2 after foundation is complete.
-- **Phase 6 (Polish)**: Depends on completion of target user stories.
+- **Phase 1 (Setup — Delete & Create)**: No dependencies — start immediately
+- **Phase 2 (Foundational)**: Depends on Phase 1 (utils/ package must exist)
+- **Phase 3–5 (US1–US3)**: All depend on Phase 2 checkpoint (imports must resolve)
+  - US1, US2, US3 can proceed in parallel after Phase 2 completes
+- **Phase 6 (Integration)**: Depends on Phases 3–5 completion
 
-### User Story Dependencies
+### Within Phase 2
 
-- **US1 (P1)**: No dependency on US2/US3 after foundation.
-- **US2 (P2)**: Depends on foundational worker startup and Kafka helper availability; independent from US3 logic.
-- **US3 (P3)**: Depends on foundational worker/Kafka modules; independent from US2 startup-warning behavior.
+1. T006–T007: Create new `utils/` module files (can be parallel)
+2. T008–T010: Delete old root-level files (after T006–T007 are complete)
+3. T011–T014: Update imports in consuming modules (can be parallel after deletes)
+4. T015: Update all test file imports (after T011–T014 to avoid confusion)
 
-### Within Each User Story
+### Parallel Opportunities
 
-- Write tests first and ensure they fail before implementation.
-- Implement core story behavior, then complete logging/edge handling.
-- Validate story-specific independent test criteria before moving on.
+- **Phase 1**: T003, T004, T005 can run in parallel with each other
+- **Phase 2**: T006 and T007 can run in parallel; T011–T014 can run in parallel after T008–T010
+- **Phase 3–5**: US1 (T016–T018), US2 (T019–T020), US3 (T021–T024) can all start in parallel after Phase 2
+- **Phase 6**: T027, T028, T029 can run in parallel
 
 ---
 
-## Parallel Opportunities
+## Parallel Example: Phase 3–5 after Foundational Gate
 
-- **Setup**: T002 and T003 can run in parallel.
-- **Foundational**: T006 and T010 can run in parallel after T005 starts.
-- **US1 tests**: T011, T012, T013 can run in parallel.
-- **US2 tests**: T018, T019, T020 can run in parallel.
-- **US3 tests**: T025, T026, T027 can run in parallel.
-- **Polish**: T032, T033, and T035 can run in parallel.
-
-## Parallel Example: User Story 1
-
-```bash
-# Parallel test authoring for US1 worker lifecycle:
-Task: "Add worker startup/shutdown lifecycle test in rag_agent/tests/test_worker_runtime.py"
-Task: "Add consumer loop continues-when-idle test in rag_agent/tests/test_worker_runtime.py"
-Task: "Add non-fatal per-event failure continuation test in rag_agent/tests/test_worker_runtime.py"
 ```
+# Launch simultaneously after Phase 2 checkpoint passes:
+Task: "Update test_worker_runtime.py to use caplog (T016)"
+Task: "Update test_logging.py, remove StructuredLogger tests (T017)"
+Task: "Update worker.py logging (T018)"
 
-## Parallel Example: User Story 3
+Task: "Update test_kafka_integration.py import paths (T019)"
+Task: "Update kafka.py logging (T020)"
 
-```bash
-# Parallel US3 typed-handler validation tasks:
-Task: "Add typed-handler signature contract test in rag_agent/tests/test_request_event.py"
-Task: "Add ingest-to-dispatch integration test in rag_agent/tests/test_kafka_integration.py"
-Task: "Add TODO marker coverage test for deferred validation/metrics in rag_agent/tests/test_request_event.py"
+Task: "Update test_request_event.py (T021)"
+Task: "Update test_completion_event.py (T022)"
+Task: "Simplify handlers.py (T023)"
+Task: "Simplify agent.py (T024)"
 ```
 
 ---
 
 ## Implementation Strategy
 
-### MVP First (User Story 1 Only)
+### MVP (Phases 1–3 only)
 
-1. Complete Phase 1 (Setup).
-2. Complete Phase 2 (Foundational).
-3. Complete Phase 3 (US1).
-4. Validate US1 independently using worker lifecycle tests.
-5. Demonstrate standalone worker operation as MVP.
+1. Phase 1: Delete service.py and logging.py; create utils/
+2. Phase 2: Create helpers.py + llm_client.py in utils/; update all imports
+3. Phase 3: Update worker.py to use standard logging; fix worker tests
+4. **STOP and VALIDATE**: `pytest rag_agent/tests/test_worker_runtime.py` passes
+5. Proceed to US2 + US3 in parallel
 
-### Incremental Delivery
+### Full Delivery (All Phases)
 
-1. Foundation first: Setup + Foundational.
-2. Add US1 and validate worker lifecycle.
-3. Add US2 and validate startup topic check warnings.
-4. Add US3 and validate minimal typed handler behavior.
-5. Finish with Phase 6 quality/performance evidence.
-
-### Parallel Team Strategy
-
-1. Team completes setup and foundational work together.
-2. After foundation:
-   - Developer A: US1 worker lifecycle tasks
-   - Developer B: US2 startup topic check tasks
-   - Developer C: US3 typed handler tasks
-3. Merge into polish/performance validation.
+1. Phases 1–2 (foundational restructuring)
+2. Phases 3–5 in parallel (US1 + US2 + US3 simplification)
+3. Phase 6 (integration, quality gates, evidence capture)
 
 ---
 
 ## Notes
 
-- Task format strictly follows checklist requirements.
-- User-story tasks include `[US1]`, `[US2]`, or `[US3]` labels.
-- All tasks include explicit file paths.
-- Deferred validation/metrics work remains tracked via explicit TODO tasks in US3.
-- Keep branch and feature directory unchanged throughout execution.
+- [P] tasks = different files, no blocking dependency on incomplete tasks
+- [USx] label maps task to specific user story for traceability
+- Test-driven where behaviour changes: fix tests to reflect new paths before or alongside implementation
+- Avoid: editing test files before import paths in source files are correct (will cause confusing failures)
+- Every removed exception guard must have a corresponding `# TODO:` comment — no silent deletions
+- `rag_agent/utils/helpers.py` is the only file that consolidates multiple responsibilities; all others move unchanged
+- Stop at Phase 2 checkpoint to validate import resolution before touching any test files

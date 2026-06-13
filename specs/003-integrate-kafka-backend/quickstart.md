@@ -1,138 +1,95 @@
-# Quickstart: Kafka Backend Integration Service
+# Quickstart: Backend Kafka Startup Topic Bootstrap
 
-## 1. Configure environment
+## 1. Install dependencies
 
-Create/update `.env.local` in project root with backend Kafka settings:
+```bash
+pip install -r requirements.txt
+```
+
+## 2. Configure environment
+
+Set Kafka runtime settings in `.env.local`:
 
 ```env
 BACKEND_KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+BACKEND_KAFKA_CLIENT_ID=backend-service
 BACKEND_KAFKA_STARTUP_RETRY_COUNT=5
 BACKEND_KAFKA_STARTUP_RETRY_TIMEOUT_SECONDS=2
-BACKEND_KAFKA_CLIENT_ID=backend-service
 ```
 
-Environment loading behavior:
-- `.env.local` is loaded when present.
-- Process environment variables override `.env.local` values.
+Optional secure-cluster settings:
 
-## 2. Start Kafka and Kafka UI locally
+```env
+BACKEND_KAFKA_SECURITY_PROTOCOL=
+BACKEND_KAFKA_SASL_MECHANISM=
+BACKEND_KAFKA_SASL_USERNAME=
+BACKEND_KAFKA_SASL_PASSWORD=
+BACKEND_KAFKA_SSL_CAFILE=
+```
 
-From project root:
+## 3. Start local Kafka infrastructure
 
 ```bash
 docker compose up -d kafka kafka-ui
 ```
 
-Validate containers are running:
+Wait until Kafka is ready (typically under 30 seconds):
 
 ```bash
-docker compose ps
+docker compose logs kafka | grep "Kafka Server started"
 ```
 
-Confirm compose image expectations:
-
-```bash
-docker compose config | grep -E "apache/kafka:4.2.1|provectuslabs/kafka-ui:latest"
-```
-
-Verify Kafka UI is reachable (default):
-
-```bash
-curl -I http://localhost:8080
-```
-
-## 3. Run backend service
-
-Example run command (exact path may differ after implementation):
+## 4. Run backend service
 
 ```bash
 python -m backend_service.app.main
 ```
 
-Expected startup behavior:
-- Kafka admin client initializes during lifespan startup.
-- On transient failures, startup retries follow configured retry count and timeout.
-- Startup exits with explicit failure if retry budget is exhausted.
-- On service shutdown, Kafka admin resources are closed via lifespan shutdown handling.
+Expected startup output:
 
-## 4. Create a topic
+```
+INFO  Kafka admin connect attempt 1/6
+INFO  Kafka admin connected
+INFO  Bootstrapping Kafka topics: ['rag', 'rag-complete']
+DEBUG Topic created: rag
+DEBUG Topic created: rag-complete
+INFO  Topic bootstrap complete: 2 created, 0 already existed, 0 errors
+```
 
-Example request:
+On subsequent startups (topics already exist):
+
+```
+INFO  Bootstrapping Kafka topics: ['rag', 'rag-complete']
+DEBUG Topic already exists: rag
+DEBUG Topic already exists: rag-complete
+INFO  Topic bootstrap complete: 0 created, 2 already existed, 0 errors
+```
+
+## 5. Verify topics in Kafka UI
+
+Open http://localhost:8080 and confirm `rag` and `rag-complete` appear in the Topics list.
+
+## 6. Run tests
 
 ```bash
-curl -X POST http://localhost:8001/api/v1/topics \
-  -H "Content-Type: application/json" \
-  -d '{"topic_name":"agent-events","num_partitions":1,"replication_factor":1}'
+.venv/bin/python -m pytest backend_service/tests/ -q
 ```
 
-Expected responses:
-- `201` with `status=created` for new topic.
-- `200` with `status=already_exists` if topic exists.
-- `4xx/5xx` with `status=error` for invalid input/runtime failures.
-
-Structured error response shape (for validation/HTTP/unhandled failures):
-
-```json
-{
-  "topic_name": null,
-  "status": "error",
-  "message": "..."
-}
-```
-
-## 5. Run tests
+## 7. Quality checks
 
 ```bash
-pytest backend_service/tests -q
+.venv/bin/ruff check project backend_service
+.venv/bin/ruff format --check project backend_service
+.venv/bin/python -m compileall project backend_service
 ```
 
-Latest local evidence:
-- `13 passed` in `backend_service/tests`.
-- Covers startup success, retry-then-success, retry exhaustion, shutdown cleanup, env precedence, API success, duplicate handling, payload validation, HTTP exception envelope, unhandled exception envelope, and runtime error mapping.
-- Covers compose contract checks for Kafka image pin (`apache/kafka:4.2.1`), Kafka UI image wiring, and KRaft environment key presence.
+## 8. Performance notes
 
-## 6. Run quality checks
+- Topic bootstrap step target: ≤5 seconds against a local Kafka cluster (SC-003).
+- Bootstrap time is O(n) over topic count — currently 2 topics, well within budget.
 
-```bash
-ruff check backend_service
-ruff format --check backend_service
-python -m compileall backend_service
-```
+## 9. Adding new topics
 
-Latest local evidence:
-- `ruff check` passed.
-- `ruff format --check` passed.
-- `python -m compileall backend_service` completed successfully.
-
-## 7. Performance baseline (local)
-
-Measured with `fastapi.testclient.TestClient` and mocked Kafka admin calls:
-- Startup with one retry (configured timeout = 1s): `~1006.53 ms` total startup time.
-- Topic create API p95 latency across 30 calls: `~2.24 ms`.
-
-Interpretation:
-- Topic create latency is comfortably within the plan budget (`<= 2s` p95 local).
-- Startup behavior aligns with retry budget (`retry_count + 1` attempts with configured delay).
-
-## 8. Compose startup-time validation
-
-Target:
-- Bring up local Kafka + Kafka UI in under 2 minutes.
-
-Current environment result:
-- `docker compose` command is available, but startup validation is blocked by Docker daemon permission:
-  - `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`
-
-Validation command to run in a compose-capable environment:
-
-```bash
-start=$(date +%s)
-docker compose up -d kafka kafka-ui
-end=$(date +%s)
-echo $((end-start))
-```
-
-## 9. Scope reminder
-
-This backend service is limited to Kafka admin startup connectivity and topic creation API.
-No inter-service messaging proxy behavior is included in this feature.
+1. Add the topic to the appropriate enum in `project/topics.py`.
+2. If needed, add a new getter function and include it in `get_all_topic_names()`.
+3. Restart the backend service — the new topic will be created on next startup automatically.

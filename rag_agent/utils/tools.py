@@ -8,10 +8,9 @@ import io
 from pathlib import Path
 from typing import Any
 
-from rag_agent.config import EmbeddingConfig, LLMConfig
-from rag_agent.helpers import cosine_similarity, serialize_table_to_markdown
-from rag_agent.llm_client import call_embedding, call_llm
-from rag_agent.prompts import IMAGE_DESCRIPTION_PROMPT
+from rag_agent.utils.helpers import EmbeddingConfig, LLMConfig, cosine_similarity, serialize_table_to_markdown
+from rag_agent.utils.llm_client import call_embedding, call_llm
+from rag_agent.utils.prompts import IMAGE_DESCRIPTION_PROMPT
 
 
 def open_pdf(file_path: str):

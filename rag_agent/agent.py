@@ -10,17 +10,20 @@ from typing import Any, TypedDict
 
 import fitz
 
+import logging
+
 from project.schemas import ExtractedPage, PageExtractionStatus, RAGAgentInput, RAGAgentOutput
-from rag_agent.config import (
+from rag_agent.utils.helpers import (
+    assemble_page_content,
+    build_compilation_context,
     get_embedding_config,
     get_text_llm_config,
     get_vlm_batch_size,
     get_vlm_config,
 )
-from rag_agent.helpers import assemble_page_content, build_compilation_context
-from rag_agent.llm_client import call_llm
-from rag_agent.prompts import MATERIAL_COMPILATION_PROMPT
-from rag_agent.tools import (
+from rag_agent.utils.llm_client import call_llm
+from rag_agent.utils.prompts import MATERIAL_COMPILATION_PROMPT
+from rag_agent.utils.tools import (
     describe_images_with_vlm,
     extract_images_from_page,
     extract_tables_from_page,
@@ -28,6 +31,8 @@ from rag_agent.tools import (
     open_pdf,
     score_page_relevance,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass

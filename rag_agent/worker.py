@@ -6,9 +6,10 @@ import threading
 import time
 from collections.abc import Callable
 
+import logging
+
 from project.schemas import RAGCompletionEvent, WorkerRuntimeState
 from project.topics import get_rag_topic_names
-from rag_agent.config import KafkaRuntimeConfig
 from rag_agent.handlers import RAGRequestEventHandler
 from rag_agent.kafka import (
     KafkaConsumerProtocol,
@@ -21,7 +22,9 @@ from rag_agent.kafka import (
     create_producer,
     poll_records,
 )
-from rag_agent.logging import StructuredLogger
+from rag_agent.utils.helpers import KafkaRuntimeConfig
+
+logger = logging.getLogger(__name__)
 
 RequestHandler = Callable[[dict[str, object], KafkaProducerProtocol | None], RAGCompletionEvent | None]
 
@@ -38,7 +41,6 @@ def process_consumer_batch(
     producer: KafkaProducerProtocol,
     handler: RequestHandler,
     poll_timeout_ms: int,
-    lifecycle_logger: StructuredLogger | None = None,
 ) -> int:
     """Poll once and dispatch all returned Kafka records."""
 
@@ -48,24 +50,11 @@ def process_consumer_batch(
         for record in records:
             payload = record.value
             request_id = _extract_request_id(payload)
-            if lifecycle_logger is not None:
-                lifecycle_logger.emit(
-                    request_id=request_id,
-                    stage="consumed",
-                    message="Consumed RAG request event",
-                    metadata={"topic": getattr(record, "topic", "rag")},
-                )
+            logger.info("consumed request_id=%s topic=%s", request_id, getattr(record, "topic", "rag"))
             try:
                 handler(payload, producer)
             except Exception as exc:
-                if lifecycle_logger is not None:
-                    lifecycle_logger.emit(
-                        request_id=request_id,
-                        stage="error",
-                        level="ERROR",
-                        message="Unhandled exception while processing consumed event",
-                        metadata={"failure_stage": "dispatch", "error": str(exc)},
-                    )
+                logger.error("dispatch error request_id=%s error=%s", request_id, exc)
             processed += 1
     return processed
 
@@ -79,13 +68,11 @@ class RAGWorker:
         producer_factory: Callable[[KafkaRuntimeConfig], KafkaProducerProtocol] = create_producer,
         consumer_factory: Callable[[KafkaRuntimeConfig], KafkaConsumerProtocol] = create_consumer,
         handler_factory: Callable[[], RAGRequestEventHandler] = RAGRequestEventHandler,
-        lifecycle_logger: StructuredLogger | None = None,
     ) -> None:
         self._config = config
         self._producer_factory = producer_factory
         self._consumer_factory = consumer_factory
         self._handler_factory = handler_factory
-        self._logger = lifecycle_logger or StructuredLogger()
         self._producer: KafkaProducerProtocol | None = None
         self._consumer: KafkaConsumerProtocol | None = None
         self._stop_event = threading.Event()
@@ -111,12 +98,9 @@ class RAGWorker:
         self._startup_check_complete = True
         if topic_check.warning_message:
             self._startup_warnings.append(topic_check.warning_message)
-            self._logger.emit_startup_topic_check(
-                missing_topics=topic_check.missing_topics,
-                level="WARNING",
-            )
+            logger.warning("startup_topic_check missing=%s", topic_check.missing_topics)
         else:
-            self._logger.emit_startup_topic_check(missing_topics=[])
+            logger.info("startup_topic_check all required topics present")
 
         handler = self._handler_factory().process_request
         self._stop_event.clear()
@@ -138,16 +122,9 @@ class RAGWorker:
                     self._producer,
                     handler,
                     self.config.poll_timeout_ms,
-                    self._logger,
                 )
             except Exception as exc:
-                self._logger.emit(
-                    request_id="worker",
-                    stage="error",
-                    level="ERROR",
-                    message="Worker poll loop failure",
-                    metadata={"failure_stage": "poll_loop", "error": str(exc)},
-                )
+                logger.error("poll_loop failure error=%s", exc)
 
     def stop(self) -> None:
         """Stop poll loop and close Kafka resources."""
@@ -173,6 +150,10 @@ class RAGWorker:
 def main() -> None:
     """Run worker until interrupted."""
 
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    )
     worker = RAGWorker()
     worker.start()
     try:

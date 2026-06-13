@@ -27,6 +27,38 @@ Topic names are centralized in `project/topics.py`:
 
 Hardcoded topic strings outside topic registry and Kafka gateway are disallowed.
 
+## Module Structure Contract (Updated — Simplification Phase)
+
+After simplification the active module layout is:
+
+```text
+rag_agent/
+├── agent.py       # Orchestration — basic exception handling only
+├── handlers.py    # Ingest/dispatch — basic exception handling only
+├── kafka.py       # Kafka transport and metadata checks
+├── worker.py      # Consumer loop thread entry point
+└── utils/
+    ├── __init__.py
+    ├── helpers.py    # Pure helpers + merged LLM config + call_llm/call_embedding
+    ├── llm_client.py # Simplified LLM/embedding wrappers (TODOs for guards)
+    ├── prompts.py    # Prompt templates
+    └── tools.py      # PDF extraction tools
+```
+
+Deleted modules (contract obligations discharged):
+- `rag_agent/service.py` — removed
+- `rag_agent/logging.py` — `StructuredLogger` replaced by standard `logging.getLogger(__name__)`
+
+## Logging Module Contract
+
+All modules MUST use:
+```python
+import logging
+logger = logging.getLogger(__name__)
+```
+
+Entry point (`worker.py`) calls `logging.basicConfig(...)` once at startup. No custom logger class is permitted.
+
 ## Kafka Gateway Module Contract
 
 All Kafka interactions route through `rag_agent/kafka.py`:
