@@ -120,19 +120,52 @@
 
 ### WebSocketEvents
 
-**Purpose**: Shared `project/events.py` module defining WebSocket event-name constants importable by both frontend and backend. Contains names only — no payload models (those stay in `project/schemas.py`).
+**Purpose**: Shared `project/events.py` module defining WebSocket event-name constants and their event body schemas, importable by both frontend and backend.
 
-**Representation**: A `str` Enum so values compare/serialize as plain strings.
+**Representation**: A `str` Enum for event names and schema models for event bodies.
 
 | Member | Value | Description |
 |---|---|---|
 | `STREAM_TOKENS` | `"stream-tokens"` | Server → client token stream event; emission logic implemented later (TODO) |
 
 **Validation rules**:
-- Values are stable string literals — renaming a value is a breaking contract change for the frontend.
-- Module import must have no side effects (no Socket.IO or network calls) so the frontend toolchain can read names safely.
+- Event-name values are stable string literals — renaming a value is a breaking contract change for the frontend.
+- Module import must have no side effects (no Socket.IO or network calls) so the frontend toolchain can read contracts safely.
 
-**Extension rule**: New WebSocket events are added as new enum members here and referenced by both sides.
+**Extension rule**: New WebSocket events are added as enum members plus corresponding body schemas in the same shared module.
+
+---
+
+### StreamTokensEventBody
+
+**Purpose**: Shared WebSocket body schema for the `stream-tokens` event.
+
+| Field | Type | Description |
+|---|---|---|
+| `from_service` | `str` | Emitting backend/agent service identifier |
+| `content` | `str` | Token/content payload chunk |
+| `metadata` | `dict[str, Any]` | Additional event context and stream metadata |
+
+**Validation rules**:
+- No custom validation or exception handling in this iteration.
+- Field presence/type are schema-driven only.
+
+---
+
+### UserRequest
+
+**Purpose**: Shared backend request schema in `project/schemas.py` for user-originated async processing keyed by session.
+
+| Field | Type | Description |
+|---|---|---|
+| `user_prompt` | `str` | End-user prompt text |
+| `user_level` | `list[str]` | User level tags/labels |
+| `file_data` | `Any` | Attached file payload/reference data |
+| `sid` | `str` | Session identifier (`sid`) used for response routing |
+
+**Validation rules**:
+- No additional custom validation or exception handling in this iteration.
+- Keeps schema minimal to match the current low-boilerplate requirement.
 
 ---
 
@@ -178,6 +211,7 @@ get(session_id: str) -> Any | None              # fetch a session connection (No
 
 **Validation rules**:
 - `event` values come from `project/events.py` (e.g. `STREAM_TOKENS`).
+- `payload` for `stream-tokens` follows `StreamTokensEventBody` contract in `project/events.py`.
 - `emit_event` routes solely by `session_id`; `user_id` is not used for routing.
 - Listeners are lightweight stubs; full behavior (including `stream-tokens` emission flow) is implemented later.
 

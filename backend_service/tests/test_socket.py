@@ -4,7 +4,7 @@ import asyncio
 
 from backend_service.app import socket as socket_module
 from backend_service.app.connection_manager import ConnectionManager
-from project.events import WebSocketEvents
+from project.events import StreamTokensEventBody, WebSocketEvents
 
 
 def test_connect_registers_session(monkeypatch):
@@ -48,3 +48,17 @@ def test_emit_event_accepts_plain_string_event(monkeypatch):
 
 def test_stream_tokens_constant_value():
     assert WebSocketEvents.STREAM_TOKENS.value == "stream-tokens"
+
+
+def test_stream_tokens_event_body_required_fields():
+    body = StreamTokensEventBody(
+        from_service="rag-agent", content="hello", metadata={"k": "v"}
+    )
+    assert body.from_service == "rag-agent"
+    assert body.content == "hello"
+    assert body.metadata == {"k": "v"}
+
+
+def test_stream_tokens_event_body_metadata_defaults_to_empty_dict():
+    body = StreamTokensEventBody(from_service="teaching-agent", content="hi")
+    assert body.metadata == {}

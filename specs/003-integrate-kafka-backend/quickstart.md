@@ -153,12 +153,17 @@ print("session_id (sid):", sio.sid)
 sio.wait()
 ```
 
-Shared event names live in `project/events.py` and are importable by both frontend and backend:
+Shared event contracts (names + body schemas) live in `project/events.py` and are importable by both frontend and backend:
 
 ```python
-from project.events import WebSocketEvents
+from project.events import StreamTokensEventBody, WebSocketEvents
 
 print(WebSocketEvents.STREAM_TOKENS.value)  # "stream-tokens"
+payload = StreamTokensEventBody(
+	from_service="rag-agent",
+	content="hello",
+	metadata={"index": 1, "done": False},
+)
 ```
 
 ## 8b. Emit an event to a session from the backend
@@ -167,10 +172,33 @@ From backend code, route a payload to a specific session via its `session_id` (=
 
 ```python
 from backend_service.app.socket import emit_event
-from project.events import WebSocketEvents
+from project.events import WebSocketEvents, StreamTokensEventBody
 
-await emit_event(WebSocketEvents.STREAM_TOKENS, {"token": "hello"}, session_id)
+payload = StreamTokensEventBody(
+	from_service="rag-agent",
+	content="hello",
+	metadata={"index": 1, "done": False},
+)
+
+await emit_event(WebSocketEvents.STREAM_TOKENS, payload.model_dump(), session_id)
 ```
+
+## 8c. Use the shared `UserRequest` schema
+
+The backend request contract includes `UserRequest` in `project/schemas.py`:
+
+```python
+from project.schemas import UserRequest
+
+req = UserRequest(
+	user_prompt="Explain gradient descent simply",
+	user_level=["beginner"],
+	file_data={"files": ["notes.pdf"]},
+	sid="abc123",
+)
+```
+
+No additional custom validation or exception handling is required for this schema in the current iteration.
 
 > Note: Listener bodies and the full `stream-tokens` emission flow are lightweight stubs in this iteration; edge cases (disconnect cleanup, missing session, auth, back-pressure) are marked TODO.
 

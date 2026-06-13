@@ -28,8 +28,11 @@
 - Q: Which WebSocket transport should the backend use for frontend connections? → A: Socket.IO via `python-socketio` mounted on the FastAPI ASGI app — native named-event listeners and `emit` match the design.
 - Q: How are users and sessions related for event routing? → A: A user may own multiple sessions, but each session is independent; all inbound data carries a `session_id` and is routed independently by it.
 - Q: How does the application `session_id` relate to the Socket.IO connection id? → A: They are the same — the `session_id` IS the Socket.IO-generated `sid`.
-- Q: What should the shared `project/events.py` define? → A: Event-name string constants only (a `str` Enum of event names such as `stream-tokens`); payload shapes stay in `schemas.py`.
+- Q: What should the shared `project/events.py` define? → A: WebSocket event-name constants and event body schemas; for now include `stream-tokens` with fields `from_service`, `content`, and `metadata`.
 - Q: What is the emit function signature? → A: `emit_event(event, payload, session_id)` — routed by `session_id` (== `sid`); `user_id` is not needed for routing.
+- Q: Should `project/events.py` also include WebSocket event body schemas? → A: Yes. Define event body schemas there; for now include `stream-tokens` with fields `from_service`, `content`, and `metadata`.
+- Q: What additional backend schema should be added to `project/schemas.py`? → A: Add `UserRequest` with fields `user_prompt`, `user_level` (list of strings), `file_data`, and `sid`.
+- Q: What validation/error-handling level is required for these new schemas? → A: None for now — no extra exception handling or validation.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -62,7 +65,7 @@ As a frontend client, I need to connect to the backend over a WebSocket so that 
 1. **Given** the backend service is running, **When** a frontend client opens a Socket.IO connection, **Then** the connection is registered in the connection manager keyed by the Socket.IO-generated `session_id` (`sid`).
 2. **Given** an active session is registered, **When** the backend calls `emit_event(event, payload, session_id)`, **Then** the payload is emitted to that session only and not to other connected sessions.
 3. **Given** a single user has opened multiple independent sessions, **When** an event is emitted for one `session_id`, **Then** only that session receives it — sessions are handled independently.
-4. **Given** a connected session, **When** the backend emits a `stream-tokens` event, **Then** the event name and payload match the constant defined in `project/events.py`.
+4. **Given** a connected session, **When** the backend emits a `stream-tokens` event, **Then** the event name and payload conform to the event constant and body schema defined in `project/events.py`.
 
 ---
 
@@ -102,13 +105,15 @@ As a frontend client, I need to connect to the backend over a WebSocket so that 
 - **FR-018**: A per-topic default input factory function MUST be provided in `backend_service/app/utils.py`; each factory returns a fully initialized, type-safe instance of the topic's input schema with sensible default values and no validators or exception handling.
 - **FR-019**: The `rag` default factory in `backend_service/app/utils.py` MUST return a `RAGRequestEvent` with a dynamically generated `request_id` (using `uuid4`) and all other required fields set to representative default values.
 - **FR-020**: The backend service MUST expose a WebSocket interface using Socket.IO (`python-socketio`) mounted on the FastAPI ASGI app, to which the frontend connects.
-- **FR-021**: All shared WebSocket event names MUST be defined in a `project/events.py` module as a string Enum of event-name constants, importable by both frontend and backend; payload shapes MUST NOT be added to this module.
-- **FR-022**: `project/events.py` MUST define a `stream-tokens` event constant; its emission logic is to be implemented later (TODO).
+- **FR-021**: Shared WebSocket event contracts MUST be defined in `project/events.py`, importable by both frontend and backend; this module MUST include event-name constants and corresponding event body schemas.
+- **FR-022**: `project/events.py` MUST define a `stream-tokens` event constant and a `stream-tokens` body schema containing `from_service`, `content`, and `metadata`; emission logic remains TODO.
 - **FR-023**: The backend service MUST provide a simple connection manager class that maintains a mapping of `session_id` to connection, exposing minimal `get` and `set` functions; complex exception handling and lifecycle logic are deferred as TODOs.
 - **FR-024**: The connection manager MUST key connections by `session_id`, where the `session_id` IS the Socket.IO-generated `sid`. Sessions MUST be treated independently even when a single user owns multiple sessions.
 - **FR-025**: WebSocket event listeners MUST be placed in a dedicated `socket.py` file as lightweight listeners; their full behavior is to be implemented later (TODO).
 - **FR-026**: `socket.py` MUST provide an `emit_event(event, payload, session_id)` function that emits the given event with the payload to the connection identified by `session_id`.
 - **FR-027**: The WebSocket integration MUST favor the simplest approach with minimum boilerplate; advanced exceptional handling and edge cases MUST be deferred via TODO markers.
+- **FR-028**: The backend service MUST define a `UserRequest` schema in `project/schemas.py` with fields `user_prompt`, `user_level` (list of strings), `file_data`, and `sid`.
+- **FR-029**: For `stream-tokens` event body schema and `UserRequest`, no additional exception handling or custom validation logic is required in this iteration.
 
 ### Key Entities
 
@@ -118,7 +123,8 @@ As a frontend client, I need to connect to the backend over a WebSocket so that 
 - **TestEventPublishResult**: API response payload containing request identifier, target topic, publish status, and an inline optional Kafka metadata object; no dedicated metadata schema is introduced.
 - **KafkaProducerHandle**: Shared producer instance exposed by the Kafka admin layer and reused by the test-events API.
 - **TestEventDefaultFactory**: Pure functions in `backend_service/app/utils.py`, one per topic, that return a fully initialized default instance of each topic's input schema. No validators, no exception handling — type-safe initialized values only. The `rag` factory returns `RAGRequestEvent` with a fresh `uuid4`-based `request_id` on every call.
-- **WebSocketEvents**: The shared `project/events.py` module — a string Enum of WebSocket event-name constants (including `stream-tokens`) importable by both frontend and backend. Contains names only, no payload models.
+- **WebSocketEvents**: The shared `project/events.py` module containing both WebSocket event-name constants and event body schemas. For now this includes the `stream-tokens` event name and its body schema fields: `from_service`, `content`, and `metadata`.
+- **UserRequest**: Backend request schema in `project/schemas.py` with fields `user_prompt`, `user_level` (`list[str]`), `file_data`, and `sid`; implemented without additional custom validation or exception handling in this iteration.
 - **ConnectionManager**: A simple class mapping `session_id` (== Socket.IO `sid`) to its connection, with minimal `get`/`set` functions and no complex logic. Sessions are independent even when owned by the same user.
 - **SocketModule**: The dedicated `socket.py` file holding lightweight Socket.IO event listeners (implemented later) and the `emit_event(event, payload, session_id)` function that routes a payload to a session.
 
@@ -135,6 +141,8 @@ As a frontend client, I need to connect to the backend over a WebSocket so that 
 - **SC-007**: A frontend Socket.IO client can establish a WebSocket connection to the backend and be registered in the connection manager keyed by its `session_id` (`sid`).
 - **SC-008**: A payload emitted via `emit_event(event, payload, session_id)` is delivered only to the connection mapped to that `session_id` and to no other session.
 - **SC-009**: The shared `project/events.py` defines the `stream-tokens` event constant and is importable by both frontend and backend without backend-only dependencies.
+- **SC-010**: The shared `project/events.py` defines a `stream-tokens` body schema with fields `from_service`, `content`, and `metadata`.
+- **SC-011**: `project/schemas.py` defines `UserRequest` with fields `user_prompt`, `user_level` (`list[str]`), `file_data`, and `sid`.
 
 ## Assumptions
 

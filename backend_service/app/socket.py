@@ -14,7 +14,7 @@ from typing import Any
 import socketio
 
 from backend_service.app.connection_manager import ConnectionManager
-from project.events import WebSocketEvents
+from project.events import StreamTokensEventBody, WebSocketEvents
 
 # Socket.IO server mounted onto the FastAPI app in main.py.
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
@@ -54,9 +54,9 @@ async def emit_event(
     await sio.emit(event_name, payload, to=session_id)
 
 
-async def stream_tokens(payload: Any, session_id: str) -> None:
-    """Emit a ``stream-tokens`` event to a session.
+async def stream_tokens(body: StreamTokensEventBody, session_id: str) -> None:
+    """Emit a ``stream-tokens`` event to a session using the typed schema.
 
     TODO: Implement the token streaming flow.
     """
-    await emit_event(WebSocketEvents.STREAM_TOKENS, payload, session_id)
+    await emit_event(WebSocketEvents.STREAM_TOKENS, body.model_dump(), session_id)

@@ -222,6 +222,15 @@ class StartupTopicBootstrapResult(BaseModel):
     )
 
 
+class UserRequest(BaseModel):
+    """Inbound user request routed from WebSocket to backend services."""
+
+    user_prompt: str
+    user_level: List[str]
+    file_data: Any = None
+    sid: str
+
+
 # ---------------------------------------------------------------------------
 # Teaching Agent schemas
 # ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from backend_service.app.utils import default_rag_test_event
-from project.schemas import RAGRequestEvent
+from project.schemas import RAGRequestEvent, UserRequest
 
 
 def test_default_rag_test_event_returns_rag_request_event() -> None:
@@ -25,3 +25,25 @@ def test_default_rag_test_event_required_fields_are_truthy() -> None:
     assert result.user_request
     assert result.file_paths
     assert result.session_ctx
+
+
+def test_user_request_required_fields() -> None:
+    req = UserRequest(
+        user_prompt="Explain gradient descent",
+        user_level=["beginner"],
+        file_data=None,
+        sid="abc-123",
+    )
+    assert req.user_prompt == "Explain gradient descent"
+    assert req.user_level == ["beginner"]
+    assert req.sid == "abc-123"
+
+
+def test_user_request_file_data_accepts_any_type() -> None:
+    req = UserRequest(
+        user_prompt="q",
+        user_level=["advanced"],
+        file_data={"name": "notes.pdf", "size": 1024},
+        sid="sid-x",
+    )
+    assert req.file_data == {"name": "notes.pdf", "size": 1024}

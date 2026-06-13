@@ -2,7 +2,7 @@
 
 **Version**: 1.0  
 **Date**: 2026-06-13  
-**Scope**: WebSocket connectivity of `backend_service` — Socket.IO channel, shared event names, connection manager, and per-session emit
+**Scope**: WebSocket connectivity of `backend_service` — Socket.IO channel, shared event contracts (names + bodies), connection manager, per-session emit, and `UserRequest` schema
 
 ---
 
@@ -14,15 +14,25 @@
 
 ---
 
-## Shared Event-Name Contract (`project/events.py`)
+## Shared Event Contract (`project/events.py`)
 
-- Defines a `str` Enum of WebSocket event-name constants importable by both frontend and backend.
-- Contains event names only — no payload models (payload shapes live in `project/schemas.py`).
+- Defines WebSocket event-name constants (as `str` Enum) and event body schemas importable by both frontend and backend.
+- For now includes one event contract: `stream-tokens`.
 - Module import has no side effects.
 
 | Member | Value | Direction | Notes |
 |---|---|---|---|
 | `STREAM_TOKENS` | `"stream-tokens"` | Server → client | Emission logic implemented later (TODO) |
+
+### `stream-tokens` Body Schema
+
+| Field | Type | Required |
+|---|---|---|
+| `from_service` | `str` | Yes |
+| `content` | `str` | Yes |
+| `metadata` | `dict[str, Any]` | Yes |
+
+**Validation/handling scope**: No additional custom validation or exception handling in this iteration.
 
 **Stability**: Changing a value is a breaking contract change for the frontend.
 
@@ -63,6 +73,7 @@ A minimal class mapping `session_id` → connection.
 |---|---|
 | `emit_event(event, payload, session_id)` for a connected session | Payload emitted to that session only |
 | `event` argument | Sourced from `project/events.py` constants |
+| `payload` for `stream-tokens` | Conforms to `stream-tokens` body schema in `project/events.py` |
 | Routing key | Always `session_id` (== `sid`); `user_id` is not used for routing |
 
 ### Non-Guaranteed / Deferred Behaviors (TODO)
@@ -75,14 +86,31 @@ A minimal class mapping `session_id` → connection.
 
 ---
 
+## Shared Backend Schema Contract (`project/schemas.py`)
+
+### `UserRequest`
+
+| Field | Type | Required |
+|---|---|---|
+| `user_prompt` | `str` | Yes |
+| `user_level` | `list[str]` | Yes |
+| `file_data` | `Any` | Yes |
+| `sid` | `str` | Yes |
+
+**Validation/handling scope**: No additional custom validation or exception handling in this iteration.
+
+---
+
 ## Acceptance Mapping
 
 | Spec Requirement | Contract Element |
 |---|---|
 | FR-020 (Socket.IO mounted) | Transport Contract |
-| FR-021 (shared event names) | Shared Event-Name Contract |
-| FR-022 (`stream-tokens` defined) | `STREAM_TOKENS` member |
+| FR-021 (shared event contracts) | Shared Event Contract |
+| FR-022 (`stream-tokens` name + body schema) | `STREAM_TOKENS` member + body schema table |
 | FR-023, FR-024 (connection manager) | Connection Manager Contract |
 | FR-025 (listeners in `socket.py`) | Socket Module Contract |
 | FR-026 (`emit_event` signature) | `emit_event` row |
 | FR-027 (minimal, deferred edge cases) | Deferred Behaviors (TODO) |
+| FR-028 (`UserRequest` schema) | Shared Backend Schema Contract |
+| FR-029 (no extra validation/exception handling) | Validation/handling scope notes |

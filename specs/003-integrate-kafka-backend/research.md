@@ -45,10 +45,10 @@
 - **Rationale**: Native named-event listeners (`@sio.on(...)`) and `sio.emit(event, data, to=sid)` map directly to the spec's "lightweight listeners + emit named events" design and provide per-connection routing with minimal boilerplate (FR-020).
 - **Alternatives considered**: FastAPI/Starlette native `WebSocket` endpoints (requires a custom event-name dispatch layer), raw ASGI WebSocket (more boilerplate, no built-in event model).
 
-## Decision 10: Shared Event-Name Contract Location
-- **Decision**: Define WebSocket event names in `project/events.py` as a `str` Enum of name constants only (including `stream-tokens`); payload shapes stay in `schemas.py`.
-- **Rationale**: Names are the cross-language contract both frontend and backend must agree on; keeping the shared surface to names only avoids leaking backend-only payload models and keeps `events.py` importable by the frontend (FR-021, FR-022).
-- **Alternatives considered**: Names plus payload Pydantic models (couples frontend to backend models), handler registry metadata (over-engineered for current scope).
+## Decision 10: Shared WebSocket Contract Location
+- **Decision**: Define shared WebSocket contracts in `project/events.py` using event-name constants plus event body schemas. For now include `stream-tokens` with body fields `from_service`, `content`, and `metadata`.
+- **Rationale**: Frontend and backend must agree not only on event names but also on body shape. Keeping both in a shared module provides one source of truth and reduces contract drift (FR-021, FR-022).
+- **Alternatives considered**: Names-only in `events.py` with body schema elsewhere (higher drift risk), registry metadata + handlers (over-engineered for current scope).
 
 ## Decision 11: Session Identity and Connection Manager
 - **Decision**: Treat the application `session_id` as identical to the Socket.IO-generated `sid`; a simple `ConnectionManager` class maps `session_id -> connection` with minimal `get`/`set` methods. A user may own multiple independent sessions; each session is routed independently.
@@ -64,3 +64,13 @@
 - **Decision**: Defer disconnect cleanup, missing-`session_id` handling, concurrent-emit ordering/back-pressure, and WebSocket authentication via explicit TODO markers.
 - **Rationale**: Spec FR-027 mandates the simplest approach with minimum boilerplate; deferring non-essential resilience keeps the first iteration small and reviewable.
 - **Alternatives considered**: Implementing full lifecycle/auth now (scope creep against the spec's stated simplicity goal).
+
+## Decision 14: Add UserRequest Schema in Shared Backend Contracts
+- **Decision**: Add `UserRequest` to `project/schemas.py` with fields `user_prompt`, `user_level` (`list[str]`), `file_data`, and `sid`.
+- **Rationale**: The WebSocket and async request flow now requires a standard backend request envelope keyed by session identity; defining it in shared schemas keeps downstream agent/backend contracts explicit (FR-028).
+- **Alternatives considered**: Defining `UserRequest` in `backend_service` only (less reusable), embedding this shape ad hoc in endpoint handlers (no central contract).
+
+## Decision 15: Validation Scope for New Schemas
+- **Decision**: Do not add custom validation or exception-handling logic for `stream-tokens` event body schema and `UserRequest` in this iteration.
+- **Rationale**: Explicitly matches the feature constraint to keep implementation minimal and defer hardening to later TODO tasks (FR-029).
+- **Alternatives considered**: Strict validators now (extra boilerplate and premature complexity).
