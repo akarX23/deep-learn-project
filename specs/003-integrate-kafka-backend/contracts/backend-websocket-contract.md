@@ -94,7 +94,6 @@ A minimal class mapping `session_id` → connection.
 |---|---|---|
 | `user_prompt` | `str` | Yes |
 | `user_level` | `list[str]` | Yes |
-| `file_data` | `Any` | Yes |
 | `sid` | `str` | Yes |
 
 **Validation/handling scope**: No additional custom validation or exception handling in this iteration.

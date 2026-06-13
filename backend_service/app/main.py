@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from backend_service.app.api.chat_request import router as chat_request_router
 from backend_service.app.api.test_events import router as test_events_router
 from backend_service.app.api.topics import router as topics_router
 from backend_service.app.config import KafkaSettings
@@ -69,6 +70,7 @@ def create_app(
     app = FastAPI(title="Kafka Backend Service", version="0.1.0", lifespan=lifespan)
     app.state.connection_manager = connection_manager
     app.include_router(topics_router)
+    app.include_router(chat_request_router)
     if test_event_routes_enabled:
         app.include_router(test_events_router)
 

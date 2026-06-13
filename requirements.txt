@@ -19,5 +19,8 @@ kafka-python>=2.0.2
 # --- Backend Service (WebSocket) ---
 python-socketio>=5.11
 
+# --- Backend Service (File Uploads) ---
+python-multipart>=0.0.9
+
 # --- Development / Testing ---
 pytest>=8.0.0

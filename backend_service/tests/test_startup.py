@@ -253,7 +253,11 @@ def test_lifespan_includes_topic_bootstrap() -> None:
     assert tracking_admin.connect_called is True
     assert tracking_admin.bootstrap_topics_called is True
     # Verify bootstrap received all topics from project/topics
-    assert tracking_admin.bootstrap_topics_topics == ["rag", "rag-complete"]
+    assert tracking_admin.bootstrap_topics_topics == [
+        "rag",
+        "init-planner",
+        "rag-complete",
+    ]
 
 
 # Bootstrap Topics Tests (T004-T008)

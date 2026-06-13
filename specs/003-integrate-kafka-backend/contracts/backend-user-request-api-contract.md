@@ -10,16 +10,15 @@
 
 The endpoint accepts `multipart/form-data` with:
 
-1. **JSON Field**: `request` (serialized JSON containing `UserRequest` schema)
-2. **File Fields**: 0–3 files uploaded as `files[]` (multipart upload)
+1. **Parsed Form Fields**: `user_prompt`, `user_level`, `sid` (the `UserRequest` schema)
+2. **File Fields**: 0–3 files uploaded as `files` (repeated multipart field)
 
-### `UserRequest` Schema (JSON payload)
+### `UserRequest` Schema (parsed form model)
 
 ```json
 {
   "user_prompt": "string (non-empty)",
   "user_level": ["string", "..."],
-  "file_data": null,
   "sid": "string (session id)"
 }
 ```
@@ -28,13 +27,12 @@ The endpoint accepts `multipart/form-data` with:
 |-------|------|-----------|-------------|
 | `user_prompt` | string | non-empty | End-user query text |
 | `user_level` | list[string] | (none) | User experience level labels |
-| `file_data` | any | nullable | Placeholder for file metadata; currently ignored |
 | `sid` | string | non-empty | Session identifier for response routing |
 
 ### File Upload Constraints
 
 - **Max files per request**: 3 (if exceeded, log warning but do not reject)
-- **File field name**: `files[]` (multipart array)
+- **File field name**: `files` (repeat the same multipart field per file)
 - **File naming**: Any name allowed; absolute path is computed on save
 - **No advanced validation**: File type, size checks are deferred
 
@@ -42,9 +40,11 @@ The endpoint accepts `multipart/form-data` with:
 
 ```bash
 curl -X POST http://localhost:8000/api/chat/request \
-  -F 'request={"user_prompt":"Explain neural networks","user_level":["beginner"],"file_data":null,"sid":"session-123"}' \
-  -F 'files[]=@document1.pdf' \
-  -F 'files[]=@document2.txt'
+  -F 'user_prompt=Explain neural networks' \
+  -F 'user_level=beginner' \
+  -F 'sid=session-123' \
+  -F 'files=@document1.pdf' \
+  -F 'files=@document2.txt'
 ```
 
 ## Response Contract
@@ -95,7 +95,7 @@ curl -X POST http://localhost:8000/api/chat/request \
 
 ### Kafka Publishing
 
-1. After files are successfully saved, a `PlannerRequestEvent` is published to topic `planner`.
+1. After files are successfully saved, a `PlannerRequestEvent` is published to topic `init-planner`.
 2. `PlannerRequestEvent` schema:
    - `user_prompt`: copied from request
    - `user_level`: copied from request

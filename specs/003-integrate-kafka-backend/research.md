@@ -66,8 +66,8 @@
 - **Alternatives considered**: Implementing full lifecycle/auth now (scope creep against the spec's stated simplicity goal).
 
 ## Decision 14: Add UserRequest Schema in Shared Backend Contracts
-- **Decision**: Add `UserRequest` to `project/schemas.py` with fields `user_prompt`, `user_level` (`list[str]`), `file_data`, and `sid`.
-- **Rationale**: The WebSocket and async request flow now requires a standard backend request envelope keyed by session identity; defining it in shared schemas keeps downstream agent/backend contracts explicit (FR-028).
+- **Decision**: Add `UserRequest` to `project/schemas.py` with fields `user_prompt`, `user_level` (`list[str]`), and `sid`.
+- **Rationale**: The WebSocket and async request flow requires a standard backend request envelope keyed by session identity; defining it in shared schemas keeps downstream agent/backend contracts explicit (FR-028) while avoiding unused schema fields.
 - **Alternatives considered**: Defining `UserRequest` in `backend_service` only (less reusable), embedding this shape ad hoc in endpoint handlers (no central contract).
 
 ## Decision 15: Validation Scope for New Schemas
@@ -104,4 +104,9 @@
 - **Decision**: Retain uploaded files indefinitely in the `./uploads` directory in this iteration; cleanup policies and retention strategies are explicitly deferred to future iterations.
 - **Rationale**: Satisfies FR-038's requirement for a simple implementation by removing the cleanup concern from scope; retained files allow the planner to process requests asynchronously without time-pressure.
 - **Alternatives considered**: Auto-cleanup after planner processing (adds tracking complexity), time-based expiration (adds scheduler complexity and requires monitoring).
+
+## Decision 22: Parsed Form Model for UserRequest in Swagger
+- **Decision**: For `POST /api/chat/request`, accept `UserRequest` as parsed multipart form fields (`user_prompt`, `user_level`, `sid`) rather than a single JSON-string form field.
+- **Rationale**: This makes Swagger UI expose the request model as separate, typed fields while preserving multipart file uploads via `files`.
+- **Alternatives considered**: Single JSON string field (harder to use in Swagger), ad hoc endpoint-only DTOs (duplicates shared contract).
 

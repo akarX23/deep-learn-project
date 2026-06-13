@@ -31,7 +31,7 @@
 - Q: What should the shared `project/events.py` define? → A: WebSocket event-name constants and event body schemas; for now include `stream-tokens` with fields `from_service`, `content`, and `metadata`.
 - Q: What is the emit function signature? → A: `emit_event(event, payload, session_id)` — routed by `session_id` (== `sid`); `user_id` is not needed for routing.
 - Q: Should `project/events.py` also include WebSocket event body schemas? → A: Yes. Define event body schemas there; for now include `stream-tokens` with fields `from_service`, `content`, and `metadata`.
-- Q: What additional backend schema should be added to `project/schemas.py`? → A: Add `UserRequest` with fields `user_prompt`, `user_level` (list of strings), `file_data`, and `sid`.
+- Q: What additional backend schema should be added to `project/schemas.py`? → A: Add `UserRequest` with fields `user_prompt`, `user_level` (list of strings), and `sid`.
 - Q: What validation/error-handling level is required for these new schemas? → A: None for now — no extra exception handling or validation.
 
 - Q: What HTTP endpoint should the user-request ingestion API use? → A: `POST /api/chat/request` for accepting user requests with files from the frontend.
@@ -39,6 +39,8 @@
 - Q: What fields should the planner event schema include? → A: `PlannerRequestEvent` with `user_prompt`, `user_level`, `sid`, and `file_paths` (absolute paths only, no per-file metadata).
 - Q: What error response format should the API use? → A: Simple struct: `{error: <message_string>}` with appropriate HTTP status code.
 - Q: Should uploaded files be retained or cleaned up? → A: Retain indefinitely in the `./uploads` directory (configurable via env var; cleanup policy deferred to future iteration).
+- Q: Should `UserRequest` include a `file_data` field? → A: No. `UserRequest` contains only `user_prompt`, `user_level`, and `sid`; uploaded files are provided via multipart `files` fields and mapped to `PlannerRequestEvent.file_paths`.
+- Q: How should the `UserRequest` model be transmitted in the multipart request? → A: As a parsed form model so Swagger exposes separate fields (`user_prompt`, `user_level`, `sid`), plus a separate `files` field for file uploads.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -85,9 +87,9 @@ As a frontend user, I need to submit a query along with optional document files 
 
 **Acceptance Scenarios**:
 
-1. **Given** a `POST /api/chat/request` request with a valid `UserRequest` body and 1–3 files, **When** the backend processes the request, **Then** files are saved to the configured uploads directory (default `./uploads`), and a `PlannerRequestEvent` is published to Kafka with the absolute file paths.
+1. **Given** a `POST /api/chat/request` request with parsed `UserRequest` form fields (`user_prompt`, `user_level`, `sid`) and 1–3 files in form field `files`, **When** the backend processes the request, **Then** files are saved to the configured uploads directory (default `./uploads`), a `PlannerRequestEvent` is published to Kafka with the absolute file paths, and the API responds with a confirmation message.
 2. **Given** files are successfully saved, **When** the API returns, **Then** the response includes a confirmation message indicating the request has been accepted and queued for planner processing.
-3. **Given** a request with more than 3 files or other validation failure, **When** the backend processes the request, **Then** the API returns a 400 error with a simple error message.
+3. **Given** a request with invalid `UserRequest` data or validation failure, **When** the backend processes the request, **Then** the API returns a 400 error with a simple error message.
 4. **Given** files are saved but Kafka publish fails, **When** the API returns, **Then** files remain in the uploads directory (retained indefinitely) and a 500 error is returned with an error message.
 
 ---
@@ -135,9 +137,9 @@ As a frontend user, I need to submit a query along with optional document files 
 - **FR-025**: WebSocket event listeners MUST be placed in a dedicated `socket.py` file as lightweight listeners; their full behavior is to be implemented later (TODO).
 - **FR-026**: `socket.py` MUST provide an `emit_event(event, payload, session_id)` function that emits the given event with the payload to the connection identified by `session_id`.
 - **FR-027**: The WebSocket integration MUST favor the simplest approach with minimum boilerplate; advanced exceptional handling and edge cases MUST be deferred via TODO markers.
-- **FR-028**: The backend service MUST define a `UserRequest` schema in `project/schemas.py` with fields `user_prompt`, `user_level` (list of strings), `file_data`, and `sid`.
+- **FR-028**: The backend service MUST define a `UserRequest` schema in `project/schemas.py` with fields `user_prompt` (string), `user_level` (list of strings), and `sid` (string).
 - **FR-029**: For `stream-tokens` event body schema and `UserRequest`, no additional exception handling or custom validation logic is required in this iteration.
-- **FR-030**: The backend service MUST expose a `POST /api/chat/request` endpoint that accepts multipart/form-data with a JSON-serialized `UserRequest` and optional file uploads (max 3 files per request).
+- **FR-030**: The backend service MUST expose a `POST /api/chat/request` endpoint that accepts multipart/form-data with parsed `UserRequest` form fields (`user_prompt`, `user_level`, `sid`) and optional file uploads in form field `files` (max 3 files per request).
 - **FR-031**: The user-request API MUST validate the `UserRequest` schema before proceeding; if validation fails, MUST return a 400 response with error message.
 - **FR-032**: The user-request API MUST save uploaded files to a directory path configurable via the `UPLOAD_DIR` environment variable, defaulting to `./uploads`.
 - **FR-033**: The `./uploads` directory path MUST be added to `.gitignore` to prevent accidental commit of user-uploaded files.
@@ -157,11 +159,11 @@ As a frontend user, I need to submit a query along with optional document files 
 - **KafkaProducerHandle**: Shared producer instance exposed by the Kafka admin layer and reused by the test-events API.
 - **TestEventDefaultFactory**: Pure functions in `backend_service/app/utils.py`, one per topic, that return a fully initialized default instance of each topic's input schema. No validators, no exception handling — type-safe initialized values only. The `rag` factory returns `RAGRequestEvent` with a fresh `uuid4`-based `request_id` on every call.
 - **WebSocketEvents**: The shared `project/events.py` module containing both WebSocket event-name constants and event body schemas. For now this includes the `stream-tokens` event name and its body schema fields: `from_service`, `content`, and `metadata`.
-- **UserRequest**: Backend request schema in `project/schemas.py` with fields `user_prompt`, `user_level` (`list[str]`), `file_data`, and `sid`; implemented without additional custom validation or exception handling in this iteration.
+- **UserRequest**: Backend request schema in `project/schemas.py` with fields `user_prompt` (string), `user_level` (`list[str]`), and `sid` (string); implemented without additional custom validation or exception handling in this iteration. In the multipart request, this schema is parsed from separate form fields: `user_prompt`, `user_level`, and `sid`.
 - **ConnectionManager**: A simple class mapping `session_id` (== Socket.IO `sid`) to its connection, with minimal `get`/`set` functions and no complex logic. Sessions are independent even when owned by the same user.
 - **SocketModule**: The dedicated `socket.py` file holding lightweight Socket.IO event listeners (implemented later) and the `emit_event(event, payload, session_id)` function that routes a payload to a session.
 - **PlannerRequestEvent**: Kafka event schema for user requests destined for the planner agent, defined in `project/schemas.py` with fields `user_prompt`, `user_level` (`list[str]`), `sid`, and `file_paths` (`list[str]` — absolute paths). No per-file metadata included.
-- **UserRequestAPI**: The `POST /api/chat/request` endpoint that accepts multipart/form-data with a JSON `UserRequest` body and 1–3 file uploads. Saves files to the configured `UPLOAD_DIR` and publishes a `PlannerRequestEvent` to Kafka. Responses use simple error struct `{error: <message>}`.
+- **UserRequestAPI**: The `POST /api/chat/request` endpoint that accepts multipart/form-data with parsed `UserRequest` form fields (`user_prompt`, `user_level`, `sid`) and form field `files` (1–3 file uploads). Files are saved to the configured `UPLOAD_DIR`, their absolute paths are mapped to `file_paths`, and a `PlannerRequestEvent` is published to Kafka. Responses use simple error struct `{error: <message>}`.
 - **UploadDirectory**: The server-side directory for persisting uploaded user files, configurable via the `UPLOAD_DIR` environment variable (default `./uploads`), added to `.gitignore`.
 
 ## Success Criteria *(mandatory)*
@@ -178,8 +180,8 @@ As a frontend user, I need to submit a query along with optional document files 
 - **SC-008**: A payload emitted via `emit_event(event, payload, session_id)` is delivered only to the connection mapped to that `session_id` and to no other session.
 - **SC-009**: The shared `project/events.py` defines the `stream-tokens` event constant and is importable by both frontend and backend without backend-only dependencies.
 - **SC-010**: The shared `project/events.py` defines a `stream-tokens` body schema with fields `from_service`, `content`, and `metadata`.
-- **SC-011**: `project/schemas.py` defines `UserRequest` with fields `user_prompt`, `user_level` (`list[str]`), `file_data`, and `sid`.
-- **SC-012**: A `POST /api/chat/request` call with valid `UserRequest` and 1–3 file uploads succeeds: files are saved to the configured directory, a `PlannerRequestEvent` is published to Kafka, and the API responds with a confirmation message.
+- **SC-011**: `project/schemas.py` defines `UserRequest` with fields `user_prompt`, `user_level` (`list[str]`), and `sid`.
+- **SC-012**: A `POST /api/chat/request` call with valid `UserRequest` provided via parsed form fields (`user_prompt`, `user_level`, `sid`) and 1–3 file uploads (in form field `files`) succeeds: files are saved to the configured directory, a `PlannerRequestEvent` is published to Kafka, and the API responds with a confirmation message.
 - **SC-013**: A `POST /api/chat/request` call with invalid `UserRequest` data returns a 400 error with a simple error message.
 - **SC-014**: Uploaded files are persisted to the path configured via `UPLOAD_DIR` environment variable (default `./uploads`) and remain accessible for planner processing.
 - **SC-015**: The `./uploads` directory is listed in `.gitignore` to prevent accidental version-control commits of uploaded files.

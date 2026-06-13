@@ -193,14 +193,13 @@ from project.schemas import UserRequest
 req = UserRequest(
 	user_prompt="Explain gradient descent simply",
 	user_level=["beginner"],
-	file_data={"files": ["notes.pdf"]},
 	sid="abc123",
 )
 ```
 
 ## 9. Ingest user requests with file uploads
 
-The backend exposes `POST /api/chat/request` for accepting user queries and file uploads from the frontend. Files are saved to the configured directory (default `./uploads`) and a `PlannerRequestEvent` is published to Kafka for planner processing.
+The backend exposes `POST /api/chat/request` for accepting user queries and file uploads from the frontend. `UserRequest` is provided as parsed form fields (`user_prompt`, `user_level`, `sid`) so Swagger displays separate fields. Files are saved to the configured directory (default `./uploads`) and a `PlannerRequestEvent` is published to Kafka for planner processing.
 
 ### Configure upload directory (optional)
 
@@ -214,9 +213,11 @@ The configured directory is automatically added to `.gitignore` to prevent accid
 
 ```bash
 curl -X POST http://localhost:8001/api/chat/request \
-  -F 'request={"user_prompt":"Explain neural networks","user_level":["beginner"],"file_data":null,"sid":"session-123"}' \
-  -F 'files[]=@document1.pdf' \
-  -F 'files[]=@document2.txt'
+	-F 'user_prompt=Explain neural networks' \
+	-F 'user_level=beginner' \
+	-F 'sid=session-123' \
+	-F 'files=@document1.pdf' \
+	-F 'files=@document2.txt'
 ```
 
 Expected successful response (200 OK):
@@ -253,7 +254,7 @@ ls -la ./uploads/
 
 ### PlannerRequestEvent schema
 
-The event published to Kafka `planner` topic includes:
+The event published to Kafka `init-planner` topic includes:
 
 ```python
 from project.schemas import PlannerRequestEvent

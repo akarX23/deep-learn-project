@@ -99,6 +99,17 @@ class ComposeSettings(BaseModel):
     kafka_ui_url: str = "http://localhost:8080"
 
 
+def get_upload_dir() -> str:
+    """Return the configured uploads directory (default ``./uploads``).
+
+    Configurable via the ``UPLOAD_DIR`` environment variable.
+    """
+    raw = os.getenv("UPLOAD_DIR")
+    if raw is None or not raw.strip():
+        return "./uploads"
+    return raw.strip()
+
+
 def _read_optional(name: str) -> str | None:
     raw = os.getenv(name)
     if raw is None:

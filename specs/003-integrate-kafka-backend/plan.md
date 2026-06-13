@@ -7,7 +7,7 @@
 
 ## Summary
 
-Extend the backend service startup lifecycle to create Kafka topics from `project/topics` idempotently, and add a gated test-event API for topic `rag` that publishes a `RAGRequestEvent` payload directly with default schema values applied. The API returns a normalized publish result with inline Kafka metadata when available. Additionally, mount a Socket.IO WebSocket channel on the FastAPI ASGI app so the frontend can connect and receive asynchronous Kafka-driven results routed per session: a minimal `ConnectionManager` maps `session_id` (== Socket.IO `sid`) to its connection, shared WebSocket contracts live in `project/events.py` (including the `stream-tokens` event name and body schema with `from_service`, `content`, `metadata`), and a dedicated `socket.py` holds lightweight listeners plus an `emit_event(event, payload, session_id)` function. Add a backend `UserRequest` schema in `project/schemas.py` with fields `user_prompt`, `user_level` (`list[str]`), `file_data`, and `sid`. Implementation keeps advanced resilience and WebSocket edge-case handling as TODO-marked follow-ups while satisfying current observability and performance budgets.
+Extend the backend service startup lifecycle to create Kafka topics from `project/topics` idempotently, and add a gated test-event API for topic `rag` that publishes a `RAGRequestEvent` payload directly with default schema values applied. The API returns a normalized publish result with inline Kafka metadata when available. Additionally, mount a Socket.IO WebSocket channel on the FastAPI ASGI app so the frontend can connect and receive asynchronous Kafka-driven results routed per session: a minimal `ConnectionManager` maps `session_id` (== Socket.IO `sid`) to its connection, shared WebSocket contracts live in `project/events.py` (including the `stream-tokens` event name and body schema with `from_service`, `content`, `metadata`), and a dedicated `socket.py` holds lightweight listeners plus an `emit_event(event, payload, session_id)` function. Add a backend `UserRequest` schema in `project/schemas.py` with fields `user_prompt`, `user_level` (`list[str]`), and `sid`; for `/api/chat/request`, accept these as parsed multipart form fields (`user_prompt`, `user_level`, `sid`) so Swagger exposes separate model fields while files are uploaded via `files`. Implementation keeps advanced resilience and WebSocket edge-case handling as TODO-marked follow-ups while satisfying current observability and performance budgets.
 
 ## Technical Context
 
@@ -55,6 +55,7 @@ specs/003-integrate-kafka-backend/
 ├── contracts/
 │   ├── backend-topic-api-contract.md
 │   ├── backend-topic-bootstrap-contract.md
+│   ├── backend-user-request-api-contract.md
 │   └── backend-websocket-contract.md
 └── tasks.md
 ```

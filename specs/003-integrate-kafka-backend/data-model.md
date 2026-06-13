@@ -160,12 +160,12 @@
 |---|---|---|
 | `user_prompt` | `str` | End-user prompt text |
 | `user_level` | `list[str]` | User level tags/labels |
-| `file_data` | `Any` | Attached file payload/reference data |
 | `sid` | `str` | Session identifier (`sid`) used for response routing |
 
 **Validation rules**:
 - No additional custom validation or exception handling in this iteration.
 - Keeps schema minimal to match the current low-boilerplate requirement.
+- For `POST /api/chat/request`, this model is supplied via parsed multipart form fields: `user_prompt`, `user_level`, and `sid`.
 
 ---
 
