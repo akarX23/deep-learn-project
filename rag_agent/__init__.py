@@ -6,8 +6,8 @@ __all__ = ["RAGAgent"]
 
 
 def __getattr__(name: str):
-	if name == "RAGAgent":
-		from rag_agent.agent import RAGAgent
+    if name == "RAGAgent":
+        from rag_agent.agent import RAGAgent
 
-		return RAGAgent
-	raise AttributeError(name)
+        return RAGAgent
+    raise AttributeError(name)

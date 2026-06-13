@@ -19,9 +19,9 @@
 
 **Purpose**: Establish baseline scaffolding for the simplified worker-first runtime.
 
-- [ ] T001 [P] Normalize module-level logging setup in `rag_agent/worker.py`, `rag_agent/kafka.py`, `rag_agent/agent.py`, and `rag_agent/handlers.py` to use standard `logging.getLogger(__name__)`
-- [ ] T002 [P] Remove stale backend topic bootstrap configuration references from `rag_agent/utils/helpers.py` and related env-read paths used by the worker startup flow
-- [ ] T003 [P] Add explicit topic constants usage from `project/topics.py` in `rag_agent/kafka.py` for `rag` and `rag-complete` paths
+- [X] T001 [P] Normalize module-level logging setup in `rag_agent/worker.py`, `rag_agent/kafka.py`, `rag_agent/agent.py`, and `rag_agent/handlers.py` to use standard `logging.getLogger(__name__)`
+- [X] T002 [P] Remove stale backend topic bootstrap configuration references from `rag_agent/utils/helpers.py` and related env-read paths used by the worker startup flow
+- [X] T003 [P] Add explicit topic constants usage from `project/topics.py` in `rag_agent/kafka.py` for `rag` and `rag-complete` paths
 
 ---
 
@@ -31,10 +31,10 @@
 
 **Checkpoint**: Worker can initialize Kafka objects and run startup checks without FastAPI or handler/factory orchestration.
 
-- [ ] T004 Implement env-direct Kafka connector initialization and producer/consumer creation functions in `rag_agent/kafka.py`
-- [ ] T005 Implement typed startup topic-presence metadata check function in `rag_agent/kafka.py` that returns missing-topic information without creating topics
-- [ ] T006 Simplify `helpers.py` to env extraction helper functions only in `rag_agent/utils/helpers.py` (no config classes, no validators)
-- [ ] T007 Refactor worker bootstrap in `rag_agent/worker.py` to initialize threaded consumer loop and call Kafka startup checks before entering steady-state polling
+- [X] T004 Implement env-direct Kafka connector initialization and producer/consumer creation functions in `rag_agent/kafka.py`
+- [X] T005 Implement typed startup topic-presence metadata check function in `rag_agent/kafka.py` that returns missing-topic information without creating topics
+- [X] T006 Simplify `helpers.py` to env extraction helper functions only in `rag_agent/utils/helpers.py` (no config classes, no validators)
+- [X] T007 Refactor worker bootstrap in `rag_agent/worker.py` to initialize threaded consumer loop and call Kafka startup checks before entering steady-state polling
 
 ---
 
@@ -46,13 +46,13 @@
 
 ### Tests for User Story 1
 
-- [ ] T008 [P] [US1] Update runtime lifecycle coverage in `rag_agent/tests/test_worker_runtime.py` for thread startup, idle polling continuity, and shutdown resource cleanup
-- [ ] T009 [P] [US1] Update logging-stage assertions in `rag_agent/tests/test_logging.py` for worker lifecycle stages using standard logging
+- [X] T008 [P] [US1] Update runtime lifecycle coverage in `rag_agent/tests/test_worker_runtime.py` for thread startup, idle polling continuity, and shutdown resource cleanup
+- [X] T009 [P] [US1] Update logging-stage assertions in `rag_agent/tests/test_logging.py` for worker lifecycle stages using standard logging
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Implement worker main loop orchestration in `rag_agent/worker.py` to consume continuously from Kafka in a dedicated thread
-- [ ] T011 [US1] Ensure worker shutdown path in `rag_agent/worker.py` stops loop thread and closes producer/consumer through `rag_agent/kafka.py` helpers
+- [X] T010 [US1] Implement worker main loop orchestration in `rag_agent/worker.py` to consume continuously from Kafka in a dedicated thread
+- [X] T011 [US1] Ensure worker shutdown path in `rag_agent/worker.py` stops loop thread and closes producer/consumer through `rag_agent/kafka.py` helpers
 
 **Checkpoint**: User Story 1 is independently testable and no FastAPI runtime is required.
 
@@ -66,13 +66,13 @@
 
 ### Tests for User Story 2
 
-- [ ] T012 [P] [US2] Add startup topic-check test coverage in `rag_agent/tests/test_kafka_integration.py` for all-topics-present and missing-topic warning scenarios
-- [ ] T013 [P] [US2] Add test coverage in `rag_agent/tests/test_kafka_integration.py` to assert no topic creation API or backend bootstrap path is invoked
+- [X] T012 [P] [US2] Add startup topic-check test coverage in `rag_agent/tests/test_kafka_integration.py` for all-topics-present and missing-topic warning scenarios
+- [X] T013 [P] [US2] Add test coverage in `rag_agent/tests/test_kafka_integration.py` to assert no topic creation API or backend bootstrap path is invoked
 
 ### Implementation for User Story 2
 
-- [ ] T014 [US2] Implement warn-and-continue startup topic presence behavior in `rag_agent/worker.py` using results from `rag_agent/kafka.py`
-- [ ] T015 [US2] Remove topic creation behavior and backend API startup call paths from `rag_agent/kafka.py` and `rag_agent/worker.py`
+- [X] T014 [US2] Implement warn-and-continue startup topic presence behavior in `rag_agent/worker.py` using results from `rag_agent/kafka.py`
+- [X] T015 [US2] Remove topic creation behavior and backend API startup call paths from `rag_agent/kafka.py` and `rag_agent/worker.py`
 
 **Checkpoint**: User Story 2 is independently testable with startup checks and no topic creation side effects.
 
@@ -86,15 +86,15 @@
 
 ### Tests for User Story 3
 
-- [ ] T016 [P] [US3] Update dispatch flow tests in `rag_agent/tests/test_request_event.py` to validate direct worker-to-agent invocation behavior
-- [ ] T017 [P] [US3] Update completion publish path tests in `rag_agent/tests/test_completion_event.py` to validate publish from worker via `rag_agent/kafka.py`
+- [X] T016 [P] [US3] Update dispatch flow tests in `rag_agent/tests/test_request_event.py` to validate direct worker-to-agent invocation behavior
+- [X] T017 [P] [US3] Update completion publish path tests in `rag_agent/tests/test_completion_event.py` to validate publish from worker via `rag_agent/kafka.py`
 
 ### Implementation for User Story 3
 
-- [ ] T018 [US3] Remove handler/factory orchestration from active consumer flow in `rag_agent/worker.py` and `rag_agent/handlers.py`
-- [ ] T019 [US3] Ensure `rag_agent/agent.py` returns processing output only and contains no Kafka publish operations
-- [ ] T020 [US3] Implement worker-side completion publish call path in `rag_agent/worker.py` using `rag_agent/kafka.py` producer functions
-- [ ] T021 [US3] Add explicit TODO markers for deferred validation, edge-case handling, and exception-hardening in `rag_agent/worker.py`, `rag_agent/kafka.py`, `rag_agent/agent.py`, and `rag_agent/utils/helpers.py`
+- [X] T018 [US3] Remove handler/factory orchestration from active consumer flow in `rag_agent/worker.py` and `rag_agent/handlers.py`
+- [X] T019 [US3] Ensure `rag_agent/agent.py` returns processing output only and contains no Kafka publish operations
+- [X] T020 [US3] Implement worker-side completion publish call path in `rag_agent/worker.py` using `rag_agent/kafka.py` producer functions
+- [X] T021 [US3] Add explicit TODO markers for deferred validation, edge-case handling, and exception-hardening in `rag_agent/worker.py`, `rag_agent/kafka.py`, `rag_agent/agent.py`, and `rag_agent/utils/helpers.py`
 
 **Checkpoint**: User Story 3 is independently testable with direct consumer -> agent -> publish flow.
 
@@ -104,10 +104,10 @@
 
 **Purpose**: Verify end-to-end quality gates and documentation alignment.
 
-- [ ] T022 [P] Run full `rag_agent` test suite with `pytest rag_agent/tests -q` and fix regressions
-- [ ] T023 [P] Run quality checks `ruff check project rag_agent`, `ruff format --check project rag_agent`, and `python -m compileall project rag_agent`
-- [ ] T024 [P] Validate `specs/001-rag-retrieval-agent/quickstart.md` against implemented startup/check/consume/publish flow and update drifted commands or expectations
-- [ ] T025 [P] Review exported function signatures in `rag_agent/worker.py`, `rag_agent/kafka.py`, `rag_agent/agent.py`, and `rag_agent/utils/helpers.py` to remove unnecessary `Any` usage and keep explicit types
+- [X] T022 [P] Run full `rag_agent` test suite with `pytest rag_agent/tests -q` and fix regressions
+- [X] T023 [P] Run quality checks `ruff check project rag_agent`, `ruff format --check project rag_agent`, and `python -m compileall project rag_agent`
+- [X] T024 [P] Validate `specs/001-rag-retrieval-agent/quickstart.md` against implemented startup/check/consume/publish flow and update drifted commands or expectations
+- [X] T025 [P] Review exported function signatures in `rag_agent/worker.py`, `rag_agent/kafka.py`, `rag_agent/agent.py`, and `rag_agent/utils/helpers.py` to remove unnecessary `Any` usage and keep explicit types
 
 ---
 

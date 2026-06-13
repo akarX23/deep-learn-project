@@ -4,9 +4,8 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from project.schemas import RAGAgentOutput
-from rag_agent.handlers import RAGRequestEventHandler
 from rag_agent.kafka import publish_rag_complete
-from rag_agent.worker import process_consumer_batch
+from rag_agent.worker import process_consumer_batch, process_request_event
 
 
 class _FakeConsumer:
@@ -34,7 +33,7 @@ def test_consumer_batch_dispatches_event_from_rag_topic() -> None:
     processed = process_consumer_batch(
         consumer,
         producer=object(),
-        handler=lambda payload, producer: captured.append((payload, producer)),
+        processor=lambda payload, producer: captured.append((payload, producer)),
         poll_timeout_ms=250,
     )
 
@@ -43,7 +42,7 @@ def test_consumer_batch_dispatches_event_from_rag_topic() -> None:
     assert captured[0][0]["user_request"] == "Explain gradient descent"
 
 
-def test_request_handler_dispatches_to_rag_agent() -> None:
+def test_request_event_processor_dispatches_to_rag_agent() -> None:
     captured = {}
 
     class _FakeAgent:
@@ -66,8 +65,7 @@ def test_request_handler_dispatches_to_rag_agent() -> None:
     def _capture_publish(_producer, event):
         published["event"] = event
 
-    handler = RAGRequestEventHandler(agent_factory=_FakeAgent, publisher=_capture_publish)
-    output = handler.process_request(
+    output = process_request_event(
         {
             "request_id": "req-2",
             "session_ctx": {"session_id": "s-2"},
@@ -75,6 +73,8 @@ def test_request_handler_dispatches_to_rag_agent() -> None:
             "file_paths": ["rag_agent/tests/inputs/sample.pdf"],
         },
         producer=object(),
+        agent_factory=_FakeAgent,
+        publisher=_capture_publish,
     )
 
     assert captured["request"].user_prompt == "Summarize the uploaded chapter"
@@ -104,7 +104,6 @@ def test_ingest_to_dispatch_flow_preserves_request_id() -> None:
     def _capture_publish(_producer, event):
         published["request_id"] = event.request_id
 
-    handler = RAGRequestEventHandler(agent_factory=_FakeAgent, publisher=_capture_publish)
     consumer = _FakeConsumer(
         {
             "rag": [
@@ -124,7 +123,12 @@ def test_ingest_to_dispatch_flow_preserves_request_id() -> None:
     process_consumer_batch(
         consumer,
         producer=object(),
-        handler=handler.process_request,
+        processor=lambda payload, producer: process_request_event(
+            payload,
+            producer,
+            agent_factory=_FakeAgent,
+            publisher=_capture_publish,
+        ),
         poll_timeout_ms=50,
     )
 
@@ -173,13 +177,7 @@ def test_completion_event_preserves_request_correlation() -> None:
             datetime(2026, 6, 11, 16, 0, 1, tzinfo=timezone.utc),
         ]
     )
-    handler = RAGRequestEventHandler(
-        agent_factory=_FakeAgent,
-        publisher=lambda _producer, _event: None,
-        clock=lambda: next(fixed_times),
-    )
-
-    output = handler.process_request(
+    output = process_request_event(
         {
             "request_id": "req-3",
             "session_ctx": {"session_id": "s-3", "trace_id": "trace-1"},
@@ -187,6 +185,9 @@ def test_completion_event_preserves_request_correlation() -> None:
             "file_paths": ["rag_agent/tests/inputs/sample.pdf"],
         },
         producer=object(),
+        agent_factory=_FakeAgent,
+        publisher=lambda _producer, _event: None,
+        clock=lambda: next(fixed_times),
     )
 
     assert output.request_id == "req-3"
@@ -212,10 +213,6 @@ def test_lifecycle_logging_covers_consume_process_and_publish(caplog) -> None:
                 status="complete",
             )
 
-    handler = RAGRequestEventHandler(
-        agent_factory=_FakeAgent,
-        publisher=lambda _producer, _event: None,
-    )
     consumer = _FakeConsumer(
         {
             "rag": [
@@ -236,13 +233,20 @@ def test_lifecycle_logging_covers_consume_process_and_publish(caplog) -> None:
         process_consumer_batch(
             consumer,
             producer=object(),
-            handler=handler.process_request,
+            processor=lambda payload, producer: process_request_event(
+                payload,
+                producer,
+                agent_factory=_FakeAgent,
+                publisher=lambda _producer, _event: None,
+            ),
             poll_timeout_ms=100,
         )
 
     messages = [r.message for r in caplog.records]
     assert any("consumed" in m for m in messages)
-    assert any("processing_started" in m or "processing_completed" in m for m in messages)
+    assert any(
+        "processing_started" in m or "processing_completed" in m for m in messages
+    )
     assert any("publish_completed" in m for m in messages)
 
 
@@ -253,10 +257,6 @@ def test_error_stage_logged_when_processing_fails(caplog) -> None:
         def run(self, request):
             raise RuntimeError("synthetic processing failure")
 
-    handler = RAGRequestEventHandler(
-        agent_factory=_FailingAgent,
-        publisher=lambda _producer, _event: None,
-    )
     consumer = _FakeConsumer(
         {
             "rag": [
@@ -277,13 +277,21 @@ def test_error_stage_logged_when_processing_fails(caplog) -> None:
         process_consumer_batch(
             consumer,
             producer=object(),
-            handler=handler.process_request,
+            processor=lambda payload, producer: process_request_event(
+                payload,
+                producer,
+                agent_factory=_FailingAgent,
+                publisher=lambda _producer, _event: None,
+            ),
             poll_timeout_ms=100,
         )
 
     error_messages = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
     assert error_messages
-    assert any("processing_failed" in m or "synthetic processing failure" in m for m in error_messages)
+    assert any(
+        "processing_failed" in m or "synthetic processing failure" in m
+        for m in error_messages
+    )
 
 
 def handler_completion_event():

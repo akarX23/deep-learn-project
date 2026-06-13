@@ -12,25 +12,24 @@ import fitz
 
 import logging
 
-from project.schemas import ExtractedPage, PageExtractionStatus, RAGAgentInput, RAGAgentOutput
-from rag_agent.utils.helpers import (
+from project.schemas import (
+    ExtractedPage,
+    PageExtractionStatus,
+    RAGAgentInput,
+    RAGAgentOutput,
+)
+from rag_agent.utils.content_helpers import (
     assemble_page_content,
     build_compilation_context,
+)
+from rag_agent.utils.helpers import (
     get_embedding_config,
     get_text_llm_config,
-    get_vlm_batch_size,
     get_vlm_config,
 )
 from rag_agent.utils.llm_client import call_llm
 from rag_agent.utils.prompts import MATERIAL_COMPILATION_PROMPT
-from rag_agent.utils.tools import (
-    describe_images_with_vlm,
-    extract_images_from_page,
-    extract_tables_from_page,
-    extract_text_from_page,
-    open_pdf,
-    score_page_relevance,
-)
+from rag_agent.utils import tools as rag_tools
 
 logger = logging.getLogger(__name__)
 
@@ -85,9 +84,12 @@ class RAGAgent:
         graph.set_entry_point("process_page")
         return graph.compile()
 
-    def _build_page_pointers(self, request: RAGAgentInput) -> tuple[list[PagePointer], list[str]]:
+    def _build_page_pointers(
+        self, request: RAGAgentInput
+    ) -> tuple[list[PagePointer], list[str]]:
         pointers: list[PagePointer] = []
         errors: list[str] = []
+        # TODO: Add optional page-range and file-level include/exclude controls.
         for file_path in request.file_paths:
             document = self._open_docs.get(file_path)
             if document is None:
@@ -111,7 +113,7 @@ class RAGAgent:
             if file_path in self._open_docs:
                 continue
             try:
-                self._open_docs[file_path] = open_pdf(file_path)
+                self._open_docs[file_path] = rag_tools.open_pdf(file_path)
             except Exception as exc:
                 errors.append(f"{file_path}: {exc}")
         return errors
@@ -143,12 +145,16 @@ class RAGAgent:
             errors.append("Document handle unavailable")
         else:
             try:
-                text = extract_text_from_page(document, pointer.page_number)
+                text = rag_tools.extract_text_from_page(document, pointer.page_number)
                 if request.include_tables:
-                    tables = extract_tables_from_page(document, pointer.page_number)
+                    tables = rag_tools.extract_tables_from_page(
+                        document, pointer.page_number
+                    )
                 if request.include_images:
-                    images = extract_images_from_page(document, pointer.page_number)
-                    image_descriptions = describe_images_with_vlm(
+                    images = rag_tools.extract_images_from_page(
+                        document, pointer.page_number
+                    )
+                    image_descriptions = rag_tools.describe_images_with_vlm(
                         images,
                         request.user_prompt,
                         self.vlm_config,
@@ -158,7 +164,9 @@ class RAGAgent:
                 errors.append(str(exc))
 
         assembled = assemble_page_content(text, tables, image_descriptions)
-        relevance = score_page_relevance(assembled, request.user_prompt, self.embedding_config)
+        relevance = rag_tools.score_page_relevance(
+            assembled, request.user_prompt, self.embedding_config
+        )
 
         page_status = PageExtractionStatus.SUCCESS
 
@@ -191,13 +199,16 @@ class RAGAgent:
 
         if errors:
             state["errors"].extend(
-                f"{pointer.file_name}:page:{pointer.page_number}: {err}" for err in errors
+                f"{pointer.file_name}:page:{pointer.page_number}: {err}"
+                for err in errors
             )
 
         state["index"] += 1
         return state
 
-    def _compile_material(self, request: RAGAgentInput, retained_pages: list[dict[str, Any]]) -> str:
+    def _compile_material(
+        self, request: RAGAgentInput, retained_pages: list[dict[str, Any]]
+    ) -> str:
         context = build_compilation_context(retained_pages)
         if not context.strip():
             return ""
@@ -212,13 +223,16 @@ class RAGAgent:
             if compiled:
                 return compiled
         except Exception:
+            # TODO: Add explicit LLM error taxonomy and retry strategy.
             # Fall back to deterministic markdown output if model call is unavailable.
             pass
         return "# Study Material\n\n" + context
 
     @staticmethod
     def _derive_status(
-        pointers: list[PagePointer], retained_pages: list[dict[str, Any]], errors: list[str]
+        pointers: list[PagePointer],
+        retained_pages: list[dict[str, Any]],
+        errors: list[str],
     ) -> str:
         if not pointers:
             return "failed"
@@ -234,7 +248,7 @@ class RAGAgent:
         # Load runtime config once per request execution.
         self.text_llm_config = get_text_llm_config()
         self.vlm_config = get_vlm_config()
-        self.vlm_batch_size = get_vlm_batch_size()
+        self.vlm_batch_size = self.vlm_config.get("batch_size", 1)
         self.embedding_config = get_embedding_config()
 
         initial_errors = self._open_documents(payload.file_paths)
@@ -252,13 +266,19 @@ class RAGAgent:
         finally:
             self._close_documents()
 
-        compiled_material = self._compile_material(payload, final_state["retained_pages"])
+        compiled_material = self._compile_material(
+            payload, final_state["retained_pages"]
+        )
         status = self._derive_status(
             final_state["pointers"],
             final_state["retained_pages"],
             final_state["errors"],
         )
-        if status != "failed" and not compiled_material.strip() and final_state["retained_pages"]:
+        if (
+            status != "failed"
+            and not compiled_material.strip()
+            and final_state["retained_pages"]
+        ):
             status = "partial"
 
         return RAGAgentOutput(
@@ -282,7 +302,9 @@ def _parse_input(path: str) -> RAGAgentInput:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the RAG retrieval agent")
-    parser.add_argument("--input", required=True, help="Path to a JSON RAGAgentInput file")
+    parser.add_argument(
+        "--input", required=True, help="Path to a JSON RAGAgentInput file"
+    )
     args = parser.parse_args()
 
     payload = _parse_input(args.input)
