@@ -1,26 +1,13 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
 from backend_service.app.config import KafkaSettings
 from backend_service.app.main import create_app
-from project.schemas import StartupTopicBootstrapResult
-
-
-class FakeAdmin:
-    def __init__(self, settings: KafkaSettings) -> None:
-        self.settings = settings
-
-    def connect(self) -> None:
-        return None
-
-    def close(self) -> None:
-        return None
-
-    def bootstrap_topics(self, topic_names: list[str]):
-        return StartupTopicBootstrapResult()
+from project.schemas import RAGRequestEvent, StartupTopicBootstrapResult
 
 
 class FakeFuture:
@@ -49,19 +36,38 @@ class FakeProducer:
         self.closed = True
 
 
+class FakeAdmin:
+    def __init__(self, settings: KafkaSettings, producer: FakeProducer | None = None) -> None:
+        self.settings = settings
+        self._producer = producer
+
+    def connect(self) -> None:
+        return None
+
+    def close(self) -> None:
+        if self._producer is not None:
+            self._producer.close()
+
+    def bootstrap_topics(self, topic_names: list[str]):
+        return StartupTopicBootstrapResult()
+
+    @property
+    def producer(self) -> FakeProducer:
+        if self._producer is None:
+            raise RuntimeError("producer not configured")
+        return self._producer
+
+
 def _build_app(
     settings: KafkaSettings,
     producer: FakeProducer | None = None,
 ) -> tuple[object, FakeProducer | None]:
-    def producer_factory(_settings: KafkaSettings) -> FakeProducer:
-        if producer is None:
-            raise RuntimeError("producer not configured")
-        return producer
+    def admin_factory(kafka_settings: KafkaSettings) -> FakeAdmin:
+        return FakeAdmin(kafka_settings, producer=producer)
 
     app = create_app(
         settings=settings,
-        admin_factory=FakeAdmin,
-        test_event_producer_factory=producer_factory if producer is not None else None,
+        admin_factory=admin_factory,
     )
     return app, producer
 
@@ -100,15 +106,16 @@ def test_publish_rag_test_event_returns_inline_metadata() -> None:
     settings = KafkaSettings(bootstrap_servers="kafka:9092", app_env="dev")
     app, producer = _build_app(settings, producer=producer)
 
+    request_id = f"test-{uuid4().hex}"
     with TestClient(app) as client:
         response = client.post(
             "/api/v1/test-events/rag",
             json={
-                "overrides": {
-                    "user_request": "Summarize gradient descent",
-                    "file_paths": ["rag_agent/tests/inputs/sample.pdf"],
-                    "session_ctx": {"mode": "quick"},
-                }
+                "request_id": request_id,
+                "session_ctx": {"source": "test"},
+                "user_request": "Summarize gradient descent",
+                "file_paths": ["rag_agent/tests/inputs/sample.pdf"],
+                "source": "backend-service",
             },
         )
 
@@ -116,7 +123,7 @@ def test_publish_rag_test_event_returns_inline_metadata() -> None:
     body = response.json()
     assert body["topic"] == "rag"
     assert body["publish_status"] == "published"
-    assert body["request_id"].startswith("test-")
+    assert body["request_id"] == request_id
     assert body["metadata"] == {
         "partition": 3,
         "offset": 42,
@@ -134,8 +141,18 @@ def test_publish_rag_test_event_supports_partial_metadata() -> None:
     settings = KafkaSettings(bootstrap_servers="kafka:9092", app_env="dev")
     app, _ = _build_app(settings, producer=producer)
 
+    request_id = f"test-{uuid4().hex}"
     with TestClient(app) as client:
-        response = client.post("/api/v1/test-events/rag", json={})
+        response = client.post(
+            "/api/v1/test-events/rag",
+            json={
+                "request_id": request_id,
+                "session_ctx": {"source": "test"},
+                "user_request": "Test",
+                "file_paths": ["test.pdf"],
+                "source": "backend-service",
+            },
+        )
 
     assert response.status_code == 200
     assert response.json()["metadata"] == {
@@ -145,15 +162,16 @@ def test_publish_rag_test_event_supports_partial_metadata() -> None:
     }
 
 
-def test_publish_rag_test_event_invalid_override_returns_structured_error() -> None:
+def test_publish_rag_test_event_validation_error() -> None:
     producer = FakeProducer(metadata=SimpleNamespace(partition=0, offset=1, timestamp=2))
     settings = KafkaSettings(bootstrap_servers="kafka:9092", app_env="dev")
     app, _ = _build_app(settings, producer=producer)
 
     with TestClient(app, raise_server_exceptions=False) as client:
+        # Missing required fields
         response = client.post(
             "/api/v1/test-events/rag",
-            json={"overrides": {"file_paths": []}},
+            json={"request_id": "test-123"},
         )
 
     assert response.status_code == 422
@@ -167,8 +185,18 @@ def test_publish_rag_test_event_failure_returns_structured_error() -> None:
     settings = KafkaSettings(bootstrap_servers="kafka:9092", app_env="dev")
     app, _ = _build_app(settings, producer=producer)
 
+    request_id = f"test-{uuid4().hex}"
     with TestClient(app, raise_server_exceptions=False) as client:
-        response = client.post("/api/v1/test-events/rag", json={})
+        response = client.post(
+            "/api/v1/test-events/rag",
+            json={
+                "request_id": request_id,
+                "session_ctx": {"source": "test"},
+                "user_request": "Test",
+                "file_paths": ["test.pdf"],
+                "source": "backend-service",
+            },
+        )
 
     assert response.status_code == 502
     body = response.json()

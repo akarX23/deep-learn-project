@@ -7,7 +7,7 @@
 
 ## Summary
 
-Extend the backend service startup lifecycle to create Kafka topics from `project/topics` idempotently, and add a gated test-event API for topic `rag` that publishes a `RAGRequestEvent` payload using hybrid defaults+overrides. The API returns a normalized publish result that includes Kafka metadata when available. Implementation will keep advanced validation and resilience logic as TODO-marked follow-ups while satisfying current observability and performance budgets.
+Extend the backend service startup lifecycle to create Kafka topics from `project/topics` idempotently, and add a gated test-event API for topic `rag` that publishes a `RAGRequestEvent` payload directly with default schema values applied. The API returns a normalized publish result with inline Kafka metadata when available. Implementation will keep advanced validation and resilience logic as TODO-marked follow-ups while satisfying current observability and performance budgets.
 
 ## Technical Context
 
@@ -24,7 +24,7 @@ Extend the backend service startup lifecycle to create Kafka topics from `projec
 **Target Platform**: Linux backend service runtime (local docker-compose + CI Linux)
 **Project Type**: Backend web service (FastAPI + Kafka integration)  
 **Performance Goals**: Startup topic bootstrap <= 5s in local dev cluster; rag test-event publish response <= 2s p95 in local dev cluster  
-**Constraints**: Synchronous implementation; idempotent topic creation; test-event APIs enabled by default in dev/test, explicit opt-in in production; no direct agent invocation from API  
+**Constraints**: Synchronous implementation; idempotent topic creation; test-event APIs enabled by default in dev/test, explicit opt-in in production; no direct agent invocation from API; no separate schema model for test-event metadata; single shared producer owned by the Kafka admin layer  
 **Scale/Scope**: Current registry includes `rag` and `rag-complete`; immediate scope adds one topic-specific test publish route (`rag`) with extensible per-topic routing pattern
 
 ## Constitution Check

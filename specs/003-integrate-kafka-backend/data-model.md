@@ -40,36 +40,6 @@
 
 ---
 
-### RAGTestEventOverrideRequest
-
-**Purpose**: API request body used to optionally override default rag test payload fields.
-
-| Field | Type | Description |
-|---|---|---|
-| `overrides` | `dict[str, Any] \| None` | Partial field updates merged onto backend-generated default `RAGRequestEvent` payload |
-
-**Validation rules**:
-- Unknown/invalid merged fields are rejected during final `RAGRequestEvent` validation.
-- Empty body is allowed and results in backend defaults only.
-
----
-
-### KafkaPublishMetadata
-
-**Purpose**: Optional metadata block returned from Kafka publish acknowledgement.
-
-| Field | Type | Description |
-|---|---|---|
-| `partition` | `int \| None` | Broker partition used for the record |
-| `offset` | `int \| None` | Record offset in partition |
-| `timestamp` | `int \| None` | Broker/event timestamp (epoch milliseconds) |
-
-**Validation rules**:
-- Values are nullable to support partial metadata availability.
-- Non-null integer values must be non-negative.
-
----
-
 ### TestEventPublishResult
 
 **Purpose**: Normalized API response envelope for successful rag test-event publish requests.
@@ -79,14 +49,15 @@
 | `request_id` | `str` | Correlation ID copied from published event |
 | `topic` | `str` | Kafka topic name (`rag`) |
 | `publish_status` | `str` | Publish outcome (`published` for successful sends) |
-| `metadata` | `KafkaPublishMetadata \| None` | Kafka metadata when exposed by producer result |
+| `metadata` | `dict[str, int \| None] \| None` | Inline Kafka metadata object with optional `partition`, `offset`, and `timestamp` fields |
 
 **Validation rules**:
 - `request_id`, `topic`, and `publish_status` are required.
 - `metadata` may be null when broker metadata is unavailable.
+- No dedicated schema class is required for metadata; the inline object is sufficient for development-only test flows.
 
 **State transitions**:
-- `constructed` -> `validated` (Pydantic response validation) -> `returned`
+- `constructed` -> `validated` -> `returned`
 
 ---
 
@@ -102,6 +73,20 @@
 **Validation rules**:
 - In `prod`, `test_routes_enabled` defaults to `False` unless explicit opt-in is set.
 - In `dev`/`test`, `test_routes_enabled` defaults to `True`.
+
+---
+
+### KafkaProducerHandle
+
+**Purpose**: Single shared producer instance created in the Kafka admin layer and reused by the backend test-events API.
+
+| Field | Type | Description |
+|---|---|---|
+| `producer` | `object` | Producer instance owned by the Kafka admin layer and exposed for route handlers |
+
+**Validation rules**:
+- Only one shared producer exists for the backend service.
+- The producer is created in the Kafka admin layer and is not recreated by `main.py`.
 
 ---
 

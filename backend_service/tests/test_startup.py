@@ -47,6 +47,8 @@ def test_test_event_route_enablement_defaults_and_override(
         encoding="utf-8",
     )
 
+    monkeypatch.delenv("APP_ENV", raising=False)
+    monkeypatch.delenv("BACKEND_ENABLE_TEST_EVENT_APIS", raising=False)
     settings = KafkaSettings.from_env(dotenv_path=str(env_file))
     assert settings.test_event_routes_enabled() is True
 
@@ -55,6 +57,7 @@ def test_test_event_route_enablement_defaults_and_override(
         "APP_ENV=prod\n",
         encoding="utf-8",
     )
+    monkeypatch.delenv("APP_ENV", raising=False)
     monkeypatch.delenv("BACKEND_ENABLE_TEST_EVENT_APIS", raising=False)
     settings = KafkaSettings.from_env(dotenv_path=str(env_file))
     assert settings.test_event_routes_enabled() is False

@@ -79,19 +79,21 @@ Publish a contract-valid `RAGRequestEvent` to Kafka topic `rag` for integration 
 Request body:
 ```json
 {
-  "overrides": {
-    "user_request": "Summarize gradient descent",
-    "file_paths": ["rag_agent/tests/inputs/sample.pdf"],
-    "session_ctx": {"mode": "quick"}
-  }
+  "request_id": "test-req-123",
+  "session_ctx": {"mode": "quick"},
+  "user_request": "Summarize gradient descent",
+  "file_paths": ["rag_agent/tests/inputs/sample.pdf"],
+  "created_at": null,
+  "source": "backend-service"
 }
 ```
 
 Request semantics:
-- Backend creates a default payload first.
-- Optional `overrides` are merged onto defaults.
-- Merged payload MUST validate against `project.schemas.RAGRequestEvent` before publish.
+- Request body MUST use the `RAGRequestEvent` schema directly, with schema defaults applied where fields are omitted.
+- The API MUST validate the request body against `project.schemas.RAGRequestEvent` before publish.
 - API MUST only publish to Kafka; it MUST NOT invoke agent runtime services directly.
+- The response metadata is inline JSON and MUST NOT require a new dedicated schema class.
+- The API MUST reuse the shared producer exposed by the Kafka admin layer.
 
 Success response (200 OK):
 ```json

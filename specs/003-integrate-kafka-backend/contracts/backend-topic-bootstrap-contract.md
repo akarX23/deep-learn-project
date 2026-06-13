@@ -50,7 +50,8 @@
 
 - `project.schemas.StartupTopicBootstrapResult` defines startup bootstrap result structure.
 - `project.schemas.RAGRequestEvent` defines Kafka payload validation for `rag` test-event publishing.
-- `project.schemas.TestEventPublishResult` and `project.schemas.KafkaPublishMetadata` define normalized API response with optional metadata fields.
+- The rag test-event response uses an inline JSON metadata object and does not introduce a separate metadata schema class.
+- The Kafka admin layer exposes a single shared producer reused by the test-events API.
 
 ## Test-Event API Interaction with Startup
 

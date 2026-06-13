@@ -25,10 +25,10 @@
 - **Rationale**: Satisfies FR-013 and FR-014 and minimizes accidental production misuse.
 - **Alternatives considered**: Always-enabled routes (unsafe for prod), always-disabled unless enabled everywhere (friction in local testing).
 
-## Decision 6: Hybrid Payload Mode for RAG
-- **Decision**: Build a backend default `RAGRequestEvent` payload, then apply optional client override fields and validate the merged payload against `RAGRequestEvent` before publish.
-- **Rationale**: Delivers predictable test payloads while preserving caller flexibility with strict schema enforcement.
-- **Alternatives considered**: Client-only full payload (high setup burden), backend-only no overrides (too rigid for testing scenarios).
+## Decision 6: Direct RAG Request Body
+- **Decision**: Use the `RAGRequestEvent` schema directly as the rag test-event request body, with model defaults applied where fields are omitted.
+- **Rationale**: Keeps the API contract simple and avoids merge logic while still providing a predictable default payload shape.
+- **Alternatives considered**: Separate override wrapper (extra indirection), custom request DTO (duplicates the schema).
 
 ## Decision 7: Publish Metadata Contract
 - **Decision**: Return a normalized publish-result envelope with required correlation/status fields and optional Kafka metadata object (partition/offset/timestamp) when available.

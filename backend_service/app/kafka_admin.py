@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import logging
 from kafka.admin import KafkaAdminClient, NewTopic
 from kafka.errors import KafkaError, TopicAlreadyExistsError
+from kafka import KafkaProducer
 
 from backend_service.app.config import KafkaSettings
 from project.schemas import StartupTopicBootstrapResult
@@ -14,6 +16,7 @@ class KafkaAdminService:
     def __init__(self, settings: KafkaSettings) -> None:
         self.settings = settings
         self._client: KafkaAdminClient | None = None
+        self._producer: KafkaProducer | None = None
 
     def connect(self) -> None:
         self._client = KafkaAdminClient(**self.settings.admin_kwargs())
@@ -21,6 +24,9 @@ class KafkaAdminService:
         self._client.list_topics()
 
     def close(self) -> None:
+        if self._producer is not None:
+            self._producer.close()
+        self._producer = None
         if self._client is not None:
             self._client.close()
         self._client = None
@@ -90,3 +96,13 @@ class KafkaAdminService:
                 result.errors.append((topic_name, str(exc)))
 
         return result
+
+    @property
+    def producer(self) -> KafkaProducer:
+        """Lazy-load and return the shared Kafka producer."""
+        if self._producer is None:
+            self._producer = KafkaProducer(
+                **self.settings.admin_kwargs(),
+                value_serializer=lambda value: json.dumps(value).encode("utf-8"),
+            )
+        return self._producer

@@ -76,7 +76,14 @@ Open http://localhost:8080 and confirm `rag` and `rag-complete` appear in the To
 ```bash
 curl -s -X POST http://localhost:8001/api/v1/test-events/rag \
 	-H "Content-Type: application/json" \
-	-d '{}'
+	-d '{
+		"request_id": "test-req-123",
+		"session_ctx": {"mode": "quick"},
+		"user_request": "Summarize gradient descent",
+		"file_paths": ["rag_agent/tests/inputs/sample.pdf"],
+		"created_at": null,
+		"source": "backend-service"
+	}'
 ```
 
 Expected successful response shape:
@@ -96,7 +103,7 @@ Expected successful response shape:
 
 If broker metadata is not fully available, fields may be `null` while publish remains successful.
 
-## 7. Publish rag test event with overrides
+## 7. Publish rag test event with a complete request body
 
 ```bash
 curl -s -X POST http://localhost:8001/api/v1/test-events/rag \
@@ -107,18 +114,19 @@ curl -s -X POST http://localhost:8001/api/v1/test-events/rag \
 			"file_paths": ["rag_agent/tests/inputs/sample.pdf"],
 			"session_ctx": {"mode": "quick"}
 		}
+	-d '{
+		"request_id": "test-req-456",
+		"session_ctx": {"mode": "quick"},
+		"user_request": "Summarize gradient descent",
+		"file_paths": ["rag_agent/tests/inputs/sample.pdf"],
+		"created_at": null,
+		"source": "backend-service"
 	}'
-```
-
-Behavior:
-- Backend constructs defaults first.
-- Overrides are merged.
-- Final merged payload is validated against `RAGRequestEvent` before publish.
 
 ## 8. Environment gating behavior
-
-- `APP_ENV=dev` or `APP_ENV=test`: test-event routes enabled by default.
-- `APP_ENV=prod`: test-event routes disabled unless explicit opt-in (`BACKEND_ENABLE_TEST_EVENT_APIS=true`).
+- Request body is the complete `RAGRequestEvent` object.
+- Schema defaults are applied where fields are omitted.
+- Final payload is validated against `RAGRequestEvent` before publish.
 
 ## 9. Run tests
 

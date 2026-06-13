@@ -12,10 +12,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from backend_service.app.api.test_events import (
-    build_test_event_producer,
-    router as test_events_router,
-)
+from backend_service.app.api.test_events import router as test_events_router
 from backend_service.app.api.topics import router as topics_router
 from backend_service.app.config import KafkaSettings
 from backend_service.app.kafka_admin import KafkaAdminService
@@ -28,7 +25,6 @@ logging.basicConfig(level=logging.INFO)
 def create_app(
     settings: KafkaSettings | None = None,
     admin_factory: Callable[[KafkaSettings], KafkaAdminService] = KafkaAdminService,
-    test_event_producer_factory: Callable[[KafkaSettings], Any] | None = None,
 ) -> FastAPI:
     test_event_routes_enabled = _should_enable_test_event_routes(settings)
 
@@ -37,10 +33,6 @@ def create_app(
         resolved_settings = settings or KafkaSettings.from_env()
         app.state.kafka_settings = resolved_settings
         app.state.kafka_admin = admin_factory(resolved_settings)
-        app.state.test_event_producer = None
-        app.state.test_event_producer_factory = (
-            test_event_producer_factory or build_test_event_producer
-        )
 
         max_attempts = resolved_settings.startup_retry_count + 1
         last_error: Exception | None = None
@@ -72,9 +64,6 @@ def create_app(
         try:
             yield
         finally:
-            producer = getattr(app.state, "test_event_producer", None)
-            if producer is not None and hasattr(producer, "close"):
-                producer.close()
             app.state.kafka_admin.close()
 
     app = FastAPI(title="Kafka Backend Service", version="0.1.0", lifespan=lifespan)
@@ -120,21 +109,10 @@ def create_app(
 def _should_enable_test_event_routes(settings: KafkaSettings | None) -> bool:
     if settings is not None:
         return settings.test_event_routes_enabled()
-
     raw_app_env = os.getenv("APP_ENV", "dev")
     raw_enable = os.getenv("BACKEND_ENABLE_TEST_EVENT_APIS")
-    if raw_enable is not None:
-        return _parse_bool(raw_enable)
-    return raw_app_env.strip().lower() in {"dev", "test"}
-
-
-def _parse_bool(value: str) -> bool:
-    cleaned = value.strip().lower()
-    if cleaned in {"1", "true", "yes", "on"}:
-        return True
-    if cleaned in {"0", "false", "no", "off"}:
-        return False
-    raise RuntimeError("BACKEND_ENABLE_TEST_EVENT_APIS must be a boolean")
+    
+    return raw_enable == "true" or (raw_enable is None and raw_app_env == "dev")
 
 
 app = create_app()

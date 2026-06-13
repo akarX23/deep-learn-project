@@ -8,8 +8,6 @@
 ## Clarifications
 
 ### Session 2026-06-08
-
-- Q: How should Kafka environment variables be loaded at runtime? → A: Load from `.env.local` when present, then allow already-initialized process environment variables to override.
 - Q: Which FastAPI lifecycle mechanism should be used? → A: Use FastAPI lifespan events only; do not use deprecated lifecycle APIs.
 
 ### Session 2026-06-12
@@ -17,9 +15,11 @@
 - Q: Where should topic names be sourced? → A: Read from `project/topics` module (the centralized topic registry) — not from environment variables or external APIs.
 - Q: What happens if a topic already exists? → A: Topic creation should be idempotent — already-existing topics are not treated as errors.
 - Q: What level of validation is required now? → A: Only the core topic-creation behavior is required now; advanced validation (result inspection, per-topic error handling, health assertions) is deferred with TODO markers.
-- Q: How should the backend test-event API payload for `rag` be supplied? → A: Hybrid mode — backend generates a schema-valid default payload, with optional client-provided override fields validated against `RAGRequestEvent`.
+- Q: How should the backend test-event API payload for `rag` be supplied? → A: Use the full `RAGRequestEvent` schema as the request body with default values; no separate override wrapper or merge step is needed.
 - Q: In which environments should test-event APIs be enabled? → A: Enabled by default in dev/test only; production requires explicit configuration opt-in.
 - Q: What should the `rag` test-event API return on publish success? → A: Return a normalized publish-result envelope and include Kafka broker metadata when available.
+- Q: Should test-event metadata require new schema models? → A: No. Keep test-event metadata inline in the response payload; do not add additional schema models for metadata.
+- Q: Where should the shared producer live? → A: Create the single producer in the Kafka admin layer and expose it there for the test-events API to reuse.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -60,20 +60,22 @@ As a platform developer, I need the backend service to automatically create all 
 - **FR-007**: The backend service MUST log a clear message for the topic bootstrap step at startup, including the list of topics attempted.
 - **FR-008**: The backend service MUST continue startup even if topic bootstrap encounters non-fatal errors, and MUST log any such errors clearly.
 - **FR-009**: The backend service MUST expose a test-event API route for topic `rag` that publishes events to Kafka using the `RAGRequestEvent` contract from `project/schemas.py`.
-- **FR-010**: The `rag` test-event API MUST support hybrid payload mode: backend-generated default payload plus optional client-provided override fields.
-- **FR-011**: Any client-provided override fields for the `rag` test-event API MUST be validated against `RAGRequestEvent` before publish.
+- **FR-010**: The `rag` test-event API MUST accept the full `RAGRequestEvent` schema as the request body, using default field values where applicable, with no separate override wrapper or merge step.
+- **FR-011**: The `rag` test-event API MUST validate the request body against `RAGRequestEvent` before publish.
 - **FR-012**: The backend service MUST NOT call agent services directly from this API; it only publishes contract-valid test events to Kafka topics.
 - **FR-013**: Test-event APIs MUST be enabled by default in development and test environments.
 - **FR-014**: In production environments, test-event APIs MUST require explicit configuration opt-in before routes are enabled.
 - **FR-015**: On successful `rag` test-event publish, the backend service MUST return a normalized response envelope that includes request correlation and publish status.
 - **FR-016**: The successful `rag` test-event response MUST include Kafka publish metadata (for example partition/offset/timestamp) when available from the producer result.
+- **FR-017**: The backend service MUST use a single shared producer owned by the Kafka admin layer; the test-events API MUST reuse that producer rather than constructing a separate one in main.py.
 
 ### Key Entities
 
 - **TopicRegistry**: The `project/topics` module providing the list of topic names the system requires; the backend service reads from it at startup without modification.
 - **StartupTopicBootstrapResult**: The outcome of the startup topic-creation pass — topics created, topics already existing, and any errors encountered.
-- **RAGRequestEvent**: Kafka request payload schema used by the backend test-event API for publishing to topic `rag`.
-- **TestEventPublishResult**: API response envelope containing request identifier, target topic, publish status, and optional Kafka metadata fields.
+- **RAGRequestEvent**: Kafka request payload schema used by the backend test-event API for publishing to topic `rag`; this schema is also used as the request body with defaults applied.
+- **TestEventPublishResult**: API response payload containing request identifier, target topic, publish status, and an inline optional Kafka metadata object; no dedicated metadata schema is introduced.
+- **KafkaProducerHandle**: Shared producer instance exposed by the Kafka admin layer and reused by the test-events API.
 
 ## Success Criteria *(mandatory)*
 
