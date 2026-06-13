@@ -76,14 +76,33 @@
 
 ---
 
-## Phase 5: Polish & Cross-Cutting Concerns
+## Phase 5: User Story 3 - Provide Default Input Factories for Test-Event API (Priority: P2)
 
-**Purpose**: Finish, verify, and harden the feature across both user stories
+**Goal**: Expose a pure, type-safe factory function `default_rag_test_event()` in `backend_service/app/utils.py` that returns a fully initialized `RAGRequestEvent` with representative defaults and a fresh `uuid4`-based `request_id` on every call — no validators, no exception handling.
 
-- [X] T016 [P] Validate the full backend_service test suite with `pytest backend_service/tests -q` and repair any regressions introduced by the feature
-- [ ] T017 [P] Run `ruff check project backend_service`, `ruff format --check project backend_service`, and `python -m compileall project backend_service` to confirm code quality and syntax integrity
-- [ ] T018 [P] Validate `specs/003-integrate-kafka-backend/quickstart.md` against the implemented startup and rag test-event flows, and update any command/output examples that drifted
-- [ ] T019 [P] Review logging and docstrings in backend_service/app/main.py, backend_service/app/kafka_admin.py, backend_service/app/api/test_events.py, and project/schemas.py for clarity and maintainability
+**Independent Test**: Import `default_rag_test_event` from `backend_service.app.utils`, call it twice, and verify: return type is `RAGRequestEvent`, both calls return valid instances, `request_id` values differ, `user_request` / `file_paths` / `session_ctx` are all truthy.
+
+### Tests for User Story 3
+
+- [X] T020 [P] [US3] Create backend_service/tests/test_utils.py with unit tests for `default_rag_test_event()`: return type is `RAGRequestEvent`, `request_id` starts with `"test-"`, `request_id` is unique across two sequential calls, `user_request` and `session_ctx` and `file_paths` are all truthy
+
+### Implementation for User Story 3
+
+- [X] T021 [US3] Create backend_service/app/utils.py with `default_rag_test_event() -> RAGRequestEvent` using `uuid4().hex` for `request_id` and representative defaults for all required fields — no field validators, no exception handling
+- [X] T022 [US3] Run `pytest backend_service/tests/test_utils.py -v` to confirm all factory unit tests pass
+
+**Checkpoint**: User Story 3 should be fully testable independently — importing `utils.py` must have no side effects
+
+---
+
+## Phase 6: Polish & Cross-Cutting Concerns
+
+**Purpose**: Finish, verify, and harden the feature across all user stories
+
+- [X] T023 [P] Validate the full backend_service test suite with `pytest backend_service/tests -q` and confirm all tests including test_utils.py pass
+- [X] T024 [P] Run `ruff check project backend_service`, `ruff format --check project backend_service`, and `python -m compileall project backend_service` to confirm code quality and syntax integrity
+- [X] T025 [P] Validate `specs/003-integrate-kafka-backend/quickstart.md` against the implemented startup and rag test-event flows, and update any command/output examples that drifted
+- [X] T026 [P] Review logging and docstrings in backend_service/app/main.py, backend_service/app/kafka_admin.py, backend_service/app/api/test_events.py, backend_service/app/utils.py, and project/schemas.py for clarity and maintainability
 
 ---
 
@@ -98,8 +117,9 @@
 
 ### User Story Dependencies
 
-- **User Story 1 (P1)**: Can start after Foundational phase completion - does not depend on US2
+- **User Story 1 (P1)**: Can start after Foundational phase completion - does not depend on US2 or US3
 - **User Story 2 (P2)**: Can start after Foundational phase completion - does not depend on US1 for its core API behavior
+- **User Story 3 (P2)**: Can start after Foundational phase completion - fully independent of US1 and US2 (pure utility module, no route or Kafka dependencies)
 
 ### Within Each User Story
 
@@ -115,7 +135,8 @@
 - US1 tests T005 and T006 can be worked on in parallel if split across files or by separate contributors
 - US2 tests T010 and T011 can be worked on in parallel if split across files or by separate contributors
 - US2 implementation tasks T012, T013, T014, and T015 touch different files and can be staged independently once contracts are in place
-- Polish tasks T016 through T019 can be run in parallel where they do not touch the same files
+- US3 tasks T020 and T021 touch different files and can be worked in parallel
+- Polish tasks T023 through T026 can be run in parallel where they do not touch the same files
 
 ---
 
@@ -135,6 +156,13 @@ Task: "Add integration coverage in backend_service/tests/test_test_events_api.py
 Task: "Implement the rag test-event router in backend_service/app/api/test_events.py with direct RAGRequestEvent request-body handling and publish validation before publish"
 ```
 
+## Parallel Example: User Story 3
+
+```bash
+Task: "Create backend_service/tests/test_utils.py with unit tests for default_rag_test_event()"
+Task: "Create backend_service/app/utils.py with default_rag_test_event() -> RAGRequestEvent"
+```
+
 ---
 
 ## Implementation Strategy
@@ -148,10 +176,11 @@ Task: "Implement the rag test-event router in backend_service/app/api/test_event
 
 ### Incremental Delivery
 
-1. Complete Setup + Foundational
-2. Deliver User Story 1 and validate startup topic creation
-3. Deliver User Story 2 and validate rag test-event publishing
-4. Run polish checks and update quickstart/documentation outputs
+1. Complete Setup + Foundational ✅
+2. Deliver User Story 1 and validate startup topic creation ✅
+3. Deliver User Story 2 and validate rag test-event publishing ✅
+4. Deliver User Story 3: implement `utils.py` factory and unit tests
+5. Run polish checks and update quickstart/documentation outputs
 
 ### Parallel Team Strategy
 
@@ -159,6 +188,7 @@ With multiple developers:
 
 1. One developer can finish User Story 1 while another prepares User Story 2 test coverage
 2. Once shared contracts are merged, one developer can wire the rag router while another updates route gating and response mapping
+3. User Story 3 (`utils.py` factory) can be delivered by any developer independently — zero coupling to US1/US2 implementation
 3. Finish with shared verification, linting, compile checks, and quickstart validation
 
 ---

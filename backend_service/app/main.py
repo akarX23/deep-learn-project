@@ -5,7 +5,6 @@ import os
 import time
 from contextlib import asynccontextmanager
 from collections.abc import Callable
-from typing import Any
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
@@ -111,7 +110,7 @@ def _should_enable_test_event_routes(settings: KafkaSettings | None) -> bool:
         return settings.test_event_routes_enabled()
     raw_app_env = os.getenv("APP_ENV", "dev")
     raw_enable = os.getenv("BACKEND_ENABLE_TEST_EVENT_APIS")
-    
+
     return raw_enable == "true" or (raw_enable is None and raw_app_env == "dev")
 
 

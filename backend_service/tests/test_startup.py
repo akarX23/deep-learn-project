@@ -42,8 +42,7 @@ def test_test_event_route_enablement_defaults_and_override(
 ) -> None:
     env_file = tmp_path / ".env.local"
     env_file.write_text(
-        "BACKEND_KAFKA_BOOTSTRAP_SERVERS=file-kafka:9092\n"
-        "APP_ENV=dev\n",
+        "BACKEND_KAFKA_BOOTSTRAP_SERVERS=file-kafka:9092\nAPP_ENV=dev\n",
         encoding="utf-8",
     )
 
@@ -53,8 +52,7 @@ def test_test_event_route_enablement_defaults_and_override(
     assert settings.test_event_routes_enabled() is True
 
     env_file.write_text(
-        "BACKEND_KAFKA_BOOTSTRAP_SERVERS=file-kafka:9092\n"
-        "APP_ENV=prod\n",
+        "BACKEND_KAFKA_BOOTSTRAP_SERVERS=file-kafka:9092\nAPP_ENV=prod\n",
         encoding="utf-8",
     )
     monkeypatch.delenv("APP_ENV", raising=False)

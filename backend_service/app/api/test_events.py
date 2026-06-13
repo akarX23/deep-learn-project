@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 
 from project.schemas import RAGRequestEvent
+from backend_service.app.utils import default_rag_test_event
 
 router = APIRouter(prefix="/api/v1/test-events", tags=["test-events"])
 
@@ -23,9 +24,11 @@ def _serialize_metadata(record_metadata: Any) -> dict[str, int | None] | None:
 
 
 @router.post("/rag")
-def publish_rag_test_event(request: Request, payload: RAGRequestEvent) -> dict[str, Any]:
+def publish_rag_test_event(
+    request: Request, payload: RAGRequestEvent = default_rag_test_event()
+) -> dict[str, Any]:
     """Publish a test event to the 'rag' topic.
-    
+
     Accepts a full RAGRequestEvent as the request body.
     Uses the shared Kafka producer from the admin layer.
     """
@@ -37,7 +40,9 @@ def publish_rag_test_event(request: Request, payload: RAGRequestEvent) -> dict[s
     try:
         producer = admin_service.producer
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to get producer: {str(exc)}") from exc
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get producer: {str(exc)}"
+        ) from exc
 
     # Publish the event to Kafka
     try:

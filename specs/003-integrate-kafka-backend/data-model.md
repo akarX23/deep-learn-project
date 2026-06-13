@@ -90,6 +90,32 @@
 
 ---
 
+### TestEventDefaultFactory
+
+**Purpose**: Pure factory functions in `backend_service/app/utils.py`, one per topic, that return a fully initialized, type-safe default instance of each topic's input schema. No validators, no exception handling — type-safe initialized values only. Designed to be used as a convenient starting point for test event publishing.
+
+| Factory | Return Type | Location |
+|---------|-------------|----------|
+| `default_rag_test_event()` | `RAGRequestEvent` | `backend_service/app/utils.py` |
+
+**`default_rag_test_event()` default field values**:
+
+| Field | Default Value | Notes |
+|-------|---------------|-------|
+| `request_id` | `f"test-{uuid4().hex}"` | Dynamically generated per call; guarantees uniqueness |
+| `session_ctx` | `{"source": "backend-service", "mode": "integration-test"}` | Representative context for local test runs |
+| `user_request` | `"Summarize gradient descent for local integration testing."` | Representative domain query |
+| `file_paths` | `["rag_agent/tests/inputs/sample.pdf"]` | Points to the existing test fixture |
+| `created_at` | `None` | Optional field; omitted by default |
+| `source` | `"backend-service"` | Identifies the originating service |
+
+**Constraints**:
+- No Pydantic field validators added to the factory itself.
+- No exception handling — field values are set to valid defaults so constructor validation passes without error handling.
+- Module-level import must have no side effects (no network or Kafka calls).
+
+---
+
 ### TopicRegistry (read-only, external)
 
 **Purpose**: The `project/topics` module acting as the authoritative list of Kafka topic names required by the system.

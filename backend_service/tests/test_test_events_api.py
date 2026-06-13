@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from backend_service.app.config import KafkaSettings
 from backend_service.app.main import create_app
-from project.schemas import RAGRequestEvent, StartupTopicBootstrapResult
+from project.schemas import StartupTopicBootstrapResult
 
 
 class FakeFuture:
@@ -37,7 +37,9 @@ class FakeProducer:
 
 
 class FakeAdmin:
-    def __init__(self, settings: KafkaSettings, producer: FakeProducer | None = None) -> None:
+    def __init__(
+        self, settings: KafkaSettings, producer: FakeProducer | None = None
+    ) -> None:
         self.settings = settings
         self._producer = producer
 
@@ -85,7 +87,9 @@ def test_test_event_route_disabled_in_prod_without_opt_in() -> None:
 
     app, _ = _build_app(settings)
 
-    assert not any(route.path == "/api/v1/test-events/rag" for route in app.router.routes)
+    assert not any(
+        route.path == "/api/v1/test-events/rag" for route in app.router.routes
+    )
 
 
 def test_test_event_route_enabled_in_prod_with_explicit_opt_in() -> None:
@@ -163,7 +167,9 @@ def test_publish_rag_test_event_supports_partial_metadata() -> None:
 
 
 def test_publish_rag_test_event_validation_error() -> None:
-    producer = FakeProducer(metadata=SimpleNamespace(partition=0, offset=1, timestamp=2))
+    producer = FakeProducer(
+        metadata=SimpleNamespace(partition=0, offset=1, timestamp=2)
+    )
     settings = KafkaSettings(bootstrap_servers="kafka:9092", app_env="dev")
     app, _ = _build_app(settings, producer=producer)
 

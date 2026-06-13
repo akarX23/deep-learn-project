@@ -103,25 +103,32 @@ Expected successful response shape:
 
 If broker metadata is not fully available, fields may be `null` while publish remains successful.
 
-## 7. Publish rag test event with a complete request body
+## 7. Use the default input factory from utils.py
+
+The `default_rag_test_event()` factory in `backend_service/app/utils.py` returns a fully initialized `RAGRequestEvent` with a fresh `uuid4`-based `request_id` and representative defaults:
+
+```python
+from backend_service.app.utils import default_rag_test_event
+
+event = default_rag_test_event()
+print(event.request_id)   # e.g. "test-4a7f9c..."
+print(event.user_request) # "Summarize gradient descent for local integration testing."
+```
+
+To publish a test event using the factory defaults:
 
 ```bash
 curl -s -X POST http://localhost:8001/api/v1/test-events/rag \
 	-H "Content-Type: application/json" \
 	-d '{
-		"overrides": {
-			"user_request": "Summarize gradient descent",
-			"file_paths": ["rag_agent/tests/inputs/sample.pdf"],
-			"session_ctx": {"mode": "quick"}
-		}
-	-d '{
 		"request_id": "test-req-456",
-		"session_ctx": {"mode": "quick"},
-		"user_request": "Summarize gradient descent",
+		"session_ctx": {"source": "backend-service", "mode": "integration-test"},
+		"user_request": "Summarize gradient descent for local integration testing.",
 		"file_paths": ["rag_agent/tests/inputs/sample.pdf"],
 		"created_at": null,
 		"source": "backend-service"
 	}'
+```
 
 ## 8. Environment gating behavior
 - Request body is the complete `RAGRequestEvent` object.

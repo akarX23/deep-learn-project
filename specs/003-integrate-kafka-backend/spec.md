@@ -21,6 +21,11 @@
 - Q: Should test-event metadata require new schema models? → A: No. Keep test-event metadata inline in the response payload; do not add additional schema models for metadata.
 - Q: Where should the shared producer live? → A: Create the single producer in the Kafka admin layer and expose it there for the test-events API to reuse.
 
+### Session 2026-06-13
+
+- Q: Where should the default input factory for the test-event API live? → A: In `backend_service/app/utils.py` — one level above the `api/` package, shared across all app modules.
+- Q: What should the `request_id` default value be in the factory? → A: Generate a fresh `uuid4`-based string per call (e.g. `f"test-{uuid4().hex}"`) to guarantee uniqueness.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Bootstrap Kafka Topics from Project Registry on Startup (Priority: P1)
@@ -68,6 +73,8 @@ As a platform developer, I need the backend service to automatically create all 
 - **FR-015**: On successful `rag` test-event publish, the backend service MUST return a normalized response envelope that includes request correlation and publish status.
 - **FR-016**: The successful `rag` test-event response MUST include Kafka publish metadata (for example partition/offset/timestamp) when available from the producer result.
 - **FR-017**: The backend service MUST use a single shared producer owned by the Kafka admin layer; the test-events API MUST reuse that producer rather than constructing a separate one in main.py.
+- **FR-018**: A per-topic default input factory function MUST be provided in `backend_service/app/utils.py`; each factory returns a fully initialized, type-safe instance of the topic's input schema with sensible default values and no validators or exception handling.
+- **FR-019**: The `rag` default factory in `backend_service/app/utils.py` MUST return a `RAGRequestEvent` with a dynamically generated `request_id` (using `uuid4`) and all other required fields set to representative default values.
 
 ### Key Entities
 
@@ -76,6 +83,7 @@ As a platform developer, I need the backend service to automatically create all 
 - **RAGRequestEvent**: Kafka request payload schema used by the backend test-event API for publishing to topic `rag`; this schema is also used as the request body with defaults applied.
 - **TestEventPublishResult**: API response payload containing request identifier, target topic, publish status, and an inline optional Kafka metadata object; no dedicated metadata schema is introduced.
 - **KafkaProducerHandle**: Shared producer instance exposed by the Kafka admin layer and reused by the test-events API.
+- **TestEventDefaultFactory**: Pure functions in `backend_service/app/utils.py`, one per topic, that return a fully initialized default instance of each topic's input schema. No validators, no exception handling — type-safe initialized values only. The `rag` factory returns `RAGRequestEvent` with a fresh `uuid4`-based `request_id` on every call.
 
 ## Success Criteria *(mandatory)*
 
