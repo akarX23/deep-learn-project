@@ -23,6 +23,10 @@ class LLMConfig:
     env vars (ANTHROPIC_API_KEY, GOOGLE_API_KEY, OPENAI_API_KEY, etc.).
     TEACHING_API_KEY / TEACHING_API_BASE are optional overrides for
     non-standard or self-hosted endpoints.
+
+    effort: optional output compute level (low/medium/high); passed as
+    output_config to Claude 4.6 models only (Sonnet 4.6, Opus 4.6);
+    silently ignored for all other models.
     """
 
     model: str
@@ -30,14 +34,10 @@ class LLMConfig:
     api_key: str | None = None
     temperature: float = 0.7
     max_tokens: int = 1024
+    effort: str | None = None
 
 
-# Per-mode completion token ceilings enforced at the LiteLLM call boundary.
-MODE_MAX_TOKENS: dict[str, int] = {
-    "beginner": 4096,
-    "intermediate": 4096,
-    "advanced": 4096,
-}
+_DEFAULT_MAX_TOKENS = 4096
 
 
 def _read_float(name: str, default: float) -> float:
@@ -63,28 +63,37 @@ def _read_int(name: str, default: int) -> int:
 def get_llm_config(output_mode: str) -> LLMConfig:
     """Build LLM config from environment variables for the given output mode.
 
-    TEACHING_MODEL is required. Set it to any LiteLLM-compatible model string.
-    The token ceiling is read from TEACHING_{MODE}_MAX_TOKENS if set,
-    otherwise falls back to the spec default for that mode.
+    Per-mode overrides (TEACHING_{MODE}_MODEL, TEACHING_{MODE}_API_KEY,
+    TEACHING_{MODE}_MAX_TOKENS) take precedence over the shared fallbacks.
+    TEACHING_MODEL is required when no per-mode model override is set.
     """
-    model = os.getenv("TEACHING_MODEL")
+    mode_upper = output_mode.upper()
+
+    model = os.getenv(f"TEACHING_{mode_upper}_MODEL") or os.getenv("TEACHING_MODEL")
     if not model:
         raise RuntimeError(
-            "TEACHING_MODEL environment variable is not set. "
-            "Set it to any LiteLLM-compatible model string "
-            "(e.g. claude-sonnet-4-6, gemini/gemini-1.5-flash, gpt-4o)."
+            f"No model configured for '{output_mode}' mode. "
+            f"Set TEACHING_{mode_upper}_MODEL or TEACHING_MODEL to any "
+            "LiteLLM-compatible model string "
+            "(e.g. groq/llama-3.3-70b-versatile, anthropic/claude-sonnet-4-6, gpt-4o)."
         )
 
-    max_tokens = _read_int(
-        f"TEACHING_{output_mode.upper()}_MAX_TOKENS",
-        MODE_MAX_TOKENS[output_mode],
+    api_key = os.getenv(f"TEACHING_{mode_upper}_API_KEY") or os.getenv("TEACHING_API_KEY")
+    max_tokens = _read_int(f"TEACHING_{mode_upper}_MAX_TOKENS", _DEFAULT_MAX_TOKENS)
+    temperature = (
+        _read_float(f"TEACHING_{mode_upper}_TEMPERATURE", -1.0)
+        if os.getenv(f"TEACHING_{mode_upper}_TEMPERATURE")
+        else _read_float("TEACHING_TEMPERATURE", 0.7)
     )
+    effort = os.getenv(f"TEACHING_{mode_upper}_EFFORT") or None
+
     return LLMConfig(
         model=model,
         api_base=os.getenv("TEACHING_API_BASE"),
-        api_key=os.getenv("TEACHING_API_KEY"),
-        temperature=_read_float("TEACHING_TEMPERATURE", 0.7),
+        api_key=api_key or None,
+        temperature=temperature,
         max_tokens=max_tokens,
+        effort=effort,
     )
 
 

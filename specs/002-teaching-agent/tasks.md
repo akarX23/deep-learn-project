@@ -25,9 +25,12 @@ All Phase 2 tasks are reviewed and approved individually before implementation.
 
 - [x] T003 [P] Create `teaching_agent/__init__.py` (empty module marker)
 - [x] T004 [P] Create `teaching_agent/config.py`:
-      `LLMConfig` dataclass, `MODE_MAX_TOKENS` dict (4096 beginner / 4096 intermediate / 4096 advanced),
-      `get_llm_config(output_mode)` — reads `TEACHING_MODEL` (required, no default),
-      `TEACHING_API_BASE`, `TEACHING_API_KEY`, `TEACHING_TEMPERATURE`; calls `load_dotenv()`
+      `LLMConfig` dataclass, `get_llm_config(output_mode)` — resolves per-mode config from
+      `TEACHING_{MODE}_MODEL` / `TEACHING_{MODE}_API_KEY` / `TEACHING_{MODE}_MAX_TOKENS` /
+      `TEACHING_{MODE}_TEMPERATURE` / `TEACHING_{MODE}_EFFORT`
+      with fallback to `TEACHING_MODEL` / `TEACHING_API_KEY` / default 4096 /
+      `TEACHING_TEMPERATURE` (default 0.7); effort has no shared fallback (optional, no default);
+      no hardcoded values in Python; calls `load_dotenv()`
 - [x] T005 [P] Create `teaching_agent/llm_client.py`:
       `call_llm(messages, config) → (content: str, tokens_used: int)`;
       passes `response_format={"type": "json_object"}`; only passes `api_key`/`api_base`
@@ -225,6 +228,40 @@ Backend service will auto-bootstrap `"teaching"` and `"teaching-complete"` on ne
       CLAUDE.md (Output mode rules table), and tasks.md (T004 description).
       Rationale: original 512/1024/2048 limits caused truncated JSON responses with verbose providers
       (e.g. Claude). Limits kept as 3 distinct placeholders so they can be tuned independently.
+
+- [x] T029 Update `teaching_agent/config.py` for per-mode LLM configuration (FR-009, Decision 12):
+      remove hardcoded `MODE_MAX_TOKENS` dict; update `get_llm_config(output_mode)` to resolve
+      per-mode config from env vars with fallbacks:
+      - model: `TEACHING_{MODE}_MODEL` → `TEACHING_MODEL` (required if no per-mode override)
+      - api_key: `TEACHING_{MODE}_API_KEY` → `TEACHING_API_KEY`
+      - max_tokens: `TEACHING_{MODE}_MAX_TOKENS` → default 4096
+      - temperature: `TEACHING_{MODE}_TEMPERATURE` → `TEACHING_TEMPERATURE` → default 0.7
+      - effort: `TEACHING_{MODE}_EFFORT` → no fallback (optional; `None` when unset)
+      No hardcoded values remain in config.py; all defaults resolve from env/config files only.
+
+- [x] T030 Update `.env.local` — add per-mode env var stubs (commented out) under Teaching Agent section:
+      `TEACHING_BEGINNER_MODEL`, `TEACHING_BEGINNER_API_KEY`, `TEACHING_BEGINNER_MAX_TOKENS`,
+      same for `INTERMEDIATE` and `ADVANCED`; shared `TEACHING_MODEL` / `TEACHING_API_KEY`
+      remain as the active fallback defaults. Stubs are commented out so they act as
+      in-place documentation without overriding the shared fallbacks.
+
+- [x] T031 Update `CLAUDE.md` env var table — add per-mode override rows
+      (`TEACHING_{MODE}_MODEL`, `TEACHING_{MODE}_API_KEY`, `TEACHING_{MODE}_MAX_TOKENS`)
+      with fallback description; update Output mode rules table to reference env vars.
+
+- [ ] T032 Update `teaching_agent/config.py` and `teaching_agent/llm_client.py` for per-mode
+      temperature and effort (FR-009, Decision 12):
+      - `LLMConfig`: add `effort: str | None = None` field
+      - `get_llm_config()`: read `TEACHING_{MODE}_TEMPERATURE` (fallback: `TEACHING_TEMPERATURE`,
+        default 0.7) and `TEACHING_{MODE}_EFFORT` (no fallback; `None` when unset)
+      - `llm_client.py`: if `config.effort` is set and model string contains `"sonnet-4-6"` or
+        `"opus-4-6"`, pass `output_config={"effort": config.effort}` as a kwarg to
+        `litellm.completion()`; silently skip for all other models
+
+- [ ] T033 Update `.env.local` — add per-mode temperature and effort stubs under Teaching Agent
+      section: `TEACHING_BEGINNER_TEMPERATURE`, `TEACHING_INTERMEDIATE_TEMPERATURE`,
+      `TEACHING_ADVANCED_TEMPERATURE`, `TEACHING_BEGINNER_EFFORT`, `TEACHING_INTERMEDIATE_EFFORT`,
+      `TEACHING_ADVANCED_EFFORT`; variables go in `.env.local` (not `.env.local.example`)
 
 **Checkpoint**: All Phase 2 tests pass; `"teaching"` and `"teaching-complete"` topics
 registered in `project/topics.py`; worker boots and processes messages end-to-end

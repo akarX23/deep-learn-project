@@ -31,7 +31,7 @@ logic from Phase 1 is not modified.
 **Target Platform**: Linux runtime (local dev and container-ready execution)
 **Project Type**: Agent module/library within a multi-agent backend
 **Performance Goals**: Beginner mode ≤ 5s wall-clock; intermediate ≤ 10s; advanced ≤ 20s on developer hardware under a fast-endpoint model
-**Constraints**: Synchronous execution only; per-mode token ceilings enforced at LiteLLM call level (4096 beginner / 4096 intermediate / 4096 advanced); Mermaid validation required before returning diagram; JSON output only; no LangGraph
+**Constraints**: Synchronous execution only; per-mode token ceilings enforced at LiteLLM call level via `TEACHING_{MODE}_MAX_TOKENS` env vars (default 4096 each); per-mode model, API key, temperature, and effort also configurable via `TEACHING_{MODE}_MODEL` / `TEACHING_{MODE}_API_KEY` / `TEACHING_{MODE}_TEMPERATURE` / `TEACHING_{MODE}_EFFORT` with fallback to shared `TEACHING_MODEL` / `TEACHING_API_KEY` / `TEACHING_TEMPERATURE`; effort (`low | medium | high`) maps to `output_config={"effort": value}` for Claude 4.6 models only, silently skipped for all others; Mermaid validation required before returning diagram; JSON output only; no LangGraph
 **Scale/Scope**: One synchronous request per invocation; invoked once per user query by the Planner Agent
 
 ## Constitution Check
@@ -137,10 +137,9 @@ section. They are binding design decisions, traceable to the listed spec require
 
 ### Token-Ceiling Semantics (FR-008, SC-005)
 
-- The per-mode ceiling (4096 beginner / 4096 intermediate / 4096 advanced) governs **generated completion tokens**, enforced
-  as `max_tokens` at the LiteLLM call boundary in `config.py`'s per-mode map. This is the
-  value reported as `metadata.tokens_used` (the `completion_tokens` field of the LLM usage
-  response).
+- The per-mode ceiling is read from `TEACHING_{MODE}_MAX_TOKENS` (where `{MODE}` is `BEGINNER`, `INTERMEDIATE`, or `ADVANCED`) and defaults to 4096 when unset. It governs **generated completion tokens**, enforced as `max_tokens` at the LiteLLM call boundary. No ceiling value is hardcoded in `config.py` — all defaults resolve from environment/configuration files. This is the value reported as `metadata.tokens_used` (the `completion_tokens` field of the LLM usage response).
+
+Similarly, `TEACHING_{MODE}_MODEL` selects the model per learner level (fallback: `TEACHING_MODEL`), `TEACHING_{MODE}_API_KEY` selects the API key (fallback: `TEACHING_API_KEY`), `TEACHING_{MODE}_TEMPERATURE` sets the sampling temperature (fallback: `TEACHING_TEMPERATURE`, default 0.7), and `TEACHING_{MODE}_EFFORT` sets the output effort level (`low | medium | high`) for Claude 4.6 models only (silently skipped for all other models — Haiku, Groq/Llama, etc. do not support `output_config`). This allows different providers, quotas, temperature, and compute effort per mode without changing any Python file.
 - Prompt + `context` tokens are **not** counted against the completion ceiling, but are
   bounded separately: `agent.py` enforces an input guard that truncates/rejects an oversized
   `context` before dispatch, so total request size stays within the model window and a long

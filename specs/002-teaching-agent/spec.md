@@ -154,8 +154,14 @@ and verify that a `TeachingCompletionEvent` appears on `"teaching-complete"` wit
 - **FR-005**: In beginner mode, the `diagram` field MUST always be non-null and contain a valid Mermaid flowchart or sequence diagram representing the topic visually.
 - **FR-006**: In intermediate and advanced modes, the `diagram` field MUST be included only when the topic has structural or sequential complexity that benefits from visualization; otherwise `diagram` MUST be null.
 - **FR-007**: The system MUST validate Mermaid diagram syntax before including it in the response; invalid diagrams MUST NOT be returned.
-- **FR-008**: The system MUST enforce per-mode token ceilings: 4096 tokens for beginner, 4096 tokens for intermediate, 4096 tokens for advanced.
-- **FR-009**: The system MUST use a dedicated LLM client module scoped to the Teaching Agent. All model configuration (API key, model name, temperature, token limits) MUST be supplied via environment variables and MUST NOT be hardcoded. The client MUST be swappable so the underlying provider (e.g. Gemini for development, Claude for production) can be changed without modifying agent logic.
+- **FR-008**: The system MUST enforce per-mode token ceilings configurable exclusively via environment variables: `TEACHING_BEGINNER_MAX_TOKENS`, `TEACHING_INTERMEDIATE_MAX_TOKENS`, `TEACHING_ADVANCED_MAX_TOKENS`, each defaulting to 4096 when unset. No ceiling values may be hardcoded in agent Python files — all defaults must be resolvable from environment/configuration files alone.
+- **FR-009**: The system MUST use a dedicated LLM client module scoped to the Teaching Agent. All model configuration MUST be supplied via environment variables and MUST NOT be hardcoded in agent Python files. Configuration MUST support both shared and per-mode overrides using the following env var pattern (where `{MODE}` is `BEGINNER`, `INTERMEDIATE`, or `ADVANCED`):
+  - **Model**: `TEACHING_{MODE}_MODEL` — falls back to `TEACHING_MODEL` if unset; `TEACHING_MODEL` is required when no per-mode override is provided
+  - **API key**: `TEACHING_{MODE}_API_KEY` — falls back to `TEACHING_API_KEY` if unset
+  - **Max tokens**: `TEACHING_{MODE}_MAX_TOKENS` — defaults to 4096 if unset (see FR-008)
+  - **Temperature**: `TEACHING_{MODE}_TEMPERATURE` — falls back to `TEACHING_TEMPERATURE` if unset; default 0.7
+  - **Effort**: `TEACHING_{MODE}_EFFORT` — optional; values: `low | medium | high`; translates to `output_config={"effort": value}` for Claude 4.6 models (Sonnet 4.6, Opus 4.6) via LiteLLM; silently skipped for all other models (Haiku, Groq, etc.) that do not support `output_config`; does NOT enable extended thinking or reasoning tokens
+  This allows different providers, models, API quotas, temperature, and output effort per learner level without modifying any agent Python file. `TEACHING_API_BASE` remains a single shared optional override for self-hosted or custom-proxy endpoints only.
 - **FR-010**: The system MUST return `status: "error"` and a schema-valid JSON body whenever processing fails; it MUST NOT raise unhandled exceptions or return plain text.
 - **FR-011**: The system MUST populate `metadata.tokens_used` with the actual token count consumed and `metadata.model` with the model identifier used for the response.
 - **FR-012**: In beginner mode, the `explanation` MUST follow this structure: (1) one-sentence plain-English summary, (2) real-world analogy, (3) numbered step-by-step walkthrough, (4) reference to the accompanying diagram, (5) three bullet-point key takeaways. The `notes` MUST be a simplified jargon-free bullet summary. The `example` MUST be a concrete worked example with plain-English commentary on each step.
@@ -200,7 +206,7 @@ and verify that a `TeachingCompletionEvent` appears on `"teaching-complete"` wit
 - **SC-002**: For any topic processed at all three modes, automated comparison confirms the responses are qualitatively different in structure and vocabulary in 100% of runs.
 - **SC-003**: 100% of beginner-mode responses include a non-null `diagram` field containing valid Mermaid syntax.
 - **SC-004**: 100% of generated Mermaid diagrams (across all modes) pass syntax validation before being included in the response.
-- **SC-005**: Token consumption stays within the per-mode ceiling (4096 beginner / 4096 intermediate / 4096 advanced) in 100% of runs.
+- **SC-005**: Token consumption stays within the per-mode ceiling set via `TEACHING_{MODE}_MAX_TOKENS` (default 4096 each) in 100% of runs.
 - **SC-006**: Error conditions (empty topic, LLM failure, invalid diagram) always produce a schema-valid `status: "error"` response with no unhandled exceptions in 100% of runs.
 - **SC-007**: A single Teaching Agent request for any mode completes within a time budget suitable for a live tutoring interaction, with no fatal crash on LLM or diagram validation failures.
 - **SC-008**: 100% of `TeachingCompletionEvent` messages published to `"teaching-complete"` carry the same `request_id` and `session_ctx` as the originating `TeachingRequestEvent`.
