@@ -187,7 +187,7 @@ class RAGAgent:
                 future_map[future] = (idx, pointer)
 
             for future in as_completed(future_map):
-                idx, pointer = future_map[future]
+                idx, pointer = future_map[future]   
                 try:
                     result = future.result()
                     results.append(result)
@@ -360,6 +360,12 @@ def main() -> None:
         "--input", required=True, help="Path to a JSON RAGAgentInput file"
     )
     args = parser.parse_args()
+    
+    logger = logging.getLogger(__name__)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
 
     payload = _parse_input(args.input)
     agent = RAGAgent()
