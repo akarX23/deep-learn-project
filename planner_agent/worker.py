@@ -18,8 +18,10 @@ def run_worker() -> None:
     agent = PlannerAgent()
     logger.info("Planner worker listening on %s", PlannerTopics.INIT_PLANNER.value)
     for message in consumer:
+        logger.info("Received init-planner event")
         try:
             agent.run(message.value)
+            logger.info("Finished processing init-planner event")
         except Exception as exc:  # noqa: BLE001 - keep the worker alive
             logger.exception("Failed to process planner event: %s", exc)
 

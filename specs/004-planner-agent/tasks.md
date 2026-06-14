@@ -13,12 +13,12 @@
 
 **Purpose**: Ensure project scaffolding and shared contracts are ready for all user stories.
 
-- [ ] T001 [P] Ensure planner dependencies are present in `requirements.txt` (`langgraph>=1.2.0`, `langchain-core>=1.4.0`)
-- [ ] T002 [P] Create planner package scaffold in `planner_agent/__init__.py`, `planner_agent/agent.py`, `planner_agent/config.py`, `planner_agent/llm_client.py`, `planner_agent/kafka.py`, `planner_agent/prompts.py`, `planner_agent/worker.py`
-- [ ] T003 [P] Create planner test scaffold in `planner_agent/tests/__init__.py` and `planner_agent/tests/inputs/sample_input.json`
-- [ ] T004 [P] Add/update planner shared schema models in `project/schemas.py`: `UserLevelEnum`, `LevelInferenceResult`, `TeachingRequestEvent`, `QuizRequestEvent`, `ClarifyUserLevelEvent`, `WorkflowCompleteEvent`
-- [ ] T005 [P] Add/update planner topic enums in `project/topics.py`: `PlannerAgentTopics`, `AgentCompletionTopics`, and `get_all_topic_names()` aggregation
-- [ ] T006 [P] Register planner tests in `pytest.ini` (`planner_agent/tests`)
+- [x] T001 [P] Ensure planner dependencies are present in `requirements.txt` (`langgraph>=1.2.0`, `langchain-core>=1.4.0`)
+- [x] T002 [P] Create planner package scaffold in `planner_agent/__init__.py`, `planner_agent/agent.py`, `planner_agent/config.py`, `planner_agent/llm_client.py`, `planner_agent/kafka.py`, `planner_agent/prompts.py`, `planner_agent/worker.py`
+- [x] T003 [P] Create planner test scaffold in `planner_agent/tests/__init__.py` and `planner_agent/tests/inputs/sample_input.json`
+- [x] T004 [P] Add/update planner shared schema models in `project/schemas.py`: `UserLevelEnum`, `LevelInferenceResult`, `TeachingRequestEvent`, `QuizRequestEvent`, `ClarifyUserLevelEvent`, `WorkflowCompleteEvent`
+- [x] T005 [P] Add/update planner topic enums in `project/topics.py`: `PlannerAgentTopics`, `AgentCompletionTopics`, and `get_all_topic_names()` aggregation
+- [x] T006 [P] Register planner tests in `pytest.ini` (`planner_agent/tests`)
 
 ---
 
@@ -28,15 +28,15 @@
 
 **CRITICAL**: No user story work should start before this phase is complete.
 
-- [ ] T007 [P] Implement planner-local LLM env configuration in `planner_agent/config.py` (`PLANNER_TEXT_*`, confidence threshold, bootstrap servers) with explicit return types
-- [ ] T008 [P] Implement planner-local LiteLLM wrapper in `planner_agent/llm_client.py` using planner config only (no `rag_agent` config imports)
-- [ ] T009 [P] Implement typed Kafka producer/consumer factories in `planner_agent/kafka.py` with JSON serialization/deserialization
-- [ ] T010 [P] Implement `LEVEL_QUIZ_INFERENCE_PROMPT` with structured JSON output contract in `planner_agent/prompts.py`
-- [ ] T011 Implement `PlannerState` `TypedDict` in `planner_agent/agent.py` with fields from `data-model.md`
-- [ ] T012 Implement schema-boundary helpers in `planner_agent/agent.py` and `planner_agent/worker.py` to parse inbound and serialize outbound events via `project/schemas.py`
-- [ ] T013 Implement stage-level logger calls in `planner_agent/agent.py` and `planner_agent/worker.py` for consume, assign, infer, route, dispatch, finish paths
-- [ ] T014 [P] Add foundational contract tests for schema/topic conformance in `planner_agent/tests/test_planner_agent.py`
-- [ ] T015 [P] Add foundational typing/signature tests and lint expectations in `planner_agent/tests/test_worker_runtime.py` and `planner_agent/tests/test_level_inference.py`
+- [x] T007 [P] Implement planner-local LLM env configuration in `planner_agent/config.py` (`PLANNER_TEXT_*`, confidence threshold, bootstrap servers) with explicit return types
+- [x] T008 [P] Implement planner-local LiteLLM wrapper in `planner_agent/llm_client.py` using planner config only (no `rag_agent` config imports)
+- [x] T009 [P] Implement typed Kafka producer/consumer factories in `planner_agent/kafka.py` with JSON serialization/deserialization
+- [x] T010 [P] Implement `LEVEL_QUIZ_INFERENCE_PROMPT` with structured JSON output contract in `planner_agent/prompts.py`
+- [x] T011 Implement `PlannerState` `TypedDict` in `planner_agent/agent.py` with fields from `data-model.md`
+- [x] T012 Implement schema-boundary helpers in `planner_agent/agent.py` and `planner_agent/worker.py` to parse inbound and serialize outbound events via `project/schemas.py`
+- [x] T013 Implement stage-level logger calls in `planner_agent/agent.py` and `planner_agent/worker.py` for consume, assign, infer, route, dispatch, finish paths
+- [x] T014 [P] Add foundational contract tests for schema/topic conformance in `planner_agent/tests/test_planner_agent.py`
+- [x] T015 [P] Add foundational typing/signature tests and lint expectations in `planner_agent/tests/test_worker_runtime.py` and `planner_agent/tests/test_level_inference.py`
 
 **Checkpoint**: Core planner plumbing, schema boundaries, and observability are ready.
 
@@ -50,16 +50,16 @@
 
 ### Tests for User Story 1
 
-- [ ] T016 [P] [US1] Add test for unique `request_id` assignment per run in `planner_agent/tests/test_planner_agent.py`
-- [ ] T017 [P] [US1] Add test for complete state initialization from `PlannerRequestEvent` in `planner_agent/tests/test_planner_agent.py`
-- [ ] T018 [P] [US1] Add worker test for malformed inbound event handling without process crash in `planner_agent/tests/test_worker_runtime.py`
-- [ ] T019 [P] [US1] Add worker logging test for consume/parse failure paths in `planner_agent/tests/test_worker_runtime.py`
+- [x] T016 [P] [US1] Add test for unique `request_id` assignment per run in `planner_agent/tests/test_planner_agent.py`
+- [x] T017 [P] [US1] Add test for complete state initialization from `PlannerRequestEvent` in `planner_agent/tests/test_planner_agent.py`
+- [x] T018 [P] [US1] Add worker test for malformed inbound event handling without process crash in `planner_agent/tests/test_worker_runtime.py`
+- [x] T019 [P] [US1] Add worker logging test for consume/parse failure paths in `planner_agent/tests/test_worker_runtime.py`
 
 ### Implementation for User Story 1
 
-- [ ] T020 [US1] Implement `PlannerAgent.run(event: dict[str, object]) -> dict[str, object]` entry in `planner_agent/agent.py` with `request_id` generation and typed initial state
-- [ ] T021 [US1] Implement worker consume loop in `planner_agent/worker.py` for `init-planner` with schema parsing via `PlannerRequestEvent`
-- [ ] T022 [US1] Add request lifecycle logs (`request_id`, `sid`, topic, status) in `planner_agent/worker.py` and `planner_agent/agent.py`
+- [x] T020 [US1] Implement `PlannerAgent.run(event: dict[str, object]) -> dict[str, object]` entry in `planner_agent/agent.py` with `request_id` generation and typed initial state
+- [x] T021 [US1] Implement worker consume loop in `planner_agent/worker.py` for `init-planner` with schema parsing via `PlannerRequestEvent`
+- [x] T022 [US1] Add request lifecycle logs (`request_id`, `sid`, topic, status) in `planner_agent/worker.py` and `planner_agent/agent.py`
 
 **Checkpoint**: US1 is independently testable and operational.
 
@@ -73,19 +73,19 @@
 
 ### Tests for User Story 2
 
-- [ ] T023 [P] [US2] Add inference test for high-confidence result path (`user_levels`, `quiz_requested`) in `planner_agent/tests/test_level_inference.py`
-- [ ] T024 [P] [US2] Add inference test for low-confidence clarify path and topic publish in `planner_agent/tests/test_level_inference.py`
-- [ ] T025 [P] [US2] Add inference test for pre-defined levels skipping LLM call in `planner_agent/tests/test_level_inference.py`
-- [ ] T026 [P] [US2] Add inference test for LLM exception fallback to clarify event in `planner_agent/tests/test_level_inference.py`
-- [ ] T027 [P] [US2] Add test proving planner LLM config source is `planner_agent/config.py` only in `planner_agent/tests/test_level_inference.py`
-- [ ] T028 [P] [US2] Add logging-level test for inference decision branches in `planner_agent/tests/test_level_inference.py`
+- [x] T023 [P] [US2] Add inference test for high-confidence result path (`user_levels`, `quiz_requested`) in `planner_agent/tests/test_level_inference.py`
+- [x] T024 [P] [US2] Add inference test for low-confidence clarify path and topic publish in `planner_agent/tests/test_level_inference.py`
+- [x] T025 [P] [US2] Add inference test for pre-defined levels skipping LLM call in `planner_agent/tests/test_level_inference.py`
+- [x] T026 [P] [US2] Add inference test for LLM exception fallback to clarify event in `planner_agent/tests/test_level_inference.py`
+- [x] T027 [P] [US2] Add test proving planner LLM config source is `planner_agent/config.py` only in `planner_agent/tests/test_level_inference.py`
+- [x] T028 [P] [US2] Add logging-level test for inference decision branches in `planner_agent/tests/test_level_inference.py`
 
 ### Implementation for User Story 2
 
-- [ ] T029 [US2] Implement `_infer_level` node in `planner_agent/agent.py` with `LevelInferenceResult` parsing and threshold check
-- [ ] T030 [US2] Implement `_clarify_and_end` node in `planner_agent/agent.py` publishing `ClarifyUserLevelEvent` to `clarify-user-level`
-- [ ] T031 [US2] Wire infer-level routing (`continue` vs `clarify`) in `planner_agent/agent.py`
-- [ ] T032 [US2] Ensure explicit argument/return annotations for inference and clarify helpers in `planner_agent/agent.py`
+- [x] T029 [US2] Implement `_infer_level` node in `planner_agent/agent.py` with `LevelInferenceResult` parsing and threshold check
+- [x] T030 [US2] Implement `_clarify_and_end` node in `planner_agent/agent.py` publishing `ClarifyUserLevelEvent` to `clarify-user-level`
+- [x] T031 [US2] Wire infer-level routing (`continue` vs `clarify`) in `planner_agent/agent.py`
+- [x] T032 [US2] Ensure explicit argument/return annotations for inference and clarify helpers in `planner_agent/agent.py`
 
 **Checkpoint**: US2 inference and clarification behavior is independently testable.
 
@@ -99,21 +99,21 @@
 
 ### Tests for User Story 3
 
-- [ ] T033 [P] [US3] Add test for `run_rag` dispatch payload/topic conformance in `planner_agent/tests/test_planner_agent.py`
-- [ ] T034 [P] [US3] Add test confirming RAG path is skipped when `file_paths` is empty in `planner_agent/tests/test_planner_agent.py`
-- [ ] T035 [P] [US3] Add test for teaching fan-out count and per-level payload in `planner_agent/tests/test_planner_agent.py`
-- [ ] T036 [P] [US3] Add test for quiz dispatch when `quiz_requested` is true in `planner_agent/tests/test_planner_agent.py`
-- [ ] T037 [P] [US3] Add test for no quiz dispatch when `quiz_requested` is false in `planner_agent/tests/test_planner_agent.py`
-- [ ] T038 [P] [US3] Add logging tests for route and dispatch stages (`run_rag`, `teach_node`, `run_quiz`) in `planner_agent/tests/test_planner_agent.py`
+- [x] T033 [P] [US3] Add test for `run_rag` dispatch payload/topic conformance in `planner_agent/tests/test_planner_agent.py`
+- [x] T034 [P] [US3] Add test confirming RAG path is skipped when `file_paths` is empty in `planner_agent/tests/test_planner_agent.py`
+- [x] T035 [P] [US3] Add test for teaching fan-out count and per-level payload in `planner_agent/tests/test_planner_agent.py`
+- [x] T036 [P] [US3] Add test for quiz dispatch when `quiz_requested` is true in `planner_agent/tests/test_planner_agent.py`
+- [x] T037 [P] [US3] Add test for no quiz dispatch when `quiz_requested` is false in `planner_agent/tests/test_planner_agent.py`
+- [x] T038 [P] [US3] Add logging tests for route and dispatch stages (`run_rag`, `teach_node`, `run_quiz`) in `planner_agent/tests/test_planner_agent.py`
 
 ### Implementation for User Story 3
 
-- [ ] T039 [US3] Implement `_route_rag` conditional in `planner_agent/agent.py`
-- [ ] T040 [US3] Implement `_run_rag` node in `planner_agent/agent.py` with schema-conformant outbound request payload
-- [ ] T041 [US3] Implement `_fan_out_teach` using `Send` API in `planner_agent/agent.py`
-- [ ] T042 [US3] Implement `_teach_node` in `planner_agent/agent.py` publishing `TeachingRequestEvent`
-- [ ] T043 [US3] Implement `_route_quiz` conditional and `_run_quiz` node in `planner_agent/agent.py` publishing `QuizRequestEvent`
-- [ ] T044 [US3] Wire US3 graph edges and interrupt/checkpoint behavior in `planner_agent/agent.py`
+- [x] T039 [US3] Implement `_route_rag` conditional in `planner_agent/agent.py`
+- [x] T040 [US3] Implement `_run_rag` node in `planner_agent/agent.py` with schema-conformant outbound request payload
+- [x] T041 [US3] Implement `_fan_out_teach` using `Send` API in `planner_agent/agent.py`
+- [x] T042 [US3] Implement `_teach_node` in `planner_agent/agent.py` publishing `TeachingRequestEvent`
+- [x] T043 [US3] Implement `_route_quiz` conditional and `_run_quiz` node in `planner_agent/agent.py` publishing `QuizRequestEvent`
+- [x] T044 [US3] Wire US3 graph edges and interrupt/checkpoint behavior in `planner_agent/agent.py`
 
 **Checkpoint**: US3 orchestration is independently testable and schema-safe.
 
@@ -127,16 +127,16 @@
 
 ### Tests for User Story 4
 
-- [ ] T045 [P] [US4] Add finish-node test for `workflow-complete` payload conformance in `planner_agent/tests/test_planner_agent.py`
-- [ ] T046 [P] [US4] Add finish-node test for `workflow_status = "complete"` in `planner_agent/tests/test_planner_agent.py`
-- [ ] T047 [P] [US4] Add checkpoint retrieval test by `thread_id = request_id` in `planner_agent/tests/test_planner_agent.py`
-- [ ] T048 [P] [US4] Add deferred test placeholder for `Command(resume=...)` completion updates in `planner_agent/tests/test_planner_agent.py`
+- [x] T045 [P] [US4] Add finish-node test for `workflow-complete` payload conformance in `planner_agent/tests/test_planner_agent.py`
+- [x] T046 [P] [US4] Add finish-node test for `workflow_status = "complete"` in `planner_agent/tests/test_planner_agent.py`
+- [x] T047 [P] [US4] Add checkpoint retrieval test by `thread_id = request_id` in `planner_agent/tests/test_planner_agent.py`
+- [x] T048 [P] [US4] Add deferred test placeholder for `Command(resume=...)` completion updates in `planner_agent/tests/test_planner_agent.py`
 
 ### Implementation for User Story 4
 
-- [ ] T049 [US4] Implement `_finish` node in `planner_agent/agent.py` publishing `WorkflowCompleteEvent`
-- [ ] T050 [US4] Wire `finish -> END` and completion-path logs in `planner_agent/agent.py`
-- [ ] T051 [US4] Add explicit TODO markers for deferred completion-consumer/resume flow in `planner_agent/agent.py` and `planner_agent/worker.py`
+- [x] T049 [US4] Implement `_finish` node in `planner_agent/agent.py` publishing `WorkflowCompleteEvent`
+- [x] T050 [US4] Wire `finish -> END` and completion-path logs in `planner_agent/agent.py`
+- [x] T051 [US4] Add explicit TODO markers for deferred completion-consumer/resume flow in `planner_agent/agent.py` and `planner_agent/worker.py`
 
 **Checkpoint**: US4 completion flow is independently testable with current phase scope.
 
@@ -146,13 +146,13 @@
 
 **Purpose**: Final verification, quality gates, and docs/config consistency.
 
-- [ ] T052 [P] Add/refresh planner env examples in `.env.local.example` for all `PLANNER_TEXT_*` and `PLANNER_KAFKA_BOOTSTRAP_SERVERS`
-- [ ] T053 [P] Run planner test suite with evidence: `pytest planner_agent/tests -q`
-- [ ] T054 [P] Run quality gates: `ruff check project planner_agent` and `ruff format --check project planner_agent`
-- [ ] T055 [P] Run syntax gate: `python -m compileall project planner_agent -q`
-- [ ] T056 [P] Verify topic bootstrap regression in `backend_service/tests/test_startup.py` for expanded topic set from `project/topics.py`
-- [ ] T057 [P] Validate sample inputs in `planner_agent/tests/inputs/sample_input.json` cover empty-level+files and predefined-level+no-files paths
-- [ ] T058 [P] Update implementation notes and deferred-scope TODO references in `specs/004-planner-agent/quickstart.md` and `specs/004-planner-agent/research.md`
+- [x] T052 [P] Add/refresh planner env examples in `.env.local.example` for all `PLANNER_TEXT_*` and `PLANNER_KAFKA_BOOTSTRAP_SERVERS`
+- [x] T053 [P] Run planner test suite with evidence: `pytest planner_agent/tests -q`
+- [x] T054 [P] Run quality gates: `ruff check project planner_agent` and `ruff format --check project planner_agent`
+- [x] T055 [P] Run syntax gate: `python -m compileall project planner_agent -q`
+- [x] T056 [P] Verify topic bootstrap regression in `backend_service/tests/test_startup.py` for expanded topic set from `project/topics.py`
+- [x] T057 [P] Validate sample inputs in `planner_agent/tests/inputs/sample_input.json` cover empty-level+files and predefined-level+no-files paths
+- [x] T058 [P] Update implementation notes and deferred-scope TODO references in `specs/004-planner-agent/quickstart.md` and `specs/004-planner-agent/research.md`
 
 ---
 

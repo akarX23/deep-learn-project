@@ -6,11 +6,11 @@ import json
 
 from planner_agent.config import get_bootstrap_servers
 
+from kafka import KafkaConsumer, KafkaProducer
 
-def make_producer():
+
+def make_producer() -> KafkaProducer:
     """Create a Kafka producer with JSON value serialization."""
-
-    from kafka import KafkaProducer
 
     return KafkaProducer(
         bootstrap_servers=get_bootstrap_servers(),
@@ -18,10 +18,8 @@ def make_producer():
     )
 
 
-def make_consumer(topic: str):
+def make_consumer(topic: str) -> KafkaConsumer:
     """Create a Kafka consumer subscribed to a single topic."""
-
-    from kafka import KafkaConsumer
 
     return KafkaConsumer(
         topic,
