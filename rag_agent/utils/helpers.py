@@ -100,6 +100,13 @@ def get_kafka_runtime_config() -> dict[str, object]:
     }
 
 
+def get_page_parallelism() -> int:
+    """Return page-level parallelism from environment (default: 4)."""
+
+    _load_dotenv()
+    return _read_int("RAG_PAGE_PARALLELISM", 4)
+
+
 # ---------------------------------------------------------------------------
 # Internal env-read helpers
 # ---------------------------------------------------------------------------

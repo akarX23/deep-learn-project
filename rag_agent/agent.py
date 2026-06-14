@@ -1,14 +1,13 @@
-"""RAG agent orchestration with LangGraph-driven page processing."""
+"""RAG agent orchestration with deterministic bounded parallel page processing."""
 
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TypedDict
-
-import fitz
+from typing import Any
 
 import logging
 
@@ -24,6 +23,7 @@ from rag_agent.utils.content_helpers import (
 )
 from rag_agent.utils.helpers import (
     get_embedding_config,
+    get_page_parallelism,
     get_text_llm_config,
     get_vlm_config,
 )
@@ -43,15 +43,24 @@ class PagePointer:
     page_number: int
 
 
-class AgentState(TypedDict):
-    """Mutable state flowing through the LangGraph execution."""
+@dataclass
+class PageTaskResult:
+    """Result payload for one independently processed page."""
 
-    request: RAGAgentInput
-    pointers: list[PagePointer]
-    index: int
-    extracted_pages: list[ExtractedPage]
-    retained_pages: list[dict[str, Any]]
+    pointer_order: int
+    page: ExtractedPage
+    retained_payload: dict[str, Any] | None
+    failed_reason: str | None
     errors: list[str]
+
+
+@dataclass
+class FailedPage:
+    """Simple failed-page record used in reduction state."""
+
+    file_name: str
+    page_number: int
+    reason: str
 
 
 class RAGAgent:
@@ -62,27 +71,7 @@ class RAGAgent:
         self.vlm_config = None
         self.vlm_batch_size = 1
         self.embedding_config = None
-        self._open_docs: dict[str, fitz.Document] = {}
-        self._graph = self._build_graph()
-
-    def _build_graph(self):
-        try:
-            from langgraph.graph import END, StateGraph
-        except Exception as exc:
-            raise RuntimeError("langgraph is required") from exc
-
-        graph = StateGraph(AgentState)
-        graph.add_node("process_page", self._process_next_page)
-        graph.add_conditional_edges(
-            "process_page",
-            self._should_continue,
-            {
-                "continue": "process_page",
-                "end": END,
-            },
-        )
-        graph.set_entry_point("process_page")
-        return graph.compile()
+        self.page_parallelism = 4
 
     def _build_page_pointers(
         self, request: RAGAgentInput
@@ -91,11 +80,11 @@ class RAGAgent:
         errors: list[str] = []
         # TODO: Add optional page-range and file-level include/exclude controls.
         for file_path in request.file_paths:
-            document = self._open_docs.get(file_path)
-            if document is None:
-                errors.append(f"{file_path}: document not available")
+            try:
+                total = int(rag_tools.get_page_count(file_path))
+            except Exception as exc:
+                errors.append(f"{file_path}: {exc}")
                 continue
-            total = int(document.page_count)
             for page_num in range(1, total + 1):
                 pointers.append(
                     PagePointer(
@@ -106,45 +95,18 @@ class RAGAgent:
                 )
         return pointers, errors
 
-    def _open_documents(self, file_paths: list[str]) -> list[str]:
-        errors: list[str] = []
-        self._open_docs = {}
-        for file_path in file_paths:
-            if file_path in self._open_docs:
-                continue
-            try:
-                self._open_docs[file_path] = rag_tools.open_pdf(file_path)
-            except Exception as exc:
-                errors.append(f"{file_path}: {exc}")
-        return errors
-
-    def _close_documents(self) -> None:
-        for document in self._open_docs.values():
-            try:
-                document.close()
-            except Exception:
-                continue
-        self._open_docs = {}
-
-    def _should_continue(self, state: AgentState) -> str:
-        if state["index"] < len(state["pointers"]):
-            return "continue"
-        return "end"
-
-    def _process_next_page(self, state: AgentState) -> AgentState:
-        pointer = state["pointers"][state["index"]]
-        request = state["request"]
-
+    def _process_pointer(
+        self,
+        pointer: PagePointer,
+        pointer_order: int,
+        request: RAGAgentInput,
+    ) -> PageTaskResult:
         errors: list[str] = []
         text = ""
         tables: list[str] = []
         image_descriptions: list[str] = []
-        document = self._open_docs.get(pointer.file_path)
-
-        if document is None:
-            errors.append("Document handle unavailable")
-        else:
-            try:
+        try:
+            with rag_tools.open_pdf(pointer.file_path) as document:
                 text = rag_tools.extract_text_from_page(document, pointer.page_number)
                 if request.include_tables:
                     tables = rag_tools.extract_tables_from_page(
@@ -160,21 +122,67 @@ class RAGAgent:
                         self.vlm_config,
                         self.vlm_batch_size,
                     )
-            except Exception as exc:
-                errors.append(str(exc))
+        except Exception as exc:
+            reason = str(exc)
+            errors.append(reason)
+            return PageTaskResult(
+                pointer_order=pointer_order,
+                page=ExtractedPage(
+                    file_name=pointer.file_name,
+                    page_number=pointer.page_number,
+                    relevance_score=0.0,
+                    status=PageExtractionStatus.FAILED_EXTRACTION,
+                    ocr_used=False,
+                    errors=[reason],
+                ),
+                retained_payload=None,
+                failed_reason=reason,
+                errors=errors,
+            )
 
         assembled = assemble_page_content(text, tables, image_descriptions)
-        relevance = rag_tools.score_page_relevance(
-            assembled, request.user_prompt, self.embedding_config
-        )
+        if not assembled.strip():
+            reason = "No extractable content found on page"
+            errors.append(reason)
+            return PageTaskResult(
+                pointer_order=pointer_order,
+                page=ExtractedPage(
+                    file_name=pointer.file_name,
+                    page_number=pointer.page_number,
+                    relevance_score=0.0,
+                    status=PageExtractionStatus.FAILED_EXTRACTION,
+                    ocr_used=False,
+                    errors=[reason],
+                ),
+                retained_payload=None,
+                failed_reason=reason,
+                errors=errors,
+            )
+
+        try:
+            relevance = rag_tools.score_page_relevance(
+                assembled, request.user_prompt, self.embedding_config
+            )
+        except Exception as exc:
+            reason = str(exc)
+            errors.append(reason)
+            return PageTaskResult(
+                pointer_order=pointer_order,
+                page=ExtractedPage(
+                    file_name=pointer.file_name,
+                    page_number=pointer.page_number,
+                    relevance_score=0.0,
+                    status=PageExtractionStatus.FAILED_EXTRACTION,
+                    ocr_used=False,
+                    errors=[reason],
+                ),
+                retained_payload=None,
+                failed_reason=reason,
+                errors=errors,
+            )
 
         page_status = PageExtractionStatus.SUCCESS
-
-        if not assembled.strip():
-            page_status = PageExtractionStatus.FAILED_EXTRACTION
-            if not errors:
-                errors.append("No extractable content found on page")
-        elif relevance < request.relevance_threshold:
+        if relevance < request.relevance_threshold:
             page_status = PageExtractionStatus.SKIPPED_IRRELEVANT
 
         page_result = ExtractedPage(
@@ -186,25 +194,136 @@ class RAGAgent:
             errors=errors,
         )
 
-        state["extracted_pages"].append(page_result)
+        retained_payload: dict[str, Any] | None = None
         if page_result.status == PageExtractionStatus.SUCCESS and assembled.strip():
-            state["retained_pages"].append(
-                {
-                    "file_name": pointer.file_name,
-                    "page_number": pointer.page_number,
-                    "relevance_score": relevance,
-                    "content": assembled.strip(),
-                }
-            )
+            retained_payload = {
+                "file_name": pointer.file_name,
+                "page_number": pointer.page_number,
+                "relevance_score": relevance,
+                "content": assembled.strip(),
+            }
 
-        if errors:
-            state["errors"].extend(
-                f"{pointer.file_name}:page:{pointer.page_number}: {err}"
-                for err in errors
-            )
+        return PageTaskResult(
+            pointer_order=pointer_order,
+            page=page_result,
+            retained_payload=retained_payload,
+            failed_reason=None,
+            errors=errors,
+        )
 
-        state["index"] += 1
-        return state
+    def _process_pages(
+        self,
+        request: RAGAgentInput,
+        pointers: list[PagePointer],
+    ) -> list[PageTaskResult]:
+        if not pointers:
+            return []
+
+        results: list[PageTaskResult] = []
+        with ThreadPoolExecutor(max_workers=self.page_parallelism) as pool:
+            future_map = {}
+            for idx, pointer in enumerate(pointers):
+                logger.info(
+                    "page_dispatched request_id=%s file=%s page=%d pointer_order=%d",
+                    request.request_id,
+                    pointer.file_name,
+                    pointer.page_number,
+                    idx,
+                )
+                future = pool.submit(self._process_pointer, pointer, idx, request)
+                future_map[future] = (idx, pointer)
+
+            for future in as_completed(future_map):
+                idx, pointer = future_map[future]
+                try:
+                    result = future.result()
+                    results.append(result)
+                    if result.page.status == PageExtractionStatus.FAILED_EXTRACTION:
+                        reason = result.failed_reason or "Page processing failed"
+                        logger.warning(
+                            "page_failed request_id=%s file=%s page=%d reason=%s",
+                            request.request_id,
+                            pointer.file_name,
+                            pointer.page_number,
+                            reason,
+                        )
+                    else:
+                        logger.info(
+                            "page_processed request_id=%s file=%s page=%d status=%s",
+                            request.request_id,
+                            pointer.file_name,
+                            pointer.page_number,
+                            result.page.status.value,
+                        )
+                except Exception as exc:
+                    reason = str(exc)
+                    logger.warning(
+                        "page_failed request_id=%s file=%s page=%d reason=%s",
+                        request.request_id,
+                        pointer.file_name,
+                        pointer.page_number,
+                        reason,
+                    )
+                    results.append(
+                        PageTaskResult(
+                            pointer_order=idx,
+                            page=ExtractedPage(
+                                file_name=pointer.file_name,
+                                page_number=pointer.page_number,
+                                relevance_score=0.0,
+                                status=PageExtractionStatus.FAILED_EXTRACTION,
+                                ocr_used=False,
+                                errors=[reason],
+                            ),
+                            retained_payload=None,
+                            failed_reason=reason,
+                            errors=[reason],
+                        )
+                    )
+        return results
+
+    def _reduce_page_results(
+        self,
+        request_id: str,
+        pointers: list[PagePointer],
+        page_results: list[PageTaskResult],
+        base_errors: list[str],
+    ) -> tuple[list[ExtractedPage], list[dict[str, Any]], list[FailedPage], list[str]]:
+        ordered = sorted(page_results, key=lambda item: item.pointer_order)
+
+        extracted_pages: list[ExtractedPage] = []
+        retained_pages: list[dict[str, Any]] = []
+        failed_pages: list[FailedPage] = []
+        errors = list(base_errors)
+
+        for item in ordered:
+            pointer = pointers[item.pointer_order]
+            if item.page.status == PageExtractionStatus.FAILED_EXTRACTION:
+                reason = item.failed_reason or "Page processing failed"
+                failed_pages.append(
+                    FailedPage(
+                        file_name=pointer.file_name,
+                        page_number=pointer.page_number,
+                        reason=reason,
+                    )
+                )
+                errors.append(
+                    f"{pointer.file_name}:page:{pointer.page_number}: {reason}"
+                )
+                continue
+
+            extracted_pages.append(item.page)
+            if item.retained_payload is not None:
+                retained_pages.append(item.retained_payload)
+
+        logger.info(
+            "state_reduced request_id=%s processed=%d included=%d failed=%d",
+            request_id,
+            len(extracted_pages),
+            len(retained_pages),
+            len(failed_pages),
+        )
+        return extracted_pages, retained_pages, failed_pages, errors
 
     def _compile_material(
         self, request: RAGAgentInput, retained_pages: list[dict[str, Any]]
@@ -250,35 +369,26 @@ class RAGAgent:
         self.vlm_config = get_vlm_config()
         self.vlm_batch_size = self.vlm_config.get("batch_size", 1)
         self.embedding_config = get_embedding_config()
+        self.page_parallelism = max(1, get_page_parallelism())
 
-        initial_errors = self._open_documents(payload.file_paths)
         pointers, pointer_errors = self._build_page_pointers(payload)
-        state: AgentState = {
-            "request": payload,
-            "pointers": pointers,
-            "index": 0,
-            "extracted_pages": [],
-            "retained_pages": [],
-            "errors": initial_errors + pointer_errors,
-        }
-        try:
-            final_state = self._graph.invoke(state)
-        finally:
-            self._close_documents()
+        page_results = self._process_pages(payload, pointers)
+        extracted_pages, retained_pages, _failed_pages, errors = (
+            self._reduce_page_results(
+                payload.request_id,
+                pointers,
+                page_results,
+                pointer_errors,
+            )
+        )
 
-        compiled_material = self._compile_material(
-            payload, final_state["retained_pages"]
-        )
+        compiled_material = self._compile_material(payload, retained_pages)
         status = self._derive_status(
-            final_state["pointers"],
-            final_state["retained_pages"],
-            final_state["errors"],
+            pointers,
+            retained_pages,
+            errors,
         )
-        if (
-            status != "failed"
-            and not compiled_material.strip()
-            and final_state["retained_pages"]
-        ):
+        if status != "failed" and not compiled_material.strip() and retained_pages:
             status = "partial"
 
         return RAGAgentOutput(
@@ -286,10 +396,10 @@ class RAGAgent:
             user_prompt=payload.user_prompt,
             schema_version=payload.schema_version,
             compiled_material=compiled_material,
-            extracted_pages=final_state["extracted_pages"],
-            total_pages_processed=len(final_state["extracted_pages"]),
-            total_pages_included=len(final_state["retained_pages"]),
-            errors=final_state["errors"],
+            extracted_pages=extracted_pages,
+            total_pages_processed=len(extracted_pages),
+            total_pages_included=len(retained_pages),
+            errors=errors,
             status=status,
         )
 

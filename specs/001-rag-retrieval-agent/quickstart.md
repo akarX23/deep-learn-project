@@ -1,4 +1,4 @@
-# Quickstart: RAG Agent Parallel Page Processing
+# Quickstart: RAG Agent Deterministic Parallel Loop Simplification
 
 ## 1. Install dependencies
 
@@ -21,10 +21,6 @@ BACKEND_KAFKA_SSL_CAFILE=
 RAG_PAGE_PARALLELISM=4
 ```
 
-Parallelism behavior:
-- missing/invalid `RAG_PAGE_PARALLELISM` -> default `4`
-- values below `1` are clamped to `1`
-
 ## 3. Start local Kafka (optional)
 
 ```bash
@@ -37,40 +33,26 @@ docker compose up -d kafka kafka-ui
 python -m rag_agent.worker
 ```
 
-Expected startup sequence:
-1. worker initializes Kafka producer and consumer through `kafka.py`
-2. worker checks topic presence for required topics
-3. missing-topic warnings are logged (startup continues)
-4. threaded consumer loop starts polling `rag`
-
 ## 5. Request processing flow
 
-For each consumed request event:
-1. worker receives payload from `rag`
-2. worker dispatches request to `process_request_event`
-3. `agent.py` opens documents and builds page pointers
-4. LangGraph StateGraph dispatches page processing in bounded parallel mode
-5. per-page results are reduced and compiled into final material
-6. worker publishes completion event to `rag-complete`
+For each request event:
+1. worker consumes payload from `rag`
+2. worker dispatches to `process_request_event`
+3. `agent.py` builds deterministic page pointer order
+4. page tasks run in parallel with max workers from `RAG_PAGE_PARALLELISM`
+5. successful extracted content is reduced in pointer order
+6. failed pages are excluded from extracted content and tracked separately
+7. worker publishes completion payload to `rag-complete`
 
-## 6. Smoke-test payload
+## 6. Verify logs
 
-```json
-{
-  "request_id": "demo-001",
-  "session_ctx": {"session_id": "s-1"},
-  "user_request": "Summarize chapter one",
-  "file_paths": ["rag_agent/tests/inputs/sample.pdf"]
-}
-```
+Check for stage logs:
+- `page_dispatched`
+- `page_processed`
+- `page_failed`
+- `state_reduced`
 
-## 7. Validate bounded concurrency behavior
-
-- Use a request with multiple pages and verify processing overlaps in logs.
-- Confirm in-flight page tasks do not exceed `RAG_PAGE_PARALLELISM`.
-- Confirm output status and extracted page semantics match prior behavior.
-
-## 8. Run validation checks
+## 7. Run validation checks
 
 ```bash
 .venv/bin/python -m pytest -q rag_agent/tests
@@ -79,6 +61,6 @@ For each consumed request event:
 .venv/bin/python -m compileall project rag_agent
 ```
 
-## 9. Deferred scope reminders
+## 8. Deferred scope reminders
 
-Advanced retry policy tuning, rich metrics instrumentation, and expanded exception taxonomy remain TODO scope.
+Advanced retries, rich validation, and expanded exception taxonomy remain deferred TODO scope.

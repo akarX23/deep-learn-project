@@ -35,6 +35,8 @@ Simplify the RAGRequestEventHandler by only focusing on ingesting Kafka events a
 - Q: Should `process_consumer_batch` remain a standalone function passed as a callable into `_poll_loop`? → A: No. Remove `process_consumer_batch`; inline the poll-and-dispatch logic directly into `_poll_loop`. Eliminates the function and the `processor` parameter threading through the call chain.
 - Q: How should page processing concurrency be handled inside the RAG agent loop? → A: Process pages in parallel with a fixed maximum concurrency controlled by an environment variable; avoid separate batching logic.
 - Q: How should invalid or missing page-concurrency env var values be handled? → A: Use default `4` when missing or invalid, and clamp minimum to `1`.
+- Q: How should final extracted-content ordering be handled when page processing runs in parallel? → A: Preserve original page-number order deterministically in final extracted content; parallelism affects execution only.
+- Q: How should failed pages be represented when building final state in the simplified agent flow? → A: Exclude failed pages from final extracted content, keep a simple list of failed page numbers with failure reason, and log key processing stages.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -94,6 +96,7 @@ As a maintainer, I need the consumer loop to call the RAG agent directly and pub
 - Duplicate request events arrive for the same request identifier.
 - RAG pipeline execution fails for one event while worker must continue processing subsequent events.
 - Page concurrency env var is missing, non-numeric, or less than `1`; runtime falls back to bounded safe values without startup failure.
+- One or more page tasks fail during parallel execution; failed pages are excluded from extracted content while their page numbers and reasons are retained in a simple failure list.
 - `fitz.Document` handle is `None` or already-closed when extraction functions are called (caller responsibility; document lifecycle is managed by `agent.py`).
 - Monkeypatched module-level functions in tests (`create_producer`, `create_consumer`, `process_request_event`) must be restored between test cases to avoid state leakage.
 
@@ -128,6 +131,9 @@ As a maintainer, I need the consumer loop to call the RAG agent directly and pub
 - **FR-025**: The maximum page-parallelism value MUST be configured through an environment variable. If the variable is missing or invalid, the runtime MUST default to `4`; effective values MUST be clamped to a minimum of `1`.
 - **FR-026**: The implementation MUST NOT introduce a separate page-batching orchestration layer; the agent should dispatch page work directly and rely on the downstream inference server to manage request-level batching behavior.
 - **FR-027**: Individual page-processing logic and per-page output semantics MUST remain functionally equivalent to the current single-page processing behavior.
+- **FR-028**: When pages are processed in parallel, final extracted content and retained-page aggregation MUST preserve deterministic original page order (by source file and page number), not worker completion order.
+- **FR-029**: `agent.py` MUST exclude failed pages from final extracted content aggregation and retained-page context. Failed pages MUST be tracked in a simple failure list containing page number and failure reason.
+- **FR-030**: Logging MUST capture key stages for the simplified page flow (`page_dispatched`, `page_processed`, `page_failed`, `state_reduced`) with request correlation where available.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -152,6 +158,8 @@ As a maintainer, I need the consumer loop to call the RAG agent directly and pub
 - **SC-006**: 100% of exported function boundaries in worker Kafka modules are type-annotated in implementation review.
 - **SC-007**: After boilerplate reduction, the combined line count across `kafka.py`, `worker.py`, and `tools.py` MUST decrease (no new abstractions or stubs introduced to compensate for removed ones).
 - **SC-008**: With parallel page execution enabled, the agent MUST enforce the configured maximum in-flight page tasks and MUST never exceed the configured concurrency cap.
+- **SC-009**: Parallel runs over the same input MUST produce stable page ordering in extracted/retained outputs, matching source page order.
+- **SC-010**: For runs with page failures, 100% of failed pages MUST appear in the failure list with page number and reason, and 0 failed pages MUST appear in extracted content.
 
 ## Assumptions
 

@@ -1,12 +1,12 @@
-# Contract: RAG Kafka Worker Integration (Parallel Page Update)
+# Contract: RAG Kafka Worker Integration (Deterministic Parallel Loop Update)
 
 ## Purpose
 
-Define runtime and event contracts for worker-managed Kafka flow and LangGraph-managed parallel page processing inside `agent.py`.
+Define contracts for worker-managed Kafka transport and simplified `agent.py` page processing using deterministic parallel loop execution (no LangGraph StateGraph in page flow).
 
 ## Environment Contract
 
-Kafka runtime settings (existing):
+Kafka settings:
 - `BACKEND_KAFKA_BOOTSTRAP_SERVERS` (required)
 - `BACKEND_KAFKA_CLIENT_ID` (optional)
 - `BACKEND_KAFKA_SECURITY_PROTOCOL` (optional)
@@ -15,41 +15,39 @@ Kafka runtime settings (existing):
 - `BACKEND_KAFKA_SASL_PASSWORD` (optional)
 - `BACKEND_KAFKA_SSL_CAFILE` (optional)
 
-Agent parallelism setting (new):
-- `RAG_PAGE_PARALLELISM` (optional)
-  - missing/invalid -> default `4`
-  - effective value clamped to minimum `1`
+Agent parallelism:
+- `RAG_PAGE_PARALLELISM` (integer, default `4`)
 
 ## Topic Contract
 
-Topic names from `project/topics.py`:
 - request topic: `rag`
 - completion topic: `rag-complete`
 
 ## Runtime Flow Contract
 
-1. `worker.py` starts and initializes Kafka producer/consumer.
-2. startup topic presence check runs; missing topics emit warning but do not block startup.
-3. worker poll loop consumes from `rag`.
-4. worker dispatches request to `agent.py`.
-5. `agent.py` uses LangGraph StateGraph to process pages in bounded parallel fashion.
-6. `agent.py` returns output payload only (Kafka-agnostic).
-7. worker publishes completion event to `rag-complete`.
+1. `worker.py` starts producer/consumer and topic check.
+2. poll loop consumes request payloads from `rag`.
+3. worker dispatches payload to `agent.py`.
+4. `agent.py` builds ordered page pointers and processes pages in bounded parallel execution.
+5. `agent.py` reduces results deterministically by pointer order.
+6. failed pages are excluded from extracted content and captured in a simple failure list.
+7. worker publishes completion payload to `rag-complete`.
 
-## Parallel Page Processing Contract
+## Simplified Agent State Contract
 
-- Pages are processed independently and may execute concurrently.
-- Maximum in-flight page processing is bounded by configured parallelism.
-- No separate page-batching orchestration layer is introduced in agent logic.
-- Per-page extraction/relevance/status logic remains behaviorally equivalent to prior sequential implementation.
-- Reduction stage must preserve deterministic result ordering for stable outputs.
+- No StateGraph-managed complex state for page orchestration.
+- Final state retains:
+  - successful extracted page content
+  - simple failed-page list (`page_number`, `reason`)
+  - aggregated errors list
 
-## Module Ownership Contract
+## Logging Contract
 
-- `worker.py`: startup orchestration, thread lifecycle, consume/process/publish control.
-- `kafka.py`: Kafka connector setup, producer/consumer creation, topic checks, completion publishing.
-- `agent.py`: page extraction orchestration and material compilation; no Kafka publishing.
-- `helpers.py`: environment extraction helpers, including page-parallelism extraction policy.
+Agent logs stage events:
+- `page_dispatched`
+- `page_processed`
+- `page_failed`
+- `state_reduced`
 
 ## Incoming Event Contract (`rag`)
 
@@ -80,12 +78,8 @@ Topic names from `project/topics.py`:
 }
 ```
 
-## Type Safety Contract
-
-Public boundaries remain explicitly typed. Kafka boundaries use concrete `KafkaConsumer` and `KafkaProducer` types. Agent state and page task structures remain typed for predictable merge behavior.
-
 ## Failure and Deferred Scope Contract
 
-- Per-event processing failures are non-fatal for worker runtime.
-- Startup missing topics are warning-level only.
-- Advanced retries/metrics and richer exception taxonomies remain deferred TODO scope.
+- page-level failures do not terminate request processing.
+- failed pages are ignored from extracted content but tracked in failure list.
+- advanced retry, richer validation, and deep exception taxonomy remain TODO scope.

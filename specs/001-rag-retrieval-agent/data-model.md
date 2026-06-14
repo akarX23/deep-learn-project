@@ -1,60 +1,47 @@
-# Data Model: RAG Agent Parallel Page Processing
+# Data Model: RAG Agent Deterministic Parallel Loop Simplification
 
 ## Entities
 
 ### RAGRequestEvent
-- Description: Incoming Kafka payload consumed from topic `rag`.
+- Description: Incoming Kafka payload from topic `rag`.
 - Fields:
   - `request_id`: str
   - `session_ctx`: dict[str, object]
   - `user_request`: str
   - `file_paths`: list[str]
-  - `created_at`: str | None
-  - `source`: str | None
 
 ### PagePointer
-- Description: Unit of per-page work derived from input documents.
+- Description: Deterministic pointer to one source page.
 - Fields:
   - `file_path`: str
   - `file_name`: str
-  - `page_number`: int (1-based)
-- Validation rules:
-  - `page_number >= 1`
-  - Derived only from opened document page counts.
-
-### PageTaskResult
-- Description: Per-page output produced by independent page processing.
-- Fields:
-  - `page`: `ExtractedPage`
-  - `retained_payload`: dict[str, object] | None
-  - `errors`: list[str]
+  - `page_number`: int
   - `pointer_order`: int
-- Validation rules:
-  - `pointer_order` maps to original pointer sequence for deterministic reduce.
 
-### ParallelExecutionConfig
-- Description: Runtime page-concurrency settings resolved from environment.
+### ExtractedPageContent
+- Description: Successful page extraction unit retained in final state.
 - Fields:
-  - `page_parallelism`: int
-  - `raw_env_value`: str | None
-  - `used_default`: bool
-- Validation rules:
-  - Missing/invalid env -> `page_parallelism = 4`
-  - Effective minimum -> `max(1, page_parallelism)`
+  - `file_name`: str
+  - `page_number`: int
+  - `relevance_score`: float
+  - `content`: str
 
-### AgentState (LangGraph)
-- Description: State payload passed through LangGraph nodes.
+### FailedPage
+- Description: Simple failure record for pages excluded from extracted content.
 - Fields:
-  - `request`: `RAGAgentInput`
-  - `pointers`: list[`PagePointer`]
-  - `page_results`: list[`PageTaskResult`]
-  - `retained_pages`: list[dict[str, object]]
-  - `extracted_pages`: list[`ExtractedPage`]
+  - `file_name`: str
+  - `page_number`: int
+  - `reason`: str
+
+### AgentFinalState
+- Description: Minimal agent output assembly state.
+- Fields:
+  - `extracted_content`: list[`ExtractedPageContent`]
+  - `failed_pages`: list[`FailedPage`]
   - `errors`: list[str]
-  - `parallelism`: int
 
 ### RAGCompletionEvent
-- Description: Outgoing Kafka payload produced to topic `rag-complete`.
+- Description: Outgoing Kafka payload to `rag-complete`.
 - Fields:
   - `request_id`: str
   - `session_ctx`: dict[str, object]
@@ -67,26 +54,23 @@
   - `started_at`: str
   - `completed_at`: str
   - `duration_ms`: int
-  - `source`: str
 
 ## Relationships
 
-- One `RAGRequestEvent` expands to many `PagePointer` items.
-- Each `PagePointer` yields one `PageTaskResult`.
-- Reduced `PageTaskResult` collection produces final `RAGCompletionEvent` content.
+- One `RAGRequestEvent` expands to ordered `PagePointer` items.
+- Each `PagePointer` yields either one `ExtractedPageContent` or one `FailedPage`.
+- `AgentFinalState` feeds compilation and completion payload assembly.
 
 ## State Transitions
 
-### Agent execution
-1. `initialized` -> `documents_opened`
-2. `documents_opened` -> `pointers_built`
-3. `pointers_built` -> `pages_dispatched_parallel`
-4. `pages_dispatched_parallel` -> `results_reduced`
-5. `results_reduced` -> `material_compiled`
-6. `material_compiled` -> `completed`
+### Agent runtime
+1. `pointers_built`
+2. `pages_dispatched`
+3. `pages_processed`
+4. `state_reduced`
+5. `compiled`
 
-### Parallel dispatch lifecycle
-1. pointer emitted for processing
-2. page extraction/relevance task runs independently
-3. task result emitted to reducer
-4. reducer merges in deterministic pointer order
+### Failure handling
+1. page task exception occurs
+2. failed page entry appended (`file_name`, `page_number`, `reason`)
+3. page excluded from extracted content

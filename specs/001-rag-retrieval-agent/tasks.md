@@ -1,118 +1,117 @@
-# Tasks: RAG Agent Parallel Page Processing on LangGraph
+# Tasks: RAG Agent Deterministic Parallel Loop Simplification
 
 **Input**: Design documents from `/specs/001-rag-retrieval-agent/`
 **Prerequisites**: `plan.md` (required), `spec.md` (required), `research.md`, `data-model.md`, `contracts/rag-agent-contract.md`, `quickstart.md`
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-**Purpose**: Add runtime configuration and test scaffolding for bounded page parallelism.
+**Purpose**: Prepare simple runtime configuration and test scaffolding for deterministic parallel page processing.
 
-- [ ] T001 Add `RAG_PAGE_PARALLELISM` env reading helper with default/clamp behavior in `rag_agent/utils/helpers.py`
-- [ ] T002 [P] Add/refresh module-level doc comments for new parallelism configuration in `rag_agent/agent.py`
-- [ ] T003 [P] Add shared test fixtures/utilities for parallel-page scenarios in `rag_agent/tests/test_rag_agent.py`
+- [X] T001 Add simple page-parallelism env getter in `rag_agent/utils/helpers.py`
+- [X] T002 [P] Add test fixture utilities for deterministic page ordering assertions in `rag_agent/tests/test_rag_agent.py`
+- [X] T003 [P] Add test fixture utilities for failed-page list assertions in `rag_agent/tests/test_rag_agent.py`
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-**Purpose**: Establish core graph/state structure required by all user stories.
+**Purpose**: Remove StateGraph dependency from agent page orchestration and establish minimal final state handling.
 
-**CRITICAL**: No user story implementation begins before this phase completes.
+**CRITICAL**: No user story work starts before this phase is complete.
 
-- [ ] T004 Define/extend typed agent state for page-task result reduction in `rag_agent/agent.py`
-- [ ] T005 Add typed per-page task result model/structure for deterministic merge in `rag_agent/agent.py`
-- [ ] T006 Implement deterministic ordering helper for reduced page results in `rag_agent/agent.py`
-- [ ] T007 [P] Add unit tests for deterministic ordering reducer in `rag_agent/tests/test_rag_agent.py`
-- [ ] T008 Add bounded parallelism wiring point in graph execution path in `rag_agent/agent.py`
-- [ ] T009 [P] Add tests for parallelism env parsing fallback/default/clamp in `rag_agent/tests/test_rag_agent.py`
+- [X] T004 Remove LangGraph StateGraph import/compile path from `rag_agent/agent.py`
+- [X] T005 Implement deterministic page pointer builder with pointer order in `rag_agent/agent.py`
+- [X] T006 Implement bounded parallel page dispatch loop in `rag_agent/agent.py`
+- [X] T007 Implement deterministic reduce step by pointer order in `rag_agent/agent.py`
+- [X] T008 Implement minimal final state structure (successful extracted content + failed page list) in `rag_agent/agent.py`
+- [X] T009 [P] Add foundational regression test for non-StateGraph execution path in `rag_agent/tests/test_rag_agent.py`
+- [X] T010 [P] Add foundational regression test for deterministic reduce ordering in `rag_agent/tests/test_rag_agent.py`
 
-**Checkpoint**: Core typed state + bounded runtime configuration ready.
+**Checkpoint**: Simplified deterministic parallel loop and minimal state foundations are ready.
 
 ---
 
-## Phase 3: User Story 1 - Parallel Page Processing in Agent (Priority: P1) 🎯 MVP
+## Phase 3: User Story 1 - Deterministic Parallel Page Processing (Priority: P1) 🎯 MVP
 
-**Goal**: Process document pages independently in parallel via LangGraph StateGraph while preserving page semantics.
+**Goal**: Process pages in parallel with simple deterministic control flow and stable output ordering.
 
-**Independent Test**: Run RAG pipeline against multi-page input and verify pages are processed via parallel dispatch with expected extraction outputs.
+**Independent Test**: Run multi-page request repeatedly and verify successful extracted content order always matches source pointer order.
 
 ### Tests for User Story 1
 
-- [ ] T010 [P] [US1] Add failing regression test for sequential-vs-parallel equivalence in `rag_agent/tests/test_rag_agent.py`
-- [ ] T011 [P] [US1] Add failing test for bounded in-flight page task count in `rag_agent/tests/test_rag_agent.py`
-- [ ] T012 [P] [US1] Add failing test for page-level extraction status equivalence in `rag_agent/tests/test_rag_agent.py`
+- [X] T011 [P] [US1] Add failing test for stable extracted content ordering across repeated runs in `rag_agent/tests/test_rag_agent.py`
+- [X] T012 [P] [US1] Add failing test for deterministic retained-content aggregation in `rag_agent/tests/test_rag_agent.py`
+- [X] T013 [P] [US1] Add failing test for bounded in-flight worker count using `RAG_PAGE_PARALLELISM` in `rag_agent/tests/test_rag_agent.py`
 
 ### Implementation for User Story 1
 
-- [ ] T013 [US1] Refactor StateGraph nodes to dispatch page work independently in `rag_agent/agent.py`
-- [ ] T014 [US1] Implement fan-out/fan-in reduction path for parallel page task results in `rag_agent/agent.py`
-- [ ] T015 [US1] Preserve existing text/table/image extraction logic in per-page processing path in `rag_agent/agent.py`
-- [ ] T016 [US1] Preserve relevance scoring and per-page status semantics in `rag_agent/agent.py`
-- [ ] T017 [US1] Ensure reduced retained-page context remains deterministic before compilation in `rag_agent/agent.py`
-- [ ] T018 [US1] Add structured debug logging for page dispatch/reduce lifecycle in `rag_agent/agent.py`
+- [X] T014 [US1] Implement per-page worker function with basic extraction/relevance logic in `rag_agent/agent.py`
+- [X] T015 [US1] Wire bounded parallel execution from pointer loop to worker function in `rag_agent/agent.py`
+- [X] T016 [US1] Implement deterministic successful-page aggregation by pointer order in `rag_agent/agent.py`
+- [X] T017 [US1] Keep page-processing semantics equivalent to current extraction status behavior in `rag_agent/agent.py`
+- [X] T018 [US1] Keep compilation input assembly sourced only from successful extracted content in `rag_agent/agent.py`
 
-**Checkpoint**: US1 complete and independently testable with parallel page dispatch.
+**Checkpoint**: US1 complete and independently testable.
 
 ---
 
-## Phase 4: User Story 2 - Env-Controlled Bounded Concurrency (Priority: P2)
+## Phase 4: User Story 2 - Failed Page Exclusion + Simple Failure List (Priority: P2)
 
-**Goal**: Enforce configurable max page parallelism via env var with safe fallback behavior.
+**Goal**: Exclude failed pages from extracted content while maintaining a simple failed-page list with page number and reason.
 
-**Independent Test**: Set valid/invalid/missing `RAG_PAGE_PARALLELISM` values and verify default `4`, minimum clamp `1`, and bounded in-flight execution.
+**Independent Test**: Force selected page failures and verify they are absent from extracted content and present in failed-page list with reasons.
 
 ### Tests for User Story 2
 
-- [ ] T019 [P] [US2] Add failing test for missing env var defaulting to `4` in `rag_agent/tests/test_rag_agent.py`
-- [ ] T020 [P] [US2] Add failing test for invalid env var defaulting to `4` in `rag_agent/tests/test_rag_agent.py`
-- [ ] T021 [P] [US2] Add failing test for min clamp behavior (`<1` -> `1`) in `rag_agent/tests/test_rag_agent.py`
-- [ ] T022 [P] [US2] Add failing test for bounded maximum in-flight tasks at configured value in `rag_agent/tests/test_rag_agent.py`
+- [X] T019 [P] [US2] Add failing test that failed pages are excluded from extracted content in `rag_agent/tests/test_rag_agent.py`
+- [X] T020 [P] [US2] Add failing test that failed-page list includes page number and reason in `rag_agent/tests/test_rag_agent.py`
+- [X] T021 [P] [US2] Add failing test that all failures are reflected in output errors summary in `rag_agent/tests/test_rag_agent.py`
 
 ### Implementation for User Story 2
 
-- [ ] T023 [US2] Implement runtime parse/validation of `RAG_PAGE_PARALLELISM` in `rag_agent/utils/helpers.py`
-- [ ] T024 [US2] Inject resolved page parallelism config into agent run path in `rag_agent/agent.py`
-- [ ] T025 [US2] Enforce configured cap in graph dispatch execution in `rag_agent/agent.py`
-- [ ] T026 [US2] Add warning-level log for invalid env fallback in `rag_agent/agent.py`
+- [X] T022 [US2] Add failed-page record structure (page number + reason) to agent runtime output assembly in `rag_agent/agent.py`
+- [X] T023 [US2] Exclude failed pages from extracted content and retained context reduction in `rag_agent/agent.py`
+- [X] T024 [US2] Aggregate failed-page reasons into simple output error list in `rag_agent/agent.py`
+- [X] T025 [US2] Ensure final status derivation handles zero successful pages with failures in `rag_agent/agent.py`
 
-**Checkpoint**: US2 complete and independently testable for env-driven bounded concurrency.
+**Checkpoint**: US2 complete and independently testable.
 
 ---
 
-## Phase 5: User Story 3 - Keep Worker Flow and Contracts Intact (Priority: P3)
+## Phase 5: User Story 3 - Stage Logging and Worker Flow Compatibility (Priority: P3)
 
-**Goal**: Keep direct worker->agent->publish flow, no batching layer, and updated contracts/docs consistent with new parallel behavior.
+**Goal**: Add clear stage logging in simplified agent flow while keeping worker-to-agent-to-publish integration unchanged.
 
-**Independent Test**: Execute request flow through worker path and verify completion publishing remains unchanged while agent runs parallel page extraction.
+**Independent Test**: Execute request flow and verify expected stage logs (`page_dispatched`, `page_processed`, `page_failed`, `state_reduced`) and unchanged worker publish behavior.
 
 ### Tests for User Story 3
 
-- [ ] T027 [P] [US3] Add regression test ensuring worker still dispatches directly to `process_request_event` in `rag_agent/tests/test_worker_runtime.py`
-- [ ] T028 [P] [US3] Add regression test ensuring completion publishing path is unchanged in `rag_agent/tests/test_kafka_integration.py`
-- [ ] T029 [P] [US3] Add regression test ensuring no explicit batching helper is required in `rag_agent/tests/test_rag_agent.py`
+- [X] T026 [P] [US3] Add failing test for stage log emission across page lifecycle in `rag_agent/tests/test_rag_agent.py`
+- [X] T027 [P] [US3] Add failing regression test for worker direct dispatch behavior in `rag_agent/tests/test_worker_runtime.py`
+- [X] T028 [P] [US3] Add failing regression test for completion publish path compatibility in `rag_agent/tests/test_kafka_integration.py`
 
 ### Implementation for User Story 3
 
-- [ ] T030 [US3] Verify and adjust worker-agent integration touchpoints for unchanged transport ownership in `rag_agent/worker.py`
-- [ ] T031 [US3] Verify agent remains Kafka-agnostic after parallel refactor in `rag_agent/agent.py`
-- [ ] T032 [US3] Update quickstart runtime flow to describe parallel processing and env controls in `specs/001-rag-retrieval-agent/quickstart.md`
-- [ ] T033 [US3] Update contract language for bounded parallelism and no batching layer in `specs/001-rag-retrieval-agent/contracts/rag-agent-contract.md`
-- [ ] T034 [US3] Update data model fields/transitions for page task reduction in `specs/001-rag-retrieval-agent/data-model.md`
+- [X] T029 [US3] Add `page_dispatched` stage logging with request correlation in `rag_agent/agent.py`
+- [X] T030 [US3] Add `page_processed` and `page_failed` stage logging in `rag_agent/agent.py`
+- [X] T031 [US3] Add `state_reduced` stage logging after deterministic aggregation in `rag_agent/agent.py`
+- [X] T032 [US3] Verify worker integration touchpoints remain unchanged after agent simplification in `rag_agent/worker.py`
 
-**Checkpoint**: US3 complete and independently testable with docs/contracts aligned.
+**Checkpoint**: US3 complete and independently testable.
 
 ---
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-**Purpose**: Final verification, cleanup, and release readiness evidence.
+**Purpose**: Final cleanup, docs alignment, and quality gate verification.
 
-- [ ] T035 [P] Run targeted RAG agent tests for parallel behavior in `rag_agent/tests/test_rag_agent.py`
-- [ ] T036 [P] Run worker/kafka regression tests in `rag_agent/tests/test_worker_runtime.py` and `rag_agent/tests/test_kafka_integration.py`
-- [ ] T037 Run repository quality gates (`ruff check`, `ruff format --check`, `compileall`) from repository root via `rag_agent/` and `project/`
-- [ ] T038 [P] Remove obsolete comments/TODOs contradicted by new parallel flow in `rag_agent/agent.py`
-- [ ] T039 Validate quickstart commands end-to-end against runtime behavior in `specs/001-rag-retrieval-agent/quickstart.md`
-- [ ] T040 Record final implementation notes and residual risks in `specs/001-rag-retrieval-agent/plan.md`
+- [X] T033 [P] Update runtime notes for deterministic parallel loop in `specs/001-rag-retrieval-agent/quickstart.md`
+- [X] T034 [P] Update contract wording for failed-page list and stage logs in `specs/001-rag-retrieval-agent/contracts/rag-agent-contract.md`
+- [X] T035 [P] Update data model wording for minimal final state fields in `specs/001-rag-retrieval-agent/data-model.md`
+- [X] T036 Run focused agent tests for deterministic ordering and failure-list behavior in `rag_agent/tests/test_rag_agent.py`
+- [X] T037 Run worker/kafka regression tests in `rag_agent/tests/test_worker_runtime.py` and `rag_agent/tests/test_kafka_integration.py`
+- [X] T038 Run repository quality gates (`ruff check`, `ruff format --check`, `compileall`) for `project/` and `rag_agent/`
+- [X] T039 Record final implementation notes and residual risks in `specs/001-rag-retrieval-agent/plan.md`
 
 ---
 
@@ -120,42 +119,41 @@
 
 ### Phase Dependencies
 
-- Setup (Phase 1): No dependencies.
-- Foundational (Phase 2): Depends on Setup completion; blocks all user stories.
-- User Story phases (Phase 3-5): Depend on Foundational completion.
-- Polish (Phase 6): Depends on completion of all targeted user stories.
+- Setup (Phase 1): no dependencies.
+- Foundational (Phase 2): depends on Setup; blocks all user stories.
+- User Stories (Phases 3-5): depend on Foundational completion.
+- Polish (Phase 6): depends on selected user stories completion.
 
 ### User Story Dependencies
 
-- US1 (P1): Starts after Foundational; delivers MVP parallel page processing.
-- US2 (P2): Starts after Foundational; depends on US1 graph execution points for cap enforcement.
-- US3 (P3): Starts after Foundational; validates integration and contract consistency.
+- US1 (P1): starts after Foundational; delivers MVP deterministic parallel page processing.
+- US2 (P2): starts after Foundational; depends on US1 page result handling for failure exclusion.
+- US3 (P3): starts after Foundational; validates logging and integration compatibility.
 
 ### Within Each User Story
 
 - Tests first and failing before implementation.
-- State/config primitives before orchestration wiring.
-- Core implementation before doc and integration verification.
+- Core loop/aggregation logic before output shaping.
+- Implementation before documentation and final quality gates.
 
 ### Parallel Opportunities
 
-- T002, T003 can run in parallel during Setup.
-- T007, T009 can run in parallel in Foundational phase.
-- T010-T012 can run in parallel within US1.
-- T019-T022 can run in parallel within US2.
-- T027-T029 can run in parallel within US3.
-- T035, T036, T038 can run in parallel in Polish phase.
+- T002 and T003 can run in parallel.
+- T009 and T010 can run in parallel.
+- T011-T013 can run in parallel.
+- T019-T021 can run in parallel.
+- T026-T028 can run in parallel.
+- T033-T035 can run in parallel.
 
 ---
 
-## Parallel Example: User Story 2
+## Parallel Example: User Story 1
 
 ```bash
-# Run US2 tests in parallel workstreams:
-Task: "Add failing test for missing env var defaulting to 4 in rag_agent/tests/test_rag_agent.py"
-Task: "Add failing test for invalid env var defaulting to 4 in rag_agent/tests/test_rag_agent.py"
-Task: "Add failing test for min clamp behavior (<1 -> 1) in rag_agent/tests/test_rag_agent.py"
-Task: "Add failing test for bounded maximum in-flight tasks at configured value in rag_agent/tests/test_rag_agent.py"
+# US1 parallel test workstream:
+Task: "Add failing test for stable extracted content ordering across repeated runs in rag_agent/tests/test_rag_agent.py"
+Task: "Add failing test for deterministic retained-content aggregation in rag_agent/tests/test_rag_agent.py"
+Task: "Add failing test for bounded in-flight worker count using RAG_PAGE_PARALLELISM in rag_agent/tests/test_rag_agent.py"
 ```
 
 ---
@@ -164,18 +162,21 @@ Task: "Add failing test for bounded maximum in-flight tasks at configured value 
 
 ### MVP First (US1)
 
-1. Complete Setup + Foundational.
-2. Complete US1 (parallel page dispatch and deterministic reduction).
-3. Validate US1 independently before expanding scope.
+1. Complete Setup and Foundational phases.
+2. Complete US1 deterministic parallel loop behavior.
+3. Validate US1 independently before expanding.
 
 ### Incremental Delivery
 
-1. Deliver US1 for core parallel processing.
-2. Add US2 for production-safe env-controlled bounded concurrency.
-3. Add US3 for integration/documentation alignment.
-4. Complete Polish gates and release evidence.
+1. Deliver US1 (parallel deterministic page processing).
+2. Deliver US2 (failed-page exclusion + simple failure list).
+3. Deliver US3 (stage logging + compatibility checks).
+4. Complete Polish and quality gates.
 
-### Team Parallelization
+### Parallel Team Strategy
 
 1. Team completes Setup and Foundational together.
-2. Then split: one developer on US2 env behavior, one on US3 integration/docs, while US1 stabilizes.
+2. After checkpoint, parallelize by story:
+   - Developer A: US1 loop + ordering
+   - Developer B: US2 failure-list behavior
+   - Developer C: US3 logging and integration checks

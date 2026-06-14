@@ -1,36 +1,31 @@
-# Research: RAG Agent Parallel Page Processing
+# Research: RAG Agent Deterministic Parallel Loop Simplification
 
-## Decision 1: Use LangGraph StateGraph fan-out for page-level independence
-- Decision: Keep LangGraph as orchestration runtime and model page extraction as independent page tasks executed through StateGraph fan-out/fan-in semantics.
-- Rationale: Reuses existing graph stack and keeps orchestration centralized in `agent.py` without introducing a second orchestration mechanism.
-- Alternatives considered: Manual thread pool orchestration outside LangGraph (rejected: duplicates orchestration model and drifts from current stack).
+## Decision 1: Remove LangGraph StateGraph from page processing path
+- Decision: Do not use LangGraph StateGraph for PDF page processing in `agent.py`.
+- Rationale: Clarified requirement prioritizes massive simplification and deterministic direct flow.
+- Alternatives considered: Retaining graph orchestration with simplified nodes (rejected: still adds boilerplate/state structure).
 
-## Decision 2: Enforce bounded parallelism via runtime concurrency configuration
-- Decision: Cap in-flight page tasks using runtime concurrency setting sourced from env var and passed to graph invocation/runtime.
-- Rationale: Prevents unbounded resource use while enabling parallel work.
-- Alternatives considered: Unbounded parallel fan-out (rejected: resource risk and non-deterministic load impact).
+## Decision 2: Use deterministic for-loop with bounded parallel dispatch
+- Decision: Build page pointers deterministically, dispatch page tasks in parallel with configured max workers, then reduce in pointer order.
+- Rationale: Keeps code simple while preserving bounded concurrency and deterministic outputs.
+- Alternatives considered: Completion-order aggregation (rejected: non-deterministic output ordering).
 
-## Decision 3: Environment variable contract for page parallelism
-- Decision: Add a page-parallelism env variable for `agent.py` with behavior: default `4` when missing/invalid and clamp minimum to `1`.
-- Rationale: Matches clarified requirement and allows runtime tuning without code changes.
-- Alternatives considered: Startup hard-fail on invalid env (rejected: decreases operational resilience).
+## Decision 3: Keep final state minimal
+- Decision: Final state stores only successful extracted page content plus a simple failed-page list (page number + reason).
+- Rationale: Matches clarified scope to avoid complex intermediate state models.
+- Alternatives considered: Rich per-page state machine objects (rejected: unnecessary complexity).
 
-## Decision 4: No explicit batching layer in agent runtime
-- Decision: Do not create additional batch-building logic for page requests.
-- Rationale: Requirement explicitly delegates batching optimization to inference server and keeps agent logic simpler.
-- Alternatives considered: Agent-side request batching queue (rejected: adds complexity and conflicts with clarified scope).
+## Decision 4: Exclude failed pages from extracted content
+- Decision: Failed pages are ignored in extracted-content aggregation and retained-content context.
+- Rationale: Explicit clarification requires failures tracked separately, not mixed into extracted content.
+- Alternatives considered: Keep failed pages with failure status in extracted output (rejected: conflicts with clarified requirement).
 
-## Decision 5: Preserve per-page processing semantics
-- Decision: Keep text/table/image extraction, relevance scoring, and status assignment per page equivalent to current behavior.
-- Rationale: Feature intent is concurrency and throughput, not semantic processing changes.
-- Alternatives considered: Redesign page extraction pipeline while adding concurrency (rejected: increases regression risk).
+## Decision 5: Keep logging stage-oriented and simple
+- Decision: Log key stages only (`page_dispatched`, `page_processed`, `page_failed`, `state_reduced`) with request correlation when available.
+- Rationale: Provides operational visibility without introducing complex observability framework.
+- Alternatives considered: Expanded structured telemetry/events (rejected for this scope).
 
-## Decision 6: Deterministic reduction of parallel results
-- Decision: Merge page outputs into final `extracted_pages`, retained-page context, and errors using deterministic ordering keyed by source pointer sequence.
-- Rationale: Stable outputs improve test determinism and preserve expected downstream behavior.
-- Alternatives considered: Completion-order aggregation (rejected: introduces non-deterministic ordering in tests and output).
-
-## Decision 7: Keep Kafka boundary unchanged
-- Decision: Maintain current worker -> agent -> publish flow and keep `agent.py` Kafka-agnostic.
-- Rationale: Parallelism is internal to page processing; transport architecture remains valid.
-- Alternatives considered: Push concurrency into worker/Kafka layer (rejected: violates current ownership boundaries).
+## Decision 6: Keep validation and exception handling basic
+- Decision: Retain lightweight payload validation and broad exception handling with continue-on-failure behavior.
+- Rationale: Matches user requirement for minimal boilerplate and deferred hardening.
+- Alternatives considered: Deep validation taxonomy and retry orchestration (deferred).
