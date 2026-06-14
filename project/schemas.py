@@ -469,20 +469,6 @@ class Question(BaseModel):
     @field_validator("prompt", "sub_concept")
     @classmethod
     def validate_non_empty(cls, value: str) -> str:
-class TeachingRequestEvent(BaseModel):
-    """Kafka request payload published by the Planner Agent to the 'teaching' topic."""
-
-    request_id: str
-    session_ctx: dict[str, Any]
-    topic: str
-    output_mode: str
-    context: str = ""
-    created_at: str | None = None
-    source: str | None = None
-
-    @field_validator("request_id", "topic", "output_mode")
-    @classmethod
-    def validate_required_strings(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("value cannot be empty")
         return value
@@ -569,13 +555,10 @@ class QuizAgentInput(BaseModel):
     @field_validator("topic", "teaching_content")
     @classmethod
     def validate_non_empty(cls, value: str) -> str:
-    @field_validator("session_ctx")
-    @classmethod
-    def validate_session_ctx(cls, value: dict[str, Any]) -> dict[str, Any]:
-        if value is None:
-            raise ValueError("session_ctx cannot be null")
+        if not value.strip():
+            raise ValueError("value cannot be empty")
         return value
-
+    
 
 class TeachingCompletionEvent(BaseModel):
     """Kafka completion payload published by the Teaching Agent to 'teaching-complete'."""
