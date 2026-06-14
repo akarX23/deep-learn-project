@@ -34,9 +34,9 @@ class LLMConfig:
 
 # Per-mode completion token ceilings enforced at the LiteLLM call boundary.
 MODE_MAX_TOKENS: dict[str, int] = {
-    "beginner": 512,
-    "intermediate": 1024,
-    "advanced": 2048,
+    "beginner": 4096,
+    "intermediate": 4096,
+    "advanced": 4096,
 }
 
 

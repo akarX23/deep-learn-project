@@ -26,7 +26,7 @@
 
 ## Decision 5: Token Ceiling Enforcement
 
-- Decision: Enforce per-mode token ceilings (512 beginner / 1024 intermediate / 2048 advanced) via the `max_tokens` parameter in the LiteLLM call. Report actual consumption from `response.usage.total_tokens` in `metadata.tokens_used`.
+- Decision: Enforce per-mode token ceilings (4096 beginner / 4096 intermediate / 4096 advanced) via the `max_tokens` parameter in the LiteLLM call. Report actual consumption from `response.usage.total_tokens` in `metadata.tokens_used`.
 - Rationale: Setting `max_tokens` at the model call level is the only reliable way to enforce hard ceilings. Response usage reporting requires no additional counting logic.
 - Alternatives considered: Post-hoc token counting and truncation (unreliable — LLM output may be incomplete mid-sentence); tiktoken counting before the call (adds dependency and is estimator-only, not a hard enforcer).
 

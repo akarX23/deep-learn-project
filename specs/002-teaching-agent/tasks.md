@@ -25,7 +25,7 @@ All Phase 2 tasks are reviewed and approved individually before implementation.
 
 - [x] T003 [P] Create `teaching_agent/__init__.py` (empty module marker)
 - [x] T004 [P] Create `teaching_agent/config.py`:
-      `LLMConfig` dataclass, `MODE_MAX_TOKENS` dict (512/1024/2048),
+      `LLMConfig` dataclass, `MODE_MAX_TOKENS` dict (4096 beginner / 4096 intermediate / 4096 advanced),
       `get_llm_config(output_mode)` — reads `TEACHING_MODEL` (required, no default),
       `TEACHING_API_BASE`, `TEACHING_API_KEY`, `TEACHING_TEMPERATURE`; calls `load_dotenv()`
 - [x] T005 [P] Create `teaching_agent/llm_client.py`:
@@ -218,6 +218,13 @@ Backend service will auto-bootstrap `"teaching"` and `"teaching-complete"` on ne
       start backend service → verify `"teaching"` and `"teaching-complete"` topics bootstrapped;
       start `teaching_agent/worker.py`; publish a `TeachingRequestEvent` to `"teaching"`;
       verify `TeachingCompletionEvent` on `"teaching-complete"` with matching `request_id`
+
+- [x] T028 Update per-mode token ceilings to 4096 across all three modes (beginner / intermediate / advanced):
+      update `MODE_MAX_TOKENS` in `teaching_agent/config.py`; update spec.md (FR-008, SC-005,
+      acceptance criteria), plan.md (Constraints, Token-Ceiling Semantics), research.md (Decision 5),
+      CLAUDE.md (Output mode rules table), and tasks.md (T004 description).
+      Rationale: original 512/1024/2048 limits caused truncated JSON responses with verbose providers
+      (e.g. Claude). Limits kept as 3 distinct placeholders so they can be tuned independently.
 
 **Checkpoint**: All Phase 2 tests pass; `"teaching"` and `"teaching-complete"` topics
 registered in `project/topics.py`; worker boots and processes messages end-to-end

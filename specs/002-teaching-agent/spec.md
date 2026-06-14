@@ -29,14 +29,14 @@ be useful at all.
 
 **Independent Test**: Send a valid request with `output_mode: "beginner"` for any topic
 and verify that the returned content uses plain language, includes a required Mermaid
-diagram, follows the five-part structure, and stays within the 512-token ceiling.
+diagram, follows the five-part structure, and stays within the 4096-token ceiling.
 
 **Acceptance Scenarios**:
 
 1. **Given** a valid request with `output_mode: "beginner"` and a non-empty topic, **When** the agent processes it, **Then** the response contains a non-empty explanation that begins with a one-sentence plain-English summary and includes a real-world analogy.
 2. **Given** a beginner request, **When** the response is produced, **Then** the `diagram` field is always non-null and contains valid Mermaid syntax.
 3. **Given** a beginner request, **When** the response is produced, **Then** `notes` contains three bullet-point takeaways with no unexplained jargon, and `example` contains a concrete worked example with plain-English step commentary.
-4. **Given** a beginner request, **When** output is generated, **Then** total tokens consumed do not exceed 512.
+4. **Given** a beginner request, **When** output is generated, **Then** total tokens consumed do not exceed 4096.
 
 ---
 
@@ -52,14 +52,14 @@ trust with the broader audience.
 
 **Independent Test**: Send a valid request with `output_mode: "intermediate"` for any
 topic and verify that the explanation uses correct technical terms, includes a Python
-code snippet, presents trade-offs, and stays within the 1024-token ceiling.
+code snippet, presents trade-offs, and stays within the 4096-token ceiling.
 
 **Acceptance Scenarios**:
 
 1. **Given** a valid request with `output_mode: "intermediate"`, **When** the agent processes it, **Then** the explanation starts with a precise definition and includes a section on mechanics and trade-offs.
 2. **Given** an intermediate request for a structurally complex topic, **When** the response is produced, **Then** a Mermaid diagram is included and is more detailed than a beginner diagram would be for the same topic.
 3. **Given** an intermediate request for a topic with no structural complexity, **When** the response is produced, **Then** the `diagram` field may be null.
-4. **Given** an intermediate request, **When** output is generated, **Then** total tokens consumed do not exceed 1024.
+4. **Given** an intermediate request, **When** output is generated, **Then** total tokens consumed do not exceed 4096.
 
 ---
 
@@ -74,14 +74,14 @@ tool against their existing knowledge. Serving them well builds credibility.
 
 **Independent Test**: Send a valid request with `output_mode: "advanced"` for any topic
 and verify that the explanation includes a formal definition, internal mechanics,
-complexity analysis, edge cases, and further-exploration pointers within 2048 tokens.
+complexity analysis, edge cases, and further-exploration pointers within 4096 tokens.
 
 **Acceptance Scenarios**:
 
 1. **Given** a valid request with `output_mode: "advanced"`, **When** the agent processes it, **Then** the explanation includes a formal or semi-formal definition, a deep-dive into internal mechanics with time/space complexity, and at least one documented edge case or failure mode.
 2. **Given** an advanced request, **When** the response is produced, **Then** the `notes` field is a dense technical reference usable as a practitioner cheat sheet.
 3. **Given** an advanced request, **When** the response is produced, **Then** the `example` demonstrates non-trivial usage (optimization, edge-case handling, or architectural pattern).
-4. **Given** an advanced request, **When** output is generated, **Then** total tokens consumed do not exceed 2048.
+4. **Given** an advanced request, **When** output is generated, **Then** total tokens consumed do not exceed 4096.
 
 ---
 
@@ -154,7 +154,7 @@ and verify that a `TeachingCompletionEvent` appears on `"teaching-complete"` wit
 - **FR-005**: In beginner mode, the `diagram` field MUST always be non-null and contain a valid Mermaid flowchart or sequence diagram representing the topic visually.
 - **FR-006**: In intermediate and advanced modes, the `diagram` field MUST be included only when the topic has structural or sequential complexity that benefits from visualization; otherwise `diagram` MUST be null.
 - **FR-007**: The system MUST validate Mermaid diagram syntax before including it in the response; invalid diagrams MUST NOT be returned.
-- **FR-008**: The system MUST enforce per-mode token ceilings: 512 tokens for beginner, 1024 tokens for intermediate, 2048 tokens for advanced.
+- **FR-008**: The system MUST enforce per-mode token ceilings: 4096 tokens for beginner, 4096 tokens for intermediate, 4096 tokens for advanced.
 - **FR-009**: The system MUST use a dedicated LLM client module scoped to the Teaching Agent. All model configuration (API key, model name, temperature, token limits) MUST be supplied via environment variables and MUST NOT be hardcoded. The client MUST be swappable so the underlying provider (e.g. Gemini for development, Claude for production) can be changed without modifying agent logic.
 - **FR-010**: The system MUST return `status: "error"` and a schema-valid JSON body whenever processing fails; it MUST NOT raise unhandled exceptions or return plain text.
 - **FR-011**: The system MUST populate `metadata.tokens_used` with the actual token count consumed and `metadata.model` with the model identifier used for the response.
@@ -200,7 +200,7 @@ and verify that a `TeachingCompletionEvent` appears on `"teaching-complete"` wit
 - **SC-002**: For any topic processed at all three modes, automated comparison confirms the responses are qualitatively different in structure and vocabulary in 100% of runs.
 - **SC-003**: 100% of beginner-mode responses include a non-null `diagram` field containing valid Mermaid syntax.
 - **SC-004**: 100% of generated Mermaid diagrams (across all modes) pass syntax validation before being included in the response.
-- **SC-005**: Token consumption stays within the per-mode ceiling (512 / 1024 / 2048) in 100% of runs.
+- **SC-005**: Token consumption stays within the per-mode ceiling (4096 beginner / 4096 intermediate / 4096 advanced) in 100% of runs.
 - **SC-006**: Error conditions (empty topic, LLM failure, invalid diagram) always produce a schema-valid `status: "error"` response with no unhandled exceptions in 100% of runs.
 - **SC-007**: A single Teaching Agent request for any mode completes within a time budget suitable for a live tutoring interaction, with no fatal crash on LLM or diagram validation failures.
 - **SC-008**: 100% of `TeachingCompletionEvent` messages published to `"teaching-complete"` carry the same `request_id` and `session_ctx` as the originating `TeachingRequestEvent`.

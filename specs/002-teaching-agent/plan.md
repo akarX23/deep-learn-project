@@ -31,7 +31,7 @@ logic from Phase 1 is not modified.
 **Target Platform**: Linux runtime (local dev and container-ready execution)
 **Project Type**: Agent module/library within a multi-agent backend
 **Performance Goals**: Beginner mode ≤ 5s wall-clock; intermediate ≤ 10s; advanced ≤ 20s on developer hardware under a fast-endpoint model
-**Constraints**: Synchronous execution only; per-mode token ceilings enforced at LiteLLM call level (512 / 1024 / 2048); Mermaid validation required before returning diagram; JSON output only; no LangGraph
+**Constraints**: Synchronous execution only; per-mode token ceilings enforced at LiteLLM call level (4096 beginner / 4096 intermediate / 4096 advanced); Mermaid validation required before returning diagram; JSON output only; no LangGraph
 **Scale/Scope**: One synchronous request per invocation; invoked once per user query by the Planner Agent
 
 ## Constitution Check
@@ -137,7 +137,7 @@ section. They are binding design decisions, traceable to the listed spec require
 
 ### Token-Ceiling Semantics (FR-008, SC-005)
 
-- The per-mode ceiling (512 / 1024 / 2048) governs **generated completion tokens**, enforced
+- The per-mode ceiling (4096 beginner / 4096 intermediate / 4096 advanced) governs **generated completion tokens**, enforced
   as `max_tokens` at the LiteLLM call boundary in `config.py`'s per-mode map. This is the
   value reported as `metadata.tokens_used` (the `completion_tokens` field of the LLM usage
   response).
