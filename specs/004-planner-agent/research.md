@@ -45,9 +45,9 @@
 
 ## Decision 4: Level Inference and Quiz Detection via Single LLM Call
 
-**Decision**: A single structured LLM call (JSON response) returns both the inferred user level + confidence score AND the quiz intent flag. This reuses the same `call_llm` wrapper from `rag_agent/utils/llm_client.py` and avoids two round-trips.
+**Decision**: A single structured LLM call (JSON response) returns both inferred user level + confidence score and quiz intent flag. Planner uses its own LiteLLM configuration surface (`PLANNER_TEXT_*`) and does not depend on rag_agent runtime configuration.
 
-**Rationale**: Both inferences (level + quiz intent) operate on the same user prompt. A single JSON-structured call with fields `{"level": "beginner|intermediate|advanced", "confidence": 0.0-1.0, "quiz_requested": true|false}` is simpler and faster than two separate calls. Prompt template lives in `planner_agent/prompts.py`.
+**Rationale**: Both inferences operate on the same prompt. One JSON-structured call with fields `{"level": "beginner|intermediate|advanced", "confidence": 0.0-1.0, "quiz_requested": true|false}` minimizes latency and branching while preserving determinism. Planner-local config enforces service ownership boundaries and avoids hidden coupling to rag settings.
 
 **Alternatives considered**:
 - Two separate LLM calls: doubles latency for no additional accuracy benefit.
@@ -117,6 +117,30 @@ RAG already has `rag` (request) and `rag-complete` (completion). Teaching and qu
 **Alternatives considered**:
 - All schemas in `project/schemas.py`: over-shares internal state, couples other agents to planner implementation details.
 - Separate `planner_agent/schemas.py`: workable but unnecessary indirection since `agent.py` is the only consumer.
+
+---
+
+## Decision 9: Type-Safety and Schema Boundary Enforcement
+
+**Decision**: Treat all planner message boundaries as strict schema boundaries. Inbound and outbound Kafka payloads are parsed/serialized through `project/schemas.py` models, and planner function signatures are explicitly typed. `Any` is prohibited except unavoidable interop boundaries.
+
+**Rationale**: The planner is an orchestrator and integration hub. Strong typing plus schema-first boundaries reduce runtime contract drift and improve refactor safety.
+
+**Alternatives considered**:
+- Dict-only payload handling without model parse/serialize: faster to write, but weak guarantees and higher regression risk.
+- Broad `Any` usage in graph nodes: convenient initially, but erodes static guarantees and discoverability.
+
+---
+
+## Decision 10: Stage-Level Observability
+
+**Decision**: Emit logs at every major planner stage with level discipline while keeping existing logger configuration unchanged.
+
+**Rationale**: Fine-grained logging is required for request lifecycle tracing (`request_id`) and debugging of fan-out/interrupt/resume behavior in a memory-only MVP.
+
+**Alternatives considered**:
+- Sparse logging only on errors: insufficient for operational debugging.
+- Replacing logger configuration: unnecessary for this phase and explicitly out of scope.
 
 ---
 

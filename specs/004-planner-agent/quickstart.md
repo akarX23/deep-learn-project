@@ -32,6 +32,11 @@ export PLANNER_LEVEL_CONFIDENCE_THRESHOLD=0.75
 export PLANNER_KAFKA_BOOTSTRAP_SERVERS=localhost:9092
 ```
 
+Notes:
+- Planner uses its own LiteLLM configuration (`PLANNER_TEXT_*`) and does not reuse rag_agent runtime config.
+- All planner inbound/outbound Kafka messages must be parsed/serialized through models in `project/schemas.py`.
+- Planner code should keep explicit type annotations for function arguments and return types.
+
 ---
 
 ## Running the Planner Worker

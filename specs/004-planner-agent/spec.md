@@ -5,6 +5,14 @@
 **Status**: Draft  
 **Input**: User description: "Create a new agent which will act as an orchestrator for all agents. The orchestrator consumes init-planner events from Kafka, assigns request IDs, infers user knowledge levels, and creates workflows with RAG, Teaching, Quiz, and Eval agents based on pre-defined rules."
 
+## Clarifications
+
+### Session 2026-06-14
+
+- Q: What is the required logging standard across planner flow stages? → A: Logging is required at every planner flow stage with appropriate log levels; existing logger configuration remains unchanged.
+- Q: Should planner inference use RAG's LiteLLM configuration? → A: No. Planner agent must use its own LiteLLM configuration and environment variables.
+- Q: What type-safety and schema-conformance constraints apply? → A: Planner code must enforce strong typing end-to-end; inbound/outbound messages must conform to `project/schemas.py`; function signatures must declare argument and return types; `Any` is disallowed except unavoidable cases.
+
 ## User Scenarios & Testing
 
 ### User Story 1 - Consume init-planner Events and Request Assignment (Priority: P1)
@@ -106,6 +114,10 @@ As agents complete their work, they produce completion events (e.g., `rag-comple
 - **FR-011**: System MUST include basic exception handling (try/except, logging) for LLM calls, Kafka producer/consumer failures; errors are logged but do not crash the agent (FR-012).
 - **FR-012**: System MUST NOT include complex retry logic, transaction handling, distributed tracing, or persistence layer in the first pass; all deferred to TODO markers.
 - **FR-013**: System directory structure MUST follow the rag_agent pattern: `planner_agent/` with `agent.py`, `config.py`, `llm_client.py`, `kafka.py`, `utils/`, and `tests/`.
+- **FR-014**: System MUST emit logs at every major planner workflow step (consume init event, request_id assignment, inference decision, route decision, dispatch publish, completion consume, final completion publish) using appropriate severity levels (`DEBUG`/`INFO` for normal flow, `WARNING` for recoverable issues, `ERROR` for failures).
+- **FR-015**: System MUST use planner-local LiteLLM configuration for all planner LLM calls (planner-specific model/base URL/key/temperature/token settings) and MUST NOT depend on rag_agent runtime config.
+- **FR-016**: System MUST validate and serialize all inbound and outbound planner Kafka messages using their corresponding schemas from `project/schemas.py`.
+- **FR-017**: System MUST provide explicit type annotations for planner function parameters and return values; `Any` MAY be used only in unavoidable interoperability boundaries and must be minimized.
 
 ### Key Entities
 
@@ -126,6 +138,10 @@ As agents complete their work, they produce completion events (e.g., `rag-comple
 - **SC-006**: Planner agent handles basic Kafka producer/consumer errors (topic unavailable, message serialization) without crashing.
 - **SC-007**: Code structure and patterns follow rag_agent conventions (directory layout, module responsibilities, test organization).
 - **SC-008**: All TODO markers are documented in code for deferred work (retry logic, persistence, advanced error handling, timeout strategies).
+- **SC-009**: 100% of planner workflow stage transitions produce structured logs with appropriate level and `request_id` correlation.
+- **SC-010**: 100% of planner LLM calls resolve configuration from planner-local settings (no rag_agent configuration imports for planner inference).
+- **SC-011**: 100% of planner-produced and planner-consumed Kafka payloads are schema-validated against `project/schemas.py` in unit tests.
+- **SC-012**: Planner modules pass static type checking with no unresolved `Any` usage except explicitly documented unavoidable boundaries.
 
 ## Assumptions
 
@@ -135,5 +151,8 @@ As agents complete their work, they produce completion events (e.g., `rag-comple
 - Intermediate outputs from agents are simple JSON-serializable objects stored in a dict (no database).
 - Quiz intent is detected using LLM-based classification (same LLM as level inference) with confidence threshold; reuses existing inference pattern.
 - Basic exception handling means try/except with logging; no retry queues, circuit breakers, or exponential backoff.
+- Existing logger configuration is retained; this clarification only mandates broader logging coverage and level discipline.
+- Planner uses a dedicated LiteLLM configuration surface and does not reuse rag_agent configuration values.
+- Type safety is enforced at implementation boundaries; message contracts are treated as strict schema boundaries.
 - Request workflows remain active indefinitely without timeout; agent completion is the primary lifecycle trigger. Timeout logic deferred to future phase.
 - "Eval agent" is designed but not invoked; placeholders/TODOs mark its future integration.
