@@ -5,10 +5,10 @@ python-dotenv>=1.0.0
 # --- RAG Agent ---
 pymupdf>=1.27.0
 litellm>=1.40.0
-langgraph>=0.2.0
+langgraph>=1.2.0
 
 # --- Planner Agent ---
-# Add planner-specific dependencies here.
+langchain-core>=1.4.0
 
 # --- Teaching Agent ---
 litellm>=1.40.0
