@@ -11,10 +11,15 @@ langgraph>=0.2.0
 # Add planner-specific dependencies here.
 
 # --- Teaching Agent ---
-# Add teaching-specific dependencies here.
-
-# --- Backend Service (Kafka) ---
+litellm>=1.40.0
 kafka-python>=2.0.2
+
+# --- Backend Service ---
+fastapi>=0.110.0
+uvicorn>=0.29.0
+kafka-python>=2.0.2
+python-socketio>=5.11
+python-multipart>=0.0.9
 
 # --- Development / Testing ---
 pytest>=8.0.0
