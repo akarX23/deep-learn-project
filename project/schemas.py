@@ -290,3 +290,61 @@ class TeachingAgentOutput(BaseModel):
         if value not in {"ok", "error"}:
             raise ValueError("status must be 'ok' or 'error'")
         return value
+
+
+class TeachingRequestEvent(BaseModel):
+    """Kafka request payload published by the Planner Agent to the 'teaching' topic."""
+
+    request_id: str
+    session_ctx: dict[str, Any]
+    topic: str
+    output_mode: str
+    context: str = ""
+    created_at: str | None = None
+    source: str | None = None
+
+    @field_validator("request_id", "topic", "output_mode")
+    @classmethod
+    def validate_required_strings(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value cannot be empty")
+        return value
+
+    @field_validator("session_ctx")
+    @classmethod
+    def validate_session_ctx(cls, value: dict[str, Any]) -> dict[str, Any]:
+        if value is None:
+            raise ValueError("session_ctx cannot be null")
+        return value
+
+
+class TeachingCompletionEvent(BaseModel):
+    """Kafka completion payload published by the Teaching Agent to 'teaching-complete'."""
+
+    request_id: str
+    session_ctx: dict[str, Any]
+    topic: str
+    output_mode: str
+    status: str
+    content: Optional[TeachingContent] = None
+    tokens_used: int = Field(default=0, ge=0)
+    model: str
+    started_at: str
+    completed_at: str
+    duration_ms: int = Field(default=0, ge=0)
+    errors: List[str] = Field(default_factory=list)
+    source: str = "teaching-agent"
+
+    @field_validator("request_id", "topic", "output_mode", "model", "started_at", "completed_at")
+    @classmethod
+    def validate_non_empty_fields(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value cannot be empty")
+        return value
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str) -> str:
+        if value not in {"ok", "error"}:
+            raise ValueError("status must be 'ok' or 'error'")
+        return value

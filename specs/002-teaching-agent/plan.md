@@ -16,6 +16,12 @@ module (not shared with the RAG agent). Configuration is loaded from environment
 No graph orchestration runtime (LangGraph) is used — the pipeline is a linear single-step
 sequence that does not require stateful loop orchestration.
 
+Phase 2 adds a Kafka integration layer (`kafka.py`, `handlers.py`, `worker.py`) following
+the same three-file pattern as the RAG agent. The worker consumes `TeachingRequestEvent`
+payloads from the `"teaching"` Kafka topic, invokes `TeachingAgent.run()` unchanged, and
+publishes `TeachingCompletionEvent` results to `"teaching-complete"`. The core pipeline
+logic from Phase 1 is not modified.
+
 ## Technical Context
 
 **Language/Version**: Python 3.11
@@ -86,28 +92,43 @@ specs/002-teaching-agent/
 
 ```text
 project/
-└── schemas.py           # Add: OutputMode, TeachingAgentInput, TeachingContent,
-                         #      TeachingMetadata, TeachingAgentOutput
+├── schemas.py           # Phase 1: OutputMode, TeachingAgentInput, TeachingContent,
+│                        #           TeachingMetadata, TeachingAgentOutput
+│                        # Phase 2: TeachingRequestEvent, TeachingCompletionEvent
+└── topics.py            # Phase 2: Add TEACHING to PlannerTopics; add TeachingTopics enum
+                         #           (TEACHING_COMPLETE only); include in get_all_topic_names()
 
 teaching_agent/
 ├── __init__.py
 ├── agent.py             # TeachingAgent class: run(), input validation, prompt dispatch,
-                         #                      response assembly
+│                        #                      response assembly  [Phase 1 — no changes in Phase 2]
 ├── config.py            # LLMConfig dataclass, get_llm_config(), per-mode max_tokens map
-├── llm_client.py        # call_llm(messages, config) → str; guards unconfigured calls
+├── llm_client.py        # call_llm(messages, config) → (str, int); provider-agnostic via LiteLLM
 ├── prompts.py           # BEGINNER_PROMPT, INTERMEDIATE_PROMPT, ADVANCED_PROMPT constants
 ├── validators.py        # validate_mermaid(diagram: str) → bool; regex-based structural check
 ├── helpers.py           # parse_llm_response(raw: str) → dict; build_error_output()
+├── kafka.py             # Phase 2: Protocol types (KafkaConsumerProtocol, KafkaProducerProtocol)
+│                        #           factory functions (create_consumer, create_producer)
+│                        #           topic helpers (consumer_subscribe_teaching, publish_teaching_complete)
+├── handlers.py          # Phase 2: TeachingRequestEventHandler — parse event → run agent →
+│                        #           build completion event → publish; injectable dependencies
+├── worker.py            # Phase 2: TeachingWorker — lifecycle (start/stop/get_state),
+│                        #           background poll loop; process_consumer_batch() function
 └── tests/
     ├── __init__.py
-    ├── test_teaching_agent.py
+    ├── test_teaching_agent.py       # Phase 1 tests (real LLM calls)
+    ├── test_kafka_integration.py    # Phase 2: handler + publish tests (fake Kafka)
+    ├── test_worker_runtime.py       # Phase 2: worker lifecycle tests (fake Kafka)
+    ├── live_call_test.py
+    ├── run_samples.py
     └── inputs/
         └── sample_input.json
 ```
 
 **Structure Decision**: Single Python agent module following the `rag_agent/` layout.
 Schemas in `project/schemas.py` (shared contract location). No new top-level directories.
-No LangGraph — the linear pipeline requires only a plain class.
+No LangGraph — the linear pipeline requires only a plain class. Phase 2 Kafka files follow
+the RAG agent three-file pattern exactly for system-wide consistency.
 
 ## Behavior Rules and Requirement Clarifications
 
@@ -160,6 +181,19 @@ section. They are binding design decisions, traceable to the listed spec require
 
 The mode-specific rule is enforced in `agent.py` after diagram validation; full field-level
 validation rules live in `data-model.md` and `contracts/teaching-agent-contract.md`.
+
+### Kafka Event Rules (FR-019 – FR-028)
+
+| Rule | Detail |
+|---|---|
+| Inbound topic | `"teaching"` — consumed by `TeachingWorker`; published by Planner Agent |
+| Outbound topic | `"teaching-complete"` — published by `TeachingRequestEventHandler` |
+| `request_id` pass-through | Copied verbatim from `TeachingRequestEvent` to `TeachingCompletionEvent`; Teaching Agent never modifies it |
+| `session_ctx` pass-through | Copied verbatim; Teaching Agent never reads or validates its contents |
+| Always-publish rule | A `TeachingCompletionEvent` is published for every consumed message regardless of `status`; Planner is never left waiting |
+| Malformed payload | Logged with `request_id` (or `"unknown"` if absent), skipped; poll loop continues without crashing |
+| Topic bootstrap | `PlannerTopics.TEACHING` and `TeachingTopics.TEACHING_COMPLETE` registered in `project/topics.py`; both included in `get_all_topic_names()`; backend service creates topics at startup |
+| Test isolation | All Kafka dependencies injectable via factory parameters; tests use Protocol-compatible fakes, no real Kafka required |
 
 ### Edge-Case Handling (spec "Edge Cases", FR-010)
 

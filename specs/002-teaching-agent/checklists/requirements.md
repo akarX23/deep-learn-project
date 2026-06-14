@@ -31,6 +31,19 @@
 
 ## Notes
 
-- All checklist items pass. Spec is ready for `/speckit-plan`.
+- Phase 1 checklist items above all pass. Core pipeline spec is complete.
 - Python is mentioned in FR-013/FR-014 as the expected example language — this is a product-level assumption documented in Assumptions, not an implementation detail imposed on the agent internals.
-- The Evaluation Agent is referenced as a downstream consumer but is not yet specified; its contract with Teaching Agent output should be confirmed before implementation.
+- The Evaluation Agent is referenced as a downstream consumer but is not yet specified; its contract with `TeachingCompletionEvent` should be confirmed before it is implemented.
+
+## Phase 2 — Kafka Integration (added 2026-06-13)
+
+Kafka integration requirements FR-019 – FR-028 and success criteria SC-008 – SC-010 have been added to `spec.md`. The items below should be re-validated before Phase 2 implementation begins.
+
+- [x] Kafka topic names registered in `project/topics.py`: `"teaching"` under `PlannerTopics.TEACHING`; `"teaching-complete"` under `TeachingTopics.TEACHING_COMPLETE`
+- [x] `TeachingRequestEvent` and `TeachingCompletionEvent` schemas defined in `data-model.md` and `contracts/teaching-agent-contract.md`
+- [x] Always-publish rule documented (SC-009): completion event published on both success and error
+- [x] `request_id` and `session_ctx` pass-through rules documented (FR-022, FR-023, SC-008)
+- [x] Malformed payload handling documented (FR-028, SC-010)
+- [x] Three-file Kafka structure mandated (FR-027) consistent with RAG agent pattern
+- [x] Test isolation requirement documented: injectable factories, no real Kafka in tests
+- [ ] Downstream consumer (Quiz Agent, Planner) contract for `TeachingCompletionEvent` confirmed before schema is frozen

@@ -57,15 +57,75 @@
   - `content` must be null when `status` is `"error"`.
   - `metadata.topic` mirrors `TeachingAgentInput.topic` in all cases.
 
+### TeachingRequestEvent (Phase 2 — Kafka inbound)
+
+- Description: Inbound Kafka payload published by the Planner Agent to the `"teaching"` topic. Triggers the Teaching Agent worker.
+- Fields:
+  - `request_id`: str — unique per request, assigned by Planner; non-empty
+  - `session_ctx`: dict — user/session tracking metadata (e.g. `session_id`, `user_id`, `trace_id`); may be empty `{}`
+  - `topic`: str — maps to `TeachingAgentInput.topic`
+  - `output_mode`: str — maps to `TeachingAgentInput.output_mode`
+  - `context`: str — maps to `TeachingAgentInput.context`; defaults to `""`
+  - `created_at`: str | None — optional ISO 8601 UTC timestamp of when Planner created the event
+  - `source`: str | None — optional source identifier (e.g. `"planner-agent"`)
+- Validation rules:
+  - `request_id` must be non-empty.
+  - `session_ctx` must not be null (empty dict is valid).
+  - `topic`, `output_mode`, and `context` follow the same rules as `TeachingAgentInput`.
+
+### TeachingCompletionEvent (Phase 2 — Kafka outbound)
+
+- Description: Outbound Kafka payload published by the Teaching Agent to `"teaching-complete"` after every request, including failures.
+- Fields:
+  - `request_id`: str — passed through verbatim from `TeachingRequestEvent`
+  - `session_ctx`: dict — passed through verbatim from `TeachingRequestEvent`
+  - `topic`: str — from the request
+  - `output_mode`: str — from the request
+  - `status`: str — `"ok"` or `"error"`
+  - `content`: TeachingContent | None — null when `status: "error"`
+  - `tokens_used`: int — from `TeachingMetadata.tokens_used`; `0` on error
+  - `model`: str — from `TeachingMetadata.model`
+  - `started_at`: str — ISO 8601 UTC; when `TeachingAgent.run()` was invoked
+  - `completed_at`: str — ISO 8601 UTC; when the result was ready
+  - `duration_ms`: int — `max(0, completed_at - started_at)` in milliseconds
+  - `errors`: list[str] — error messages; empty list on success
+  - `source`: str — always `"teaching-agent"`
+- Validation rules:
+  - `request_id` and `session_ctx` must match the originating `TeachingRequestEvent` exactly.
+  - `status` must be exactly `"ok"` or `"error"`.
+  - `duration_ms` must be >= 0.
+  - `tokens_used` must be >= 0.
+
+### TeachingTopics (Phase 2 — Kafka topic registry)
+
+- Description: Enum in `project/topics.py` registering the outbound topic owned by the Teaching Agent.
+- Values:
+  - `TEACHING_COMPLETE = "teaching-complete"` — outbound; Teaching Agent publishes here
+- Note: The inbound topic `"teaching"` is registered under `PlannerTopics.TEACHING`, consistent
+  with the pattern used by `PlannerTopics.RAG` for the RAG Agent.
+- `TeachingTopics.TEACHING_COMPLETE` and `PlannerTopics.TEACHING` are both included in
+  `get_all_topic_names()` so the backend service bootstraps them at startup.
+
 ## Relationships
 
 - One `TeachingAgentInput` maps to one `TeachingAgentOutput`.
 - One `TeachingAgentOutput` contains exactly one `TeachingContent` (when `status: "ok"`) and exactly one `TeachingMetadata`.
 - `OutputMode` determines per-mode content rules applied to `TeachingContent`.
+- One `TeachingRequestEvent` produces exactly one `TeachingCompletionEvent`. `request_id` and `session_ctx` are invariant across both — the Teaching Agent never modifies them.
+- `TeachingRequestEvent` wraps the same fields as `TeachingAgentInput` (`topic`, `output_mode`, `context`) plus Kafka-level tracking fields (`request_id`, `session_ctx`).
+- `TeachingCompletionEvent` flattens `TeachingAgentOutput` (status, content) and `TeachingMetadata` (tokens_used, model) into a single event alongside timing and correlation fields.
 
 ## State Transitions
 
-### Request-level state
+### Kafka worker message lifecycle (Phase 2)
+1. `consumed` → `parsing` — raw Kafka payload received from `"teaching"` topic
+2. `parsing` → `dispatching` — `TeachingRequestEvent` validated successfully; `TeachingAgent.run()` invoked
+3. `parsing` → `skipped` — payload malformed or schema-invalid; error logged; poll loop continues
+4. `dispatching` → `publishing` — `TeachingAgent.run()` returns (any status); `TeachingCompletionEvent` built
+5. `publishing` → `complete` — `TeachingCompletionEvent` published to `"teaching-complete"` and flushed
+6. `publishing` → `publish_failed` — Kafka publish error logged; message acknowledged; poll loop continues
+
+### Core pipeline request-level state
 1. `received` → `generating` — input is validated and prompt is dispatched to LLM
 2. `generating` → `validating_diagram` — LLM response received and JSON parsed
 3. `validating_diagram` → `ok` — Mermaid diagram is valid (or null/not required)
