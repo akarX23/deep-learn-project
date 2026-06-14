@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 
-from rag_agent.worker import RAGWorker, process_consumer_batch
+from rag_agent.worker import RAGWorker
 
 
 @dataclass
@@ -61,11 +61,10 @@ class _Handler:
 
     def process_request(
         self, _payload: dict[str, object], _producer: _FakeProducer | None = None
-    ):
+    ) -> None:
         self.calls += 1
         if self.should_raise and self.calls == 1:
             raise RuntimeError("synthetic handler failure")
-        return None
 
 
 def _make_config() -> dict[str, object]:
@@ -82,18 +81,21 @@ def _make_config() -> dict[str, object]:
     }
 
 
-def test_worker_startup_and_shutdown_lifecycle() -> None:
+def _patch_worker_factories(
+    monkeypatch,
+    consumer: _FakeConsumer,
+    producer: _FakeProducer,
+) -> None:
+    monkeypatch.setattr("rag_agent.worker.create_consumer", lambda _config: consumer)
+    monkeypatch.setattr("rag_agent.worker.create_producer", lambda _config: producer)
+
+
+def test_worker_startup_and_shutdown_lifecycle(monkeypatch) -> None:
     fake_consumer = _FakeConsumer(topics={"rag", "rag-complete"}, responses=[{}])
     fake_producer = _FakeProducer()
+    _patch_worker_factories(monkeypatch, fake_consumer, fake_producer)
 
-    worker = RAGWorker(
-        config=_make_config(),
-        producer_factory=lambda _config: fake_producer,
-        consumer_factory=lambda _config: fake_consumer,
-        request_processor=lambda payload, producer: _Handler().process_request(
-            payload, producer
-        ),
-    )
+    worker = RAGWorker(config=_make_config())
 
     worker.start()
     time.sleep(0.02)
@@ -108,20 +110,14 @@ def test_worker_startup_and_shutdown_lifecycle() -> None:
     assert fake_producer.closed is True
 
 
-def test_worker_loop_continues_when_idle() -> None:
+def test_worker_loop_continues_when_idle(monkeypatch) -> None:
     fake_consumer = _FakeConsumer(
         topics={"rag", "rag-complete"}, responses=[{}, {}, {}]
     )
     fake_producer = _FakeProducer()
+    _patch_worker_factories(monkeypatch, fake_consumer, fake_producer)
 
-    worker = RAGWorker(
-        config=_make_config(),
-        producer_factory=lambda _config: fake_producer,
-        consumer_factory=lambda _config: fake_consumer,
-        request_processor=lambda payload, producer: _Handler().process_request(
-            payload, producer
-        ),
-    )
+    worker = RAGWorker(config=_make_config())
 
     worker.start()
     time.sleep(0.03)
@@ -130,7 +126,7 @@ def test_worker_loop_continues_when_idle() -> None:
     assert fake_consumer.poll_calls >= 2
 
 
-def test_process_batch_continues_after_single_event_failure() -> None:
+def test_process_batch_continues_after_single_event_failure(monkeypatch) -> None:
     fake_consumer = _FakeConsumer(
         topics={"rag", "rag-complete"},
         responses=[
@@ -144,30 +140,26 @@ def test_process_batch_continues_after_single_event_failure() -> None:
     )
     fake_producer = _FakeProducer()
     handler = _Handler(should_raise=True)
-
-    processed = process_consumer_batch(
-        fake_consumer,
-        fake_producer,
+    _patch_worker_factories(monkeypatch, fake_consumer, fake_producer)
+    monkeypatch.setattr(
+        "rag_agent.worker.process_request_event",
         lambda payload, producer: handler.process_request(payload, producer),
-        poll_timeout_ms=1,
     )
 
-    assert processed == 2
+    worker = RAGWorker(config=_make_config())
+    worker.start()
+    time.sleep(0.02)
+    worker.stop()
+
     assert handler.calls == 2
 
 
-def test_startup_topic_check_passes_when_topics_exist() -> None:
+def test_startup_topic_check_passes_when_topics_exist(monkeypatch) -> None:
     fake_consumer = _FakeConsumer(topics={"rag", "rag-complete"}, responses=[{}])
     fake_producer = _FakeProducer()
+    _patch_worker_factories(monkeypatch, fake_consumer, fake_producer)
 
-    worker = RAGWorker(
-        config=_make_config(),
-        producer_factory=lambda _config: fake_producer,
-        consumer_factory=lambda _config: fake_consumer,
-        request_processor=lambda payload, producer: _Handler().process_request(
-            payload, producer
-        ),
-    )
+    worker = RAGWorker(config=_make_config())
 
     worker.start()
     state = worker.get_state()
@@ -177,18 +169,12 @@ def test_startup_topic_check_passes_when_topics_exist() -> None:
     assert state.startup_topic_check_warnings == []
 
 
-def test_missing_topics_warn_and_worker_continues() -> None:
+def test_missing_topics_warn_and_worker_continues(monkeypatch) -> None:
     fake_consumer = _FakeConsumer(topics={"rag"}, responses=[{}])
     fake_producer = _FakeProducer()
+    _patch_worker_factories(monkeypatch, fake_consumer, fake_producer)
 
-    worker = RAGWorker(
-        config=_make_config(),
-        producer_factory=lambda _config: fake_producer,
-        consumer_factory=lambda _config: fake_consumer,
-        request_processor=lambda payload, producer: _Handler().process_request(
-            payload, producer
-        ),
-    )
+    worker = RAGWorker(config=_make_config())
 
     worker.start()
     state = worker.get_state()
@@ -206,7 +192,7 @@ def test_runtime_does_not_require_backend_topic_api_config() -> None:
 
 
 def measure_poll_to_completion_latency_ms(iterations: int = 50) -> float:
-    """Measure average process_consumer_batch dispatch overhead for idle+single-message polls."""
+    """Measure average worker poll-loop dispatch overhead."""
 
     fake_consumer = _FakeConsumer(
         topics={"rag", "rag-complete"},
@@ -217,15 +203,29 @@ def measure_poll_to_completion_latency_ms(iterations: int = 50) -> float:
     )
     fake_producer = _FakeProducer()
     handler = _Handler()
+    from rag_agent import worker as worker_mod
 
     started = time.perf_counter()
-    for _ in range(iterations):
-        process_consumer_batch(
-            fake_consumer,
-            fake_producer,
-            lambda payload, producer: handler.process_request(payload, producer),
-            poll_timeout_ms=1,
+    original_process = worker_mod.process_request_event
+    original_create_consumer = worker_mod.create_consumer
+    original_create_producer = worker_mod.create_producer
+    try:
+        worker_mod.create_consumer = lambda _config: fake_consumer
+        worker_mod.create_producer = lambda _config: fake_producer
+        worker_mod.process_request_event = lambda payload, producer: (
+            handler.process_request(payload, producer)
         )
+
+        worker = RAGWorker(config=_make_config())
+        worker.start()
+        while handler.calls < iterations:
+            time.sleep(0.001)
+        worker.stop()
+    finally:
+        worker_mod.process_request_event = original_process
+        worker_mod.create_consumer = original_create_consumer
+        worker_mod.create_producer = original_create_producer
+
     elapsed_ms = (time.perf_counter() - started) * 1000
     return elapsed_ms / iterations
 

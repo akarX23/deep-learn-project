@@ -48,8 +48,8 @@ For each consumed request event:
 1. consumer loop receives payload from `rag`
 2. `_poll_loop` dispatches directly to `process_request_event` (no `process_consumer_batch` indirection)
 3. `process_request_event` calls `agent.py` directly
-3. `agent.py` returns output only (no Kafka publishing)
-4. consumer loop publishes completion event to `rag-complete` via `kafka.py`
+4. `agent.py` returns output only (no Kafka publishing)
+5. consumer loop publishes completion event to `rag-complete` via `kafka.py`
 
 Implementation simplification notes:
 - `kafka.py` keeps only logic-bearing functions (create producer/consumer, topic check, publish complete)

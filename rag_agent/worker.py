@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import threading
 import time
-from collections.abc import Callable
 from datetime import datetime, timezone
 
 import logging
+from kafka import KafkaConsumer, KafkaProducer
 
 from project.schemas import (
     RAGAgentInput,
@@ -16,27 +16,17 @@ from project.schemas import (
     RAGAgentOutput,
     WorkerRuntimeState,
 )
-from project.topics import get_rag_topic_names
+from project.topics import PlannerTopics, get_rag_topic_names
 from rag_agent.agent import RAGAgent
 from rag_agent.kafka import (
-    KafkaConsumerProtocol,
-    KafkaProducerProtocol,
     check_required_topics,
-    close_consumer,
-    close_producer,
-    consumer_subscribe_rag,
     create_consumer,
     create_producer,
-    poll_records,
     publish_rag_complete,
 )
 from rag_agent.utils.helpers import get_kafka_runtime_config
 
 logger = logging.getLogger(__name__)
-
-RequestProcessor = Callable[
-    [dict[str, object], KafkaProducerProtocol], RAGCompletionEvent | None
-]
 
 
 def _extract_request_id(payload: dict[str, object]) -> str:
@@ -74,12 +64,10 @@ def _build_completion_event(
 
 def process_request_event(
     payload: dict[str, object],
-    producer: KafkaProducerProtocol,
-    agent_factory: Callable[[], RAGAgent] = RAGAgent,
-    publisher: Callable[
-        [KafkaProducerProtocol, RAGCompletionEvent], None
-    ] = publish_rag_complete,
-    clock: Callable[[], datetime] | None = None,
+    producer: KafkaProducer,
+    agent_factory=RAGAgent,
+    publisher=publish_rag_complete,
+    clock=None,
 ) -> RAGCompletionEvent | None:
     """Process one request event with direct worker -> agent -> publish flow."""
 
@@ -152,53 +140,16 @@ def process_request_event(
     return completion_event
 
 
-def process_consumer_batch(
-    consumer: KafkaConsumerProtocol,
-    producer: KafkaProducerProtocol,
-    processor: RequestProcessor,
-    poll_timeout_ms: int,
-) -> int:
-    """Poll once and dispatch all returned Kafka records."""
-
-    batches = poll_records(consumer, timeout_ms=poll_timeout_ms)
-    processed = 0
-    for records in batches.values():
-        for record in records:
-            payload = record.value
-            request_id = _extract_request_id(payload)
-            logger.info(
-                "consumed request_id=%s topic=%s",
-                request_id,
-                getattr(record, "topic", "rag"),
-            )
-            try:
-                processor(payload, producer)
-            except Exception as exc:
-                logger.error("dispatch error request_id=%s error=%s", request_id, exc)
-            processed += 1
-    return processed
-
-
 class RAGWorker:
     """Owns worker lifecycle for Kafka consume-dispatch-publish processing."""
 
     def __init__(
         self,
         config: dict[str, object] | None = None,
-        producer_factory: Callable[
-            [dict[str, object]], KafkaProducerProtocol
-        ] = create_producer,
-        consumer_factory: Callable[
-            [dict[str, object]], KafkaConsumerProtocol
-        ] = create_consumer,
-        request_processor: RequestProcessor = process_request_event,
     ) -> None:
         self._config = config
-        self._producer_factory = producer_factory
-        self._consumer_factory = consumer_factory
-        self._request_processor = request_processor
-        self._producer: KafkaProducerProtocol | None = None
-        self._consumer: KafkaConsumerProtocol | None = None
+        self._producer: KafkaProducer | None = None
+        self._consumer: KafkaConsumer | None = None
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._startup_warnings: list[str] = []
@@ -213,9 +164,9 @@ class RAGWorker:
     def start(self) -> None:
         """Initialize Kafka clients, run startup checks, and start poll loop thread."""
 
-        self._producer = self._producer_factory(self.config)
-        self._consumer = self._consumer_factory(self.config)
-        consumer_subscribe_rag(self._consumer)
+        self._producer = create_producer(self.config)
+        self._consumer = create_consumer(self.config)
+        self._consumer.subscribe([PlannerTopics.RAG.value])
 
         topic_check = check_required_topics(self._consumer, get_rag_topic_names())
         self._startup_warnings = []
@@ -229,23 +180,36 @@ class RAGWorker:
         self._stop_event.clear()
         self._thread = threading.Thread(
             target=self._poll_loop,
-            args=(self._request_processor,),
             daemon=True,
             name="rag-kafka-worker-loop",
         )
         self._thread.start()
 
-    def _poll_loop(self, processor: RequestProcessor) -> None:
+    def _poll_loop(self) -> None:
         if self._consumer is None or self._producer is None:
             return
         while not self._stop_event.is_set():
             try:
-                process_consumer_batch(
-                    self._consumer,
-                    self._producer,
-                    processor,
-                    int(self.config.get("poll_timeout_ms", 1000)),
+                batches = self._consumer.poll(
+                    timeout_ms=int(self.config.get("poll_timeout_ms", 1000))
                 )
+                for records in batches.values():
+                    for record in records:
+                        payload = record.value
+                        request_id = _extract_request_id(payload)
+                        logger.info(
+                            "consumed request_id=%s topic=%s",
+                            request_id,
+                            getattr(record, "topic", "rag"),
+                        )
+                        try:
+                            process_request_event(payload, self._producer)
+                        except Exception as exc:
+                            logger.error(
+                                "dispatch error request_id=%s error=%s",
+                                request_id,
+                                exc,
+                            )
             except Exception as exc:
                 logger.error("poll_loop failure error=%s", exc)
 
@@ -255,8 +219,11 @@ class RAGWorker:
         self._stop_event.set()
         if self._thread is not None:
             self._thread.join(timeout=2)
-        close_consumer(self._consumer)
-        close_producer(self._producer)
+        if self._consumer is not None:
+            self._consumer.close()
+        if self._producer is not None:
+            self._producer.flush()
+            self._producer.close()
 
     def get_state(self) -> WorkerRuntimeState:
         """Return a typed snapshot of worker runtime state."""

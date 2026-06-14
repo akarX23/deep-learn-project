@@ -10,9 +10,9 @@
 
 **Purpose**: Align baseline tooling and docs context for feature 001 runtime refactor.
 
-- [ ] T001 Verify dependency set for worker runtime in requirements.txt
-- [ ] T002 [P] Confirm lint and format toolchain config in pyproject.toml and requirements.txt
-- [ ] T003 [P] Update feature quick checks and command references in specs/001-rag-retrieval-agent/quickstart.md
+- [X] T001 Verify dependency set for worker runtime in requirements.txt
+- [X] T002 [P] Confirm lint and format toolchain config in pyproject.toml and requirements.txt
+- [X] T003 [P] Update feature quick checks and command references in specs/001-rag-retrieval-agent/quickstart.md
 
 ---
 
@@ -22,14 +22,14 @@
 
 **CRITICAL**: User story implementation starts only after this phase is complete.
 
-- [ ] T004 Remove Kafka protocol type stubs from rag_agent/kafka.py
-- [ ] T005 Add concrete kafka-python type annotations at module boundaries in rag_agent/kafka.py
-- [ ] T006 Remove apply_kafka_security_options from rag_agent/utils/helpers.py
-- [ ] T007 Inline Kafka security option wiring into private kwargs builders in rag_agent/kafka.py
-- [ ] T008 Remove RAGWorker injectable constructor parameters from rag_agent/worker.py
-- [ ] T009 Remove RequestProcessor type alias and callback plumbing in rag_agent/worker.py
-- [ ] T010 Remove process_consumer_batch helper and related indirection in rag_agent/worker.py
-- [ ] T011 [P] Update WorkerRuntimeState field naming and mapping consistency in rag_agent/worker.py and project/schemas.py
+- [X] T004 Remove Kafka protocol type stubs from rag_agent/kafka.py
+- [X] T005 Add concrete kafka-python type annotations at module boundaries in rag_agent/kafka.py
+- [X] T006 Remove apply_kafka_security_options from rag_agent/utils/helpers.py
+- [X] T007 Inline Kafka security option wiring into private kwargs builders in rag_agent/kafka.py
+- [X] T008 Remove RAGWorker injectable constructor parameters from rag_agent/worker.py
+- [X] T009 Remove RequestProcessor type alias and callback plumbing in rag_agent/worker.py
+- [X] T010 Remove process_consumer_batch helper and related indirection in rag_agent/worker.py
+- [X] T011 [P] Update WorkerRuntimeState field naming and mapping consistency in rag_agent/worker.py and project/schemas.py
 
 **Checkpoint**: Runtime skeleton is simplified and ready for story-specific behavior work.
 
@@ -43,16 +43,16 @@
 
 ### Tests for User Story 1
 
-- [ ] T012 [P] [US1] Update worker lifecycle thread start/stop tests in rag_agent/tests/test_worker_runtime.py
-- [ ] T013 [P] [US1] Add regression test for direct create_producer/create_consumer usage in rag_agent/tests/test_worker_runtime.py
-- [ ] T014 [P] [US1] Update runtime logging stage assertions for startup and shutdown in rag_agent/tests/test_logging.py
+- [X] T012 [P] [US1] Update worker lifecycle thread start/stop tests in rag_agent/tests/test_worker_runtime.py
+- [X] T013 [P] [US1] Add regression test for direct create_producer/create_consumer usage in rag_agent/tests/test_worker_runtime.py
+- [X] T014 [P] [US1] Update runtime logging stage assertions for startup and shutdown in rag_agent/tests/test_logging.py
 
 ### Implementation for User Story 1
 
-- [ ] T015 [US1] Refactor RAGWorker.start to create Kafka clients directly via create_producer/create_consumer in rag_agent/worker.py
-- [ ] T016 [US1] Inline poll-and-dispatch logic directly inside _poll_loop in rag_agent/worker.py
-- [ ] T017 [US1] Refactor RAGWorker.stop to close consumer and producer directly in rag_agent/worker.py
-- [ ] T018 [US1] Keep per-iteration non-fatal exception handling and TODO markers in rag_agent/worker.py
+- [X] T015 [US1] Refactor RAGWorker.start to create Kafka clients directly via create_producer/create_consumer in rag_agent/worker.py
+- [X] T016 [US1] Inline poll-and-dispatch logic directly inside _poll_loop in rag_agent/worker.py
+- [X] T017 [US1] Refactor RAGWorker.stop to close consumer and producer directly in rag_agent/worker.py
+- [X] T018 [US1] Keep per-iteration non-fatal exception handling and TODO markers in rag_agent/worker.py
 
 **Checkpoint**: Worker runtime behavior is intact with reduced boilerplate.
 
@@ -66,15 +66,15 @@
 
 ### Tests for User Story 2
 
-- [ ] T019 [P] [US2] Add topic-presence success and missing-topic warning tests in rag_agent/tests/test_kafka_integration.py
-- [ ] T020 [P] [US2] Add test that startup does not call topic creation flows in rag_agent/tests/test_kafka_integration.py
-- [ ] T021 [P] [US2] Add startup warning capture assertions in rag_agent/tests/test_logging.py
+- [X] T019 [P] [US2] Add topic-presence success and missing-topic warning tests in rag_agent/tests/test_kafka_integration.py
+- [X] T020 [P] [US2] Add test that startup does not call topic creation flows in rag_agent/tests/test_kafka_integration.py
+- [X] T021 [P] [US2] Add startup warning capture assertions in rag_agent/tests/test_logging.py
 
 ### Implementation for User Story 2
 
-- [ ] T022 [US2] Ensure startup check_required_topics call is retained and warning-only in rag_agent/worker.py
-- [ ] T023 [US2] Remove any residual topic creation code paths in rag_agent/kafka.py
-- [ ] T024 [US2] Keep startup check result mapping to WorkerRuntimeState warnings in rag_agent/worker.py
+- [X] T022 [US2] Ensure startup check_required_topics call is retained and warning-only in rag_agent/worker.py
+- [X] T023 [US2] Remove any residual topic creation code paths in rag_agent/kafka.py
+- [X] T024 [US2] Keep startup check result mapping to WorkerRuntimeState warnings in rag_agent/worker.py
 
 **Checkpoint**: Startup topic validation is lightweight and non-blocking.
 
@@ -88,20 +88,20 @@
 
 ### Tests for User Story 3
 
-- [ ] T025 [P] [US3] Update direct dispatch tests for worker -> process_request_event in rag_agent/tests/test_request_event.py
-- [ ] T026 [P] [US3] Update completion publish ownership tests in rag_agent/tests/test_completion_event.py
-- [ ] T027 [P] [US3] Add regression test that agent has no Kafka publish dependency in rag_agent/tests/test_rag_agent.py
-- [ ] T028 [P] [US3] Add tests for tools document-only API signatures in rag_agent/tests/test_rag_agent.py
+- [X] T025 [P] [US3] Update direct dispatch tests for worker -> process_request_event in rag_agent/tests/test_request_event.py
+- [X] T026 [P] [US3] Update completion publish ownership tests in rag_agent/tests/test_completion_event.py
+- [X] T027 [P] [US3] Add regression test that agent has no Kafka publish dependency in rag_agent/tests/test_rag_agent.py
+- [X] T028 [P] [US3] Add tests for tools document-only API signatures in rag_agent/tests/test_rag_agent.py
 
 ### Implementation for User Story 3
 
-- [ ] T029 [US3] Remove _with_optional_open helper and path branching from extraction functions in rag_agent/utils/tools.py
-- [ ] T030 [US3] Remove _page_from_source page-number guard and keep direct page load path in rag_agent/utils/tools.py
-- [ ] T031 [US3] Update extraction function signatures to accept only fitz.Document in rag_agent/utils/tools.py
-- [ ] T032 [US3] Update call sites to use document-only extraction APIs in rag_agent/agent.py
-- [ ] T033 [US3] Remove handler/factory leftovers from active flow in rag_agent/worker.py and rag_agent/handlers.py
-- [ ] T034 [US3] Ensure completion publish remains worker-owned via publish_rag_complete in rag_agent/worker.py
-- [ ] T035 [US3] Add TODO comments for deferred validation/metrics hardening in rag_agent/worker.py and rag_agent/kafka.py
+- [X] T029 [US3] Remove _with_optional_open helper and path branching from extraction functions in rag_agent/utils/tools.py
+- [X] T030 [US3] Remove _page_from_source page-number guard and keep direct page load path in rag_agent/utils/tools.py
+- [X] T031 [US3] Update extraction function signatures to accept only fitz.Document in rag_agent/utils/tools.py
+- [X] T032 [US3] Update call sites to use document-only extraction APIs in rag_agent/agent.py
+- [X] T033 [US3] Remove handler/factory leftovers from active flow in rag_agent/worker.py and rag_agent/handlers.py
+- [X] T034 [US3] Ensure completion publish remains worker-owned via publish_rag_complete in rag_agent/worker.py
+- [X] T035 [US3] Add TODO comments for deferred validation/metrics hardening in rag_agent/worker.py and rag_agent/kafka.py
 
 **Checkpoint**: Direct consume -> process -> publish flow is simpler and functionally equivalent.
 
@@ -111,13 +111,13 @@
 
 **Purpose**: Validate all quality gates and artifact consistency.
 
-- [ ] T036 [P] Run full worker test suite in rag_agent/tests/ with pytest rag_agent/tests -q
-- [ ] T037 [P] Run lint checks with ruff check project rag_agent
-- [ ] T038 [P] Run formatting checks with ruff format --check project rag_agent
-- [ ] T039 [P] Run syntax validation with python -m compileall project rag_agent
-- [ ] T040 Verify line-count reduction objective (SC-007) across rag_agent/kafka.py, rag_agent/worker.py, and rag_agent/utils/tools.py
-- [ ] T041 [P] Reconcile quickstart commands with final runtime behavior in specs/001-rag-retrieval-agent/quickstart.md
-- [ ] T042 [P] Reconcile contract statements with final module boundaries in specs/001-rag-retrieval-agent/contracts/rag-agent-contract.md
+- [X] T036 [P] Run full worker test suite in rag_agent/tests/ with pytest rag_agent/tests -q
+- [X] T037 [P] Run lint checks with ruff check project rag_agent
+- [X] T038 [P] Run formatting checks with ruff format --check project rag_agent
+- [X] T039 [P] Run syntax validation with python -m compileall project rag_agent
+- [X] T040 Verify line-count reduction objective (SC-007) across rag_agent/kafka.py, rag_agent/worker.py, and rag_agent/utils/tools.py
+- [X] T041 [P] Reconcile quickstart commands with final runtime behavior in specs/001-rag-retrieval-agent/quickstart.md
+- [X] T042 [P] Reconcile contract statements with final module boundaries in specs/001-rag-retrieval-agent/contracts/rag-agent-contract.md
 
 **Checkpoint**: Feature is ready for implementation sign-off and downstream execution.
 

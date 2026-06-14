@@ -5,13 +5,18 @@ from types import SimpleNamespace
 
 from project.schemas import RAGAgentOutput
 from rag_agent.kafka import publish_rag_complete
-from rag_agent.worker import process_consumer_batch, process_request_event
+from rag_agent.worker import RAGWorker, process_request_event
 
 
 class _FakeConsumer:
     def __init__(self, records):
         self._records = records
         self.last_timeout_ms = None
+        self.subscriptions: list[list[str]] = []
+        self.closed = False
+
+    def subscribe(self, topics):
+        self.subscriptions.append(topics)
 
     def poll(self, timeout_ms: int):
         self.last_timeout_ms = timeout_ms
@@ -19,8 +24,43 @@ class _FakeConsumer:
         self._records = {}
         return records
 
+    def topics(self):
+        return {"rag", "rag-complete"}
 
-def test_consumer_batch_dispatches_event_from_rag_topic() -> None:
+    def close(self):
+        self.closed = True
+
+
+class _FakeProducer:
+    def __init__(self):
+        self.closed = False
+        self.flush_count = 0
+
+    def send(self, topic, payload):
+        return SimpleNamespace(topic=topic, payload=payload)
+
+    def flush(self):
+        self.flush_count += 1
+
+    def close(self):
+        self.closed = True
+
+
+def _make_config() -> dict[str, object]:
+    return {
+        "bootstrap_servers": "localhost:9092",
+        "client_id": "rag-test",
+        "consumer_group_id": "rag-test-consumer",
+        "poll_timeout_ms": 5,
+        "security_protocol": None,
+        "sasl_mechanism": None,
+        "sasl_username": None,
+        "sasl_password": None,
+        "ssl_cafile": None,
+    }
+
+
+def test_consumer_batch_dispatches_event_from_rag_topic(monkeypatch) -> None:
     message = {
         "request_id": "req-1",
         "session_ctx": {"session_id": "s-1"},
@@ -28,18 +68,22 @@ def test_consumer_batch_dispatches_event_from_rag_topic() -> None:
         "file_paths": ["rag_agent/tests/inputs/sample.pdf"],
     }
     consumer = _FakeConsumer({"rag": [SimpleNamespace(value=message)]})
-    captured = []
+    producer = _FakeProducer()
+    captured = {}
 
-    processed = process_consumer_batch(
-        consumer,
-        producer=object(),
-        processor=lambda payload, producer: captured.append((payload, producer)),
-        poll_timeout_ms=250,
+    monkeypatch.setattr("rag_agent.worker.create_consumer", lambda _cfg: consumer)
+    monkeypatch.setattr("rag_agent.worker.create_producer", lambda _cfg: producer)
+    monkeypatch.setattr(
+        "rag_agent.worker.process_request_event",
+        lambda payload, _producer: captured.setdefault("payload", payload),
     )
 
-    assert processed == 1
-    assert consumer.last_timeout_ms == 250
-    assert captured[0][0]["user_request"] == "Explain gradient descent"
+    worker = RAGWorker(config=_make_config())
+    worker.start()
+    worker.stop()
+
+    assert consumer.last_timeout_ms == 5
+    assert captured["payload"]["user_request"] == "Explain gradient descent"
 
 
 def test_request_event_processor_dispatches_to_rag_agent() -> None:
@@ -120,16 +164,11 @@ def test_ingest_to_dispatch_flow_preserves_request_id() -> None:
         }
     )
 
-    process_consumer_batch(
-        consumer,
+    process_request_event(
+        payload=consumer._records["rag"][0].value,
         producer=object(),
-        processor=lambda payload, producer: process_request_event(
-            payload,
-            producer,
-            agent_factory=_FakeAgent,
-            publisher=_capture_publish,
-        ),
-        poll_timeout_ms=50,
+        agent_factory=_FakeAgent,
+        publisher=_capture_publish,
     )
 
     assert published["request_id"] == "req-ingest-1"
@@ -196,7 +235,9 @@ def test_completion_event_preserves_request_correlation() -> None:
     assert output.duration_ms == 1000
 
 
-def test_lifecycle_logging_covers_consume_process_and_publish(caplog) -> None:
+def test_lifecycle_logging_covers_consume_process_and_publish(
+    caplog, monkeypatch
+) -> None:
     import logging
 
     class _FakeAgent:
@@ -229,18 +270,23 @@ def test_lifecycle_logging_covers_consume_process_and_publish(caplog) -> None:
         }
     )
 
+    producer = _FakeProducer()
+    monkeypatch.setattr("rag_agent.worker.create_consumer", lambda _cfg: consumer)
+    monkeypatch.setattr("rag_agent.worker.create_producer", lambda _cfg: producer)
+    monkeypatch.setattr(
+        "rag_agent.worker.process_request_event",
+        lambda payload, prod: process_request_event(
+            payload,
+            prod,
+            agent_factory=_FakeAgent,
+            publisher=lambda _producer, _event: None,
+        ),
+    )
+
     with caplog.at_level(logging.INFO):
-        process_consumer_batch(
-            consumer,
-            producer=object(),
-            processor=lambda payload, producer: process_request_event(
-                payload,
-                producer,
-                agent_factory=_FakeAgent,
-                publisher=lambda _producer, _event: None,
-            ),
-            poll_timeout_ms=100,
-        )
+        worker = RAGWorker(config=_make_config())
+        worker.start()
+        worker.stop()
 
     messages = [r.message for r in caplog.records]
     assert any("consumed" in m for m in messages)
@@ -250,7 +296,7 @@ def test_lifecycle_logging_covers_consume_process_and_publish(caplog) -> None:
     assert any("publish_completed" in m for m in messages)
 
 
-def test_error_stage_logged_when_processing_fails(caplog) -> None:
+def test_error_stage_logged_when_processing_fails(caplog, monkeypatch) -> None:
     import logging
 
     class _FailingAgent:
@@ -273,18 +319,23 @@ def test_error_stage_logged_when_processing_fails(caplog) -> None:
         }
     )
 
+    producer = _FakeProducer()
+    monkeypatch.setattr("rag_agent.worker.create_consumer", lambda _cfg: consumer)
+    monkeypatch.setattr("rag_agent.worker.create_producer", lambda _cfg: producer)
+    monkeypatch.setattr(
+        "rag_agent.worker.process_request_event",
+        lambda payload, prod: process_request_event(
+            payload,
+            prod,
+            agent_factory=_FailingAgent,
+            publisher=lambda _producer, _event: None,
+        ),
+    )
+
     with caplog.at_level(logging.ERROR):
-        process_consumer_batch(
-            consumer,
-            producer=object(),
-            processor=lambda payload, producer: process_request_event(
-                payload,
-                producer,
-                agent_factory=_FailingAgent,
-                publisher=lambda _producer, _event: None,
-            ),
-            poll_timeout_ms=100,
-        )
+        worker = RAGWorker(config=_make_config())
+        worker.start()
+        worker.stop()
 
     error_messages = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
     assert error_messages

@@ -39,7 +39,7 @@ def test_worker_logs_startup_warning_for_missing_topics(caplog) -> None:
         def __init__(self, topics):
             self._topics = topics
 
-        def subscribe(self, topics):
+        def subscribe(self, _topics):
             pass
 
         def poll(self, timeout_ms):
@@ -77,14 +77,23 @@ def test_worker_logs_startup_warning_for_missing_topics(caplog) -> None:
     fake_consumer = _FakeConsumer(topics={"rag"})
 
     with caplog.at_level(logging.WARNING, logger="rag_agent.worker"):
-        worker = RAGWorker(
-            config=config,
-            producer_factory=lambda _c: _FakeProducer(),
-            consumer_factory=lambda _c: fake_consumer,
-            request_processor=lambda _payload, _producer: None,
-        )
-        worker.start()
-        worker.stop()
+        from rag_agent import worker as worker_mod
+
+        original_create_consumer = worker_mod.create_consumer
+        original_create_producer = worker_mod.create_producer
+        original_process = worker_mod.process_request_event
+        try:
+            worker_mod.create_consumer = lambda _c: fake_consumer
+            worker_mod.create_producer = lambda _c: _FakeProducer()
+            worker_mod.process_request_event = lambda _payload, _producer: None
+
+            worker = RAGWorker(config=config)
+            worker.start()
+            worker.stop()
+        finally:
+            worker_mod.create_consumer = original_create_consumer
+            worker_mod.create_producer = original_create_producer
+            worker_mod.process_request_event = original_process
 
     assert any(
         "missing" in record.message.lower() or "startup_topic_check" in record.message

@@ -13,6 +13,7 @@ from rag_agent.utils.content_helpers import serialize_table_to_markdown
 from rag_agent.utils.helpers import build_routed_model, get_text_llm_config
 from rag_agent.utils.llm_client import call_embedding, call_llm
 from rag_agent.utils.tools import (
+    open_pdf,
     extract_images_from_page,
     extract_tables_from_page,
     extract_text_from_page,
@@ -131,14 +132,16 @@ def test_get_page_count(sample_pdf_path: Path):
 
 
 def test_extract_text_from_page(sample_pdf_path: Path):
-    text = extract_text_from_page(str(sample_pdf_path), 1)
+    with open_pdf(str(sample_pdf_path)) as doc:
+        text = extract_text_from_page(doc, 1)
     assert isinstance(text, str)
     assert text.strip()
 
 
 def test_extract_tables_from_page(sample_pdf_path: Path):
-    with_tables = extract_tables_from_page(str(sample_pdf_path), 2)
-    without_tables = extract_tables_from_page(str(sample_pdf_path), 1)
+    with open_pdf(str(sample_pdf_path)) as doc:
+        with_tables = extract_tables_from_page(doc, 2)
+        without_tables = extract_tables_from_page(doc, 1)
 
     assert isinstance(with_tables, list)
     assert with_tables
@@ -147,8 +150,9 @@ def test_extract_tables_from_page(sample_pdf_path: Path):
 
 
 def test_extract_images_from_page(sample_pdf_path: Path):
-    with_images = extract_images_from_page(str(sample_pdf_path), 3)
-    without_images = extract_images_from_page(str(sample_pdf_path), 1)
+    with open_pdf(str(sample_pdf_path)) as doc:
+        with_images = extract_images_from_page(doc, 3)
+        without_images = extract_images_from_page(doc, 1)
 
     assert isinstance(with_images, list)
     assert with_images

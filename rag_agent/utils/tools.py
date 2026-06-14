@@ -7,6 +7,7 @@ import contextlib
 import io
 from pathlib import Path
 from typing import Any
+import fitz
 
 from rag_agent.utils.content_helpers import (
     cosine_similarity,
@@ -19,27 +20,10 @@ from rag_agent.utils.prompts import IMAGE_DESCRIPTION_PROMPT
 def open_pdf(file_path: str):
     """Open a PDF document from disk."""
 
-    try:
-        import fitz
-    except Exception as exc:
-        raise RuntimeError("PyMuPDF is required for PDF extraction") from exc
-
     pdf_path = Path(file_path)
     if not pdf_path.exists():
         raise FileNotFoundError(f"PDF file not found: {file_path}")
     return fitz.open(str(pdf_path))
-
-
-def _page_from_source(pdf_source: Any, page_number: int):
-    if page_number < 1:
-        raise ValueError("page_number must be >= 1")
-    return pdf_source.load_page(page_number - 1)
-
-
-def _with_optional_open(pdf_source: Any):
-    if isinstance(pdf_source, str):
-        return open_pdf(pdf_source)
-    return contextlib.nullcontext(pdf_source)
 
 
 def get_page_count(file_path: str) -> int:
@@ -49,43 +33,42 @@ def get_page_count(file_path: str) -> int:
         return doc.page_count
 
 
-def extract_text_from_page(pdf_source: Any, page_number: int) -> str:
+def extract_text_from_page(pdf_source: fitz.Document, page_number: int) -> str:
     """Extract plain text from a single page (1-based index)."""
 
-    with _with_optional_open(pdf_source) as doc:
-        page = _page_from_source(doc, page_number)
-        return page.get_text("text").strip()
+    page = pdf_source.load_page(page_number - 1)
+    return page.get_text("text").strip()
 
 
-def extract_tables_from_page(pdf_source: Any, page_number: int) -> list[str]:
+def extract_tables_from_page(pdf_source: fitz.Document, page_number: int) -> list[str]:
     """Extract tables from a page and return markdown-serialized table strings."""
 
-    with _with_optional_open(pdf_source) as doc:
-        page = _page_from_source(doc, page_number)
-        with contextlib.redirect_stdout(io.StringIO()):
-            tables = page.find_tables()
-        serialized: list[str] = []
-        for table in tables.tables:
-            data = table.extract() or []
-            markdown = serialize_table_to_markdown(data)
-            if markdown:
-                serialized.append(markdown)
-        return serialized
+    page = pdf_source.load_page(page_number - 1)
+    with contextlib.redirect_stdout(io.StringIO()):
+        tables = page.find_tables()
+    serialized: list[str] = []
+    for table in tables.tables:
+        data = table.extract() or []
+        markdown = serialize_table_to_markdown(data)
+        if markdown:
+            serialized.append(markdown)
+    return serialized
 
 
-def extract_images_from_page(pdf_source: Any, page_number: int) -> list[bytes]:
+def extract_images_from_page(
+    pdf_source: fitz.Document, page_number: int
+) -> list[bytes]:
     """Extract embedded image bytes from a single page."""
 
-    with _with_optional_open(pdf_source) as doc:
-        page = _page_from_source(doc, page_number)
-        images: list[bytes] = []
-        for image_ref in page.get_images(full=True):
-            xref = image_ref[0]
-            image_obj = doc.extract_image(xref)
-            image_bytes = image_obj.get("image")
-            if image_bytes:
-                images.append(image_bytes)
-        return images
+    page = pdf_source.load_page(page_number - 1)
+    images: list[bytes] = []
+    for image_ref in page.get_images(full=True):
+        xref = image_ref[0]
+        image_obj = pdf_source.extract_image(xref)
+        image_bytes = image_obj.get("image")
+        if image_bytes:
+            images.append(image_bytes)
+    return images
 
 
 def describe_images_with_vlm(

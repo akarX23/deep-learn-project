@@ -47,7 +47,6 @@ def get_vlm_config() -> dict[str, object]:
     _load_dotenv()
     provider = os.getenv("RAG_VLM_PROVIDER", "hosted_vllm")
     model = os.getenv("RAG_VLM_MODEL", "gpt-4o-mini")
-    batch_size = os.getenv("RAG_VLM_BATCH_SIZE", "4")
     return {
         "provider": provider,
         "model": model,
@@ -58,7 +57,7 @@ def get_vlm_config() -> dict[str, object]:
         "max_tokens": _read_int("RAG_VLM_MAX_TOKENS", 600),
         "batch_size": max(1, _read_int("RAG_VLM_BATCH_SIZE", 4)),
     }
-    
+
 
 def get_embedding_config() -> dict[str, object]:
     """Build embedding model config from environment variables."""
@@ -76,6 +75,7 @@ def get_embedding_config() -> dict[str, object]:
         "api_key": _read_optional("RAG_EMBEDDING_API_KEY"),
         "max_tokens": _read_int("RAG_EMBEDDING_MAX_TOKENS", 1024),
     }
+
 
 def get_kafka_runtime_config() -> dict[str, object]:
     """Build Kafka runtime settings directly from environment values."""
@@ -131,24 +131,3 @@ def _read_int(name: str, default: int) -> int:
         return int(raw)
     except ValueError as exc:
         raise ValueError(f"{name} must be an integer") from exc
-
-
-def apply_kafka_security_options(
-    kwargs: dict[str, str | int | bool], config: dict[str, object]
-) -> None:
-    security_protocol = config.get("security_protocol")
-    sasl_mechanism = config.get("sasl_mechanism")
-    sasl_username = config.get("sasl_username")
-    sasl_password = config.get("sasl_password")
-    ssl_cafile = config.get("ssl_cafile")
-
-    if isinstance(security_protocol, str) and security_protocol:
-        kwargs["security_protocol"] = security_protocol
-    if isinstance(sasl_mechanism, str) and sasl_mechanism:
-        kwargs["sasl_mechanism"] = sasl_mechanism
-    if isinstance(sasl_username, str) and sasl_username:
-        kwargs["sasl_plain_username"] = sasl_username
-    if isinstance(sasl_password, str) and sasl_password:
-        kwargs["sasl_plain_password"] = sasl_password
-    if isinstance(ssl_cafile, str) and ssl_cafile:
-        kwargs["ssl_cafile"] = ssl_cafile
