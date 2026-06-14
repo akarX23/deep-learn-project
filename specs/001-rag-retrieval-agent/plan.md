@@ -1,59 +1,39 @@
-# Implementation Plan: RAG Retrieval Agent
+# Implementation Plan: RAG Kafka Worker Simplification
 
-**Branch**: `001-build-rag-retrieval-agent` | **Date**: 2026-05-27 | **Spec**: `/specs/001-rag-retrieval-agent/spec.md`
+**Branch**: `001-build-rag-retrieval-agent` | **Date**: 2026-06-13 | **Spec**: `specs/001-rag-retrieval-agent/spec.md`
 **Input**: Feature specification from `/specs/001-rag-retrieval-agent/spec.md`
+
+**Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
 
 ## Summary
 
-Implement a synchronous RAG Retrieval Agent that reads uploaded PDF files page-by-page,
-extracts text/tables/images using PyMuPDF, scores assembled page content for relevance
-using sentence-transformers, retains relevant pages, and returns a single compiled Markdown
-study document plus page-level audit metadata in a schema-safe output contract.
-
-The agent runtime uses LangGraph for the reasoning loop orchestration and LiteLLM as the
-single interface for all text/image model calls. LLM/VLM connection values are sourced
-from environment variables through centralized configuration.
+Simplify the RAG runtime to a direct worker-driven Kafka flow: `worker.py` initializes Kafka and starts the threaded consumer loop, verifies required topics exist (warn-and-continue if missing), consumes request events, calls `agent.py` directly, and publishes completion events through `kafka.py`. Remove handler and factory abstractions from active flow. Keep `agent.py` Kafka-agnostic and keep `helpers.py` limited to environment-value extraction functions. Advanced validation, edge-case hardening, and deeper exception taxonomy are deferred as TODO tasks.
 
 ## Technical Context
 
-**Language/Version**: Python 3.11  
-**Primary Dependencies**: pydantic v2, PyMuPDF, sentence-transformers, LiteLLM, LangGraph  
-**Storage**: N/A (in-memory processing; file-system PDF reads only)  
-**Testing**: pytest  
-**Target Platform**: Linux runtime (local dev and container-ready execution)  
-**Project Type**: Agent module/library within a multi-agent backend  
-**Performance Goals**: Process a representative 5-10 page PDF in <=45 seconds on developer hardware; single final compilation call per request  
-**Constraints**: Synchronous execution only, no OCR in v1, PDF-only input, Markdown-only output, environment-variable based LLM configuration  
-**Scale/Scope**: Single request processes multiple PDFs, expected default range up to 10 PDFs and up to 200 total pages per request
+**Language/Version**: Python 3.11+
+**Primary Dependencies**: kafka-python, pydantic v2, litellm, sentence-transformers, pymupdf
+**Storage**: N/A (Kafka is external transport)
+**Testing**: pytest
+**Target Platform**: Linux worker runtime
+**Project Type**: Background worker service
+**Performance Goals**: Keep current poll-to-completion behavior within existing SC-005 budget; no regression from abstraction removal
+**Constraints**: No FastAPI runtime; no topic creation at startup; no handler/factory indirection; no classes/validators in `helpers.py`; defer advanced validation/error hardening with TODOs
+**Scale/Scope**: Single-worker process consuming `rag` and producing `rag-complete`; no planner-side logic changes
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-### Initial Gate Review (Pre-Research)
+- Code Quality Gate: Run `ruff check project rag_agent`, `ruff format --check project rag_agent`, and `python -m compileall project rag_agent`.
+- Testing Gate: Run targeted and full `rag_agent/tests` suites for worker loop, Kafka integration, and request/completion flow.
+- UX Consistency Gate: Preserve current event contracts and message semantics (request-in, completion-out) for downstream consumers.
+- Performance Gate: Maintain current poll loop behavior and avoid additional blocking abstractions in consume/process/publish stages.
+- Maintainability Gate: Keep runtime ownership explicit (`worker.py` orchestration, `kafka.py` transport, `agent.py` processing, `helpers.py` env extraction).
 
-- Code Quality Gate: PASS. Responsibility boundaries are explicit by module
-  (`project/schemas.py`, `rag_agent/agent.py`, `rag_agent/tools.py`,
-  `rag_agent/helpers.py`, `rag_agent/llm_client.py`, `rag_agent/prompts.py`,
-  `rag_agent/config.py`).
-- Testing Gate: PASS. Planned tests cover unit behavior, tool extraction, scoring,
-  schema validation, partial failure, and threshold filtering.
-- UX Consistency Gate: PASS. Output format constrained to coherent Markdown with stable
-  sectioning and preserved retained content.
-- Performance Gate: PASS. Budgets and synchronous constraints are defined; extraction
-  remains one-page-at-a-time with bounded LLM calls.
-- Maintainability Gate: PASS. Config and prompting are centralized; pure helper functions
-  isolate deterministic behavior from model calls.
-
-### Post-Design Gate Review (After Phase 1 Artifacts)
-
-- Code Quality Gate: PASS. Data model and contracts are explicit; no cross-module
-  ambiguity remains.
-- Testing Gate: PASS. quickstart includes full-run and targeted test instructions.
-- UX Consistency Gate: PASS. Contract preserves predictable compiled_material structure.
-- Performance Gate: PASS. Research decisions cap call count and define fallback behavior.
-- Maintainability Gate: PASS. Environment-driven model configuration eliminates hard-coded
-  provider coupling.
+Post-Design Re-check (Phase 1): PASS
+- Design adheres to simplicity and observability principles.
+- Deferred validations and exception hardening are explicitly tracked as TODO scope.
 
 ## Project Structure
 
@@ -73,27 +53,42 @@ specs/001-rag-retrieval-agent/
 ### Source Code (repository root)
 
 ```text
-project/
-└── schemas.py
-
 rag_agent/
 ├── agent.py
-├── tools.py
-├── helpers.py
-├── llm_client.py
-├── prompts.py
-├── config.py
-└── tests/
-    ├── inputs/
-    │   ├── sample.pdf
-    │   └── sample_input.json
-    └── test_rag_agent.py
+├── kafka.py
+├── worker.py
+└── utils/
+    └── helpers.py         # env extraction helpers only
+
+project/
+├── schemas.py
+└── topics.py
 ```
 
-**Structure Decision**: Single Python agent module with shared schemas at repository
-root, keeping domain boundaries explicit while minimizing framework overhead.
+**Structure Decision**: Keep runtime flow explicit and linear: `worker.py` owns consumer thread and processing pipeline orchestration; `kafka.py` owns Kafka client lifecycle and produce/consume helper functions; `agent.py` performs retrieval logic only and returns output objects.
 
 ## Complexity Tracking
 
-No constitution violations identified. Complexity remains justified by requirements for
-non-deterministic reasoning orchestration (LangGraph) and multimodal model support.
+| Violation | Why Needed | Simpler Alternative Rejected Because |
+|-----------|------------|--------------------------------------|
+| None | N/A | N/A |
+
+## Phase 0: Research Findings
+
+All open ambiguities from current scope are resolved in the clarification sessions. No additional NEEDS CLARIFICATION items remain.
+
+Research outcomes are documented in `specs/001-rag-retrieval-agent/research.md` with explicit decisions for:
+- direct worker startup and topic-presence check
+- `kafka.py`-owned env config and producer/consumer functions
+- direct consumer-loop call into `agent.py`
+- Kafka publication from consumer loop only
+- simplified `helpers.py` (env extraction only)
+
+## Phase 1: Design Artifacts
+
+Design outputs updated:
+- `specs/001-rag-retrieval-agent/data-model.md`
+- `specs/001-rag-retrieval-agent/contracts/rag-agent-contract.md`
+- `specs/001-rag-retrieval-agent/quickstart.md`
+
+No additional external API contracts are required beyond Kafka message and runtime module contracts.

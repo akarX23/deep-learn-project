@@ -1,84 +1,82 @@
-# Data Model: RAG Retrieval Agent
+# Data Model: RAG Kafka Worker Simplification
 
 ## Entities
 
-### RAGAgentInput
-- Description: Request payload received by the RAG agent.
+### RAGRequestEvent
+- Description: Incoming Kafka payload consumed from topic `rag`.
 - Fields:
-  - request_id: str (UUID string)
-  - user_prompt: str
-  - file_paths: list[str]
-  - include_tables: bool (default true)
-  - include_images: bool (default true)
-  - relevance_threshold: float (default 0.6)
-  - schema_version: str (default "1.0")
+  - `request_id`: str
+  - `session_ctx`: dict[str, object]
+  - `user_request`: str
+  - `file_paths`: list[str]
+  - `created_at`: str | None
+  - `source`: str | None
 - Validation rules:
-  - request_id must be a valid UUID string.
-  - file_paths must be non-empty.
-  - relevance_threshold must be in [0.0, 1.0].
-  - schema_version must be non-empty.
+  - Baseline schema validation remains in shared schemas.
+  - Additional semantic validation is deferred as TODO scope.
 
-### PageExtractionStatus (Enum)
-- Description: Per-page extraction outcome.
-- Allowed values:
-  - SUCCESS
-  - SKIPPED_IRRELEVANT
-  - FAILED_EXTRACTION
-
-### ExtractedPage
-- Description: Audit record for one processed page.
+### RAGCompletionEvent
+- Description: Outgoing Kafka payload produced to topic `rag-complete`.
 - Fields:
-  - file_name: str
-  - page_number: int (1-based)
-  - relevance_score: float
-  - status: PageExtractionStatus
-  - ocr_used: bool (always false in v1)
-  - errors: list[str]
-  - retained_content: str | None
-- Validation rules:
-  - page_number must be >= 1.
-  - relevance_score must be in [0.0, 1.0].
-  - retained_content must be present when status is SUCCESS.
+  - `request_id`: str
+  - `session_ctx`: dict[str, object]
+  - `user_prompt`: str
+  - `compiled_material`: str
+  - `status`: str (`complete` | `partial` | `failed`)
+  - `errors`: list[str]
+  - `total_pages_processed`: int
+  - `total_pages_included`: int
+  - `started_at`: str
+  - `completed_at`: str
+  - `duration_ms`: int
+  - `source`: str
 
-### RAGAgentOutput
-- Description: Agent response contract returned to Planner.
+### TopicPresenceCheckResult
+- Description: Startup check result based on Kafka metadata query.
 - Fields:
-  - request_id: str (mirrored)
-  - user_prompt: str (mirrored)
-  - schema_version: str (mirrored)
-  - compiled_material: str
-  - extracted_pages: list[ExtractedPage]
-  - total_pages_processed: int
-  - total_pages_included: int
-  - errors: list[str]
-  - status: str (complete | partial | failed)
+  - `required_topics`: list[str]
+  - `existing_topics`: list[str]
+  - `missing_topics`: list[str]
+  - `warning_message`: str | None
 - Validation rules:
-  - total_pages_processed >= total_pages_included >= 0.
-  - status is complete only if no unrecoverable extraction gap and at least one included page.
-  - status is partial when mixed success/failure occurs with usable output.
-  - status is failed when no usable output can be produced.
+  - Missing topics generate warnings but do not block worker startup.
+
+### WorkerRuntimeState
+- Description: Process-level runtime state for threaded consumer operation.
+- Fields:
+  - `running`: bool
+  - `stop_event_set`: bool
+  - `consumer_thread_alive`: bool
+  - `startup_check_complete`: bool
+
+### KafkaRuntimeGateway
+- Description: Function-level boundary in `rag_agent/kafka.py` for env-based connector setup, producer/consumer creation, poll, and publish operations.
+- Responsibilities:
+  - Read Kafka env values directly
+  - Create consumer and producer objects
+  - Expose consume/publish helper functions for other modules
+
+### HelpersEnvValues
+- Description: Values returned by simple env extraction helper functions in `helpers.py`.
+- Model note:
+  - No config classes and no validators in `helpers.py` for this phase.
 
 ## Relationships
-- One RAGAgentInput maps to one RAGAgentOutput.
-- One RAGAgentOutput contains zero or more ExtractedPage records.
-- Each ExtractedPage has exactly one PageExtractionStatus.
+- One `RAGRequestEvent` maps to one `RAGCompletionEvent` per terminal processing attempt.
+- `worker.py` orchestrates startup check and threaded loop.
+- `kafka.py` owns Kafka transport functions used by worker.
+- `agent.py` remains Kafka-agnostic and returns processing output only.
 
 ## State Transitions
 
-### Request-level state
-1. received -> processing_pages
-2. processing_pages -> compiling_material (if retained pages > 0)
-3. processing_pages -> failed (if no pages can be processed and no usable content)
-4. compiling_material -> complete (all target files/pages processed with usable output and no blocking errors)
-5. compiling_material -> partial (usable output with non-fatal errors)
-6. any state -> failed (fatal exception path)
+### Worker lifecycle
+1. `starting` -> `checking_topics`
+2. `checking_topics` -> `running` (ready or warning message)
+3. `running` -> `stopping`
+4. `stopping` -> `stopped`
 
-### Page-level state
-1. started -> FAILED_EXTRACTION (if extraction returns empty/invalid content and no recoverable content path)
-2. started -> SKIPPED_IRRELEVANT (if relevance score < threshold)
-3. started -> SUCCESS (if assembled content is valid and relevance score >= threshold)
-
-## Derived Fields
-- total_pages_processed: count of all attempted page records.
-- total_pages_included: count of ExtractedPage where status == SUCCESS.
-- compiled_material context: built from retained_content across SUCCESS pages only.
+### Request lifecycle
+1. `consumed` -> `processing_started`
+2. `processing_started` -> `processing_completed`
+3. `processing_completed` -> `publish_completed`
+4. any state -> `error` (non-fatal for worker runtime)

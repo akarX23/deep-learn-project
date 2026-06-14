@@ -1,11 +1,9 @@
-"""Pure helper utilities for table formatting and context assembly."""
+"""Content assembly and math helpers for RAG page processing."""
 
 from __future__ import annotations
 
 from math import sqrt
-from typing import Iterable
-
-from project.schemas import ExtractedPage
+from typing import Any, Iterable
 
 
 def serialize_table_to_markdown(table_matrix: list[list[object]]) -> str:
@@ -13,7 +11,10 @@ def serialize_table_to_markdown(table_matrix: list[list[object]]) -> str:
 
     if not table_matrix:
         return ""
-    rows = [["" if cell is None else str(cell).strip() for cell in row] for row in table_matrix]
+    rows = [
+        ["" if cell is None else str(cell).strip() for cell in row]
+        for row in table_matrix
+    ]
     header = rows[0]
     body = rows[1:] if len(rows) > 1 else []
     sep = ["---"] * len(header)
@@ -28,7 +29,9 @@ def serialize_table_to_markdown(table_matrix: list[list[object]]) -> str:
     return "\n".join(lines)
 
 
-def assemble_page_content(text: str, tables: list[str], image_descriptions: list[str]) -> str:
+def assemble_page_content(
+    text: str, tables: list[str], image_descriptions: list[str]
+) -> str:
     """Assemble text, tables, and image descriptions for one page."""
 
     sections: list[str] = []
@@ -37,22 +40,28 @@ def assemble_page_content(text: str, tables: list[str], image_descriptions: list
     if tables:
         sections.append("\n\n".join(t for t in tables if t.strip()))
     if image_descriptions:
-        image_block = "\n".join(f"- {item.strip()}" for item in image_descriptions if item.strip())
+        image_block = "\n".join(
+            f"- {item.strip()}" for item in image_descriptions if item.strip()
+        )
         if image_block:
             sections.append("Image Notes:\n" + image_block)
     return "\n\n".join(section for section in sections if section.strip())
 
 
-def build_compilation_context(retained_pages: list[ExtractedPage]) -> str:
+def build_compilation_context(retained_pages: list[dict[str, Any]]) -> str:
     """Build labeled context text from retained pages for final compilation."""
 
     chunks: list[str] = []
     for page in retained_pages:
-        if not page.retained_content:
+        content = str(page.get("content", "")).strip()
+        if not content:
             continue
+        file_name = str(page.get("file_name", "unknown"))
+        page_number = int(page.get("page_number", 0))
+        relevance_score = float(page.get("relevance_score", 0.0))
         chunks.append(
-            f"### Source: {page.file_name} | Page {page.page_number} | Score {page.relevance_score:.3f}\n"
-            f"{page.retained_content.strip()}"
+            f"### Source: {file_name} | Page {page_number} | Score {relevance_score:.3f}\n"
+            f"{content}"
         )
     return "\n\n".join(chunks)
 

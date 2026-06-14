@@ -1,7 +1,7 @@
-# Specification Quality Checklist: RAG Retrieval Agent
+# Specification Quality Checklist: RAG Kafka Worker Simplification
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2026-05-27
+**Created**: 2026-06-12
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -32,5 +32,5 @@
 ## Notes
 
 - Validation pass 1 complete: all checklist items pass.
-- Scope boundary explicitly excludes Planner Agent and Teaching Agent implementation.
-- Test coverage expectations are explicitly included as requirements to support downstream planning.
+- Spec updated in-place under `specs/001-rag-retrieval-agent` per user instruction.
+- No new branch or feature directory was created; current branch/directory were preserved.

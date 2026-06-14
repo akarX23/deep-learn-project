@@ -1,41 +1,37 @@
-# Research: RAG Retrieval Agent
+# Research: RAG Kafka Worker Simplification
 
-## Decision 1: PDF Extraction Library
-- Decision: Use PyMuPDF for all PDF-related operations (page count, text extraction, table detection, image extraction).
-- Rationale: PyMuPDF supports all required per-page primitives in one dependency and has performant random-access page APIs that fit synchronous processing.
-- Alternatives considered: pdfplumber (table support is useful but weaker image handling integration), pypdf (lightweight but lacks robust table extraction), OCR-first stacks (out of scope for v1 assumptions).
+## Decision 1: Worker-Centric Startup Flow
+- Decision: `worker.py` is the only startup entry point and owns threaded loop initialization plus startup topic presence check.
+- Rationale: Keeps runtime orchestration explicit and removes service-layer indirection.
+- Alternatives considered: FastAPI service lifecycle (out of scope), extra orchestration layer (unnecessary abstraction).
 
-## Decision 2: LLM/VLM Invocation Layer
-- Decision: Route all model calls through LiteLLM via a single call_llm(messages, config) abstraction in rag_agent/llm_client.py.
-- Rationale: A single call path reduces provider lock-in and keeps the agent independent from vendor-specific SDKs.
-- Alternatives considered: Direct provider SDKs (higher lock-in, duplicated logic), LangChain model wrappers as primary call layer (unnecessary extra abstraction for this scope).
+## Decision 2: `kafka.py` as the Kafka Ownership Boundary
+- Decision: Keep Kafka connector initialization, producer/consumer creation, and consume/produce helper functions only in `kafka.py`.
+- Rationale: Single ownership for Kafka lifecycle avoids scattered client logic across modules.
+- Alternatives considered: Producer/consumer ownership in worker/agent modules (duplicates responsibilities).
 
-## Decision 3: Runtime Configuration Source
-- Decision: Load model configuration from environment variables (model name, api_base, api_key, temperature, max_tokens), with defaults centralized in rag_agent/config.py.
-- Rationale: Environment variables are deployment-friendly, avoid secrets in code, and allow local vLLM and hosted APIs without code changes.
-- Alternatives considered: Hard-coded config constants (not portable), static JSON config file only (less secure for key management), CLI flag-only configuration (harder for orchestration environments).
+## Decision 3: Direct Consumer-to-Agent Dispatch
+- Decision: Consumer loop calls `agent.py` directly with typed inputs and receives typed output; no handler abstraction in primary flow.
+- Rationale: Removes indirection and makes poll -> process -> publish path easier to follow and maintain.
+- Alternatives considered: Keep handler abstraction/factory pattern (explicitly rejected in clarifications).
 
-## Decision 4: Agent Reasoning Loop Runtime
-- Decision: Implement the page-processing reasoning loop with LangGraph state transitions and tool nodes.
-- Rationale: LangGraph provides explicit stateful orchestration and deterministic control surfaces around non-deterministic LLM decisions.
-- Alternatives considered: Hand-rolled while loop with ad-hoc tool dispatch (less observable and harder to extend), LangChain AgentExecutor only (less explicit state graph control).
+## Decision 4: Kafka-Agnostic Agent
+- Decision: `agent.py` only returns processing output and never publishes to Kafka.
+- Rationale: Clean separation between business processing and transport behavior.
+- Alternatives considered: Agent-owned publish path (couples processing with transport).
 
-## Decision 5: Relevance Scoring Strategy
-- Decision: Use sentence-transformers all-MiniLM-L6-v2 loaded once at RAGAgent initialization; score page_content against user_prompt by cosine similarity.
-- Rationale: Lightweight embeddings with good semantic quality for educational-topic retrieval, minimizing repeated model load overhead.
-- Alternatives considered: Larger embedding models (higher latency/memory), keyword-only scoring (insufficient semantic match quality).
+## Decision 5: Simplified `helpers.py`
+- Decision: Keep `helpers.py` limited to environment-value extraction helpers; no classes and no validators.
+- Rationale: Matches simplification constraints and reduces unnecessary abstraction surface.
+- Alternatives considered: Config classes/validation layers in this phase (deferred).
 
-## Decision 6: Table Serialization Approach
-- Decision: Convert extracted 2D table matrices into Markdown tables in helpers.serialize_table_to_markdown.
-- Rationale: Markdown is the final output format and keeps table content directly usable in compilation context.
-- Alternatives considered: HTML tables (less consistent with output requirement), CSV serialization (loses contextual readability in compiled material).
+## Decision 6: Deferred Hardening as TODO Scope
+- Decision: Advanced validation, edge-case handling, and deep exception taxonomy remain deferred with explicit TODO markers.
+- Rationale: Current phase prioritizes core flow simplification and type-safe boundaries.
+- Alternatives considered: Full hardening now (scope expansion beyond clarified requirement).
 
-## Decision 7: Failure Handling and Status Derivation
-- Decision: Treat per-page and per-file extraction failures as non-fatal where possible; collect errors and derive output status as complete, partial, or failed.
-- Rationale: Planner requires actionable partial outputs when at least one file/page succeeds.
-- Alternatives considered: Fail-fast on first error (reduces usable output), silent skip without error list (breaks auditability).
-
-## Decision 8: Additional Libraries
-- Decision: Do not introduce additional external libraries beyond requested dependencies and pytest for testing.
-- Rationale: Current requirements are satisfiable with the selected stack; avoiding new dependencies keeps implementation risk low.
-- Alternatives considered: Adding PDF fixture-generation tooling; rejected for now because static sample assets satisfy testing requirements.
+## Deferred TODO Scope
+- Payload semantic validation beyond baseline schema checks.
+- Retry and backoff policy tuning for consume/process/publish failures.
+- Extended exception classes for transport and processing stages.
+- Additional metrics instrumentation and throughput counters.

@@ -6,7 +6,8 @@ import os
 from dataclasses import dataclass
 from dotenv import load_dotenv
 
-load_dotenv()  # loads .env from project root automatically
+load_dotenv()  # loads .env from project root
+load_dotenv(".env.local", override=False)  # loads local dev overrides; existing env vars win
 
 @dataclass(frozen=True)
 class LLMConfig:
@@ -85,3 +86,61 @@ def get_llm_config(output_mode: str) -> LLMConfig:
         temperature=_read_float("TEACHING_TEMPERATURE", 0.7),
         max_tokens=max_tokens,
     )
+
+
+# ---------------------------------------------------------------------------
+# Kafka runtime configuration
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class KafkaRuntimeConfig:
+    """Kafka connection config for the Teaching Agent worker.
+
+    Reads BACKEND_KAFKA_* env vars — the same cluster used by the backend service
+    and RAG agent. Uses teaching-agent-specific client_id and consumer_group_id.
+    """
+
+    bootstrap_servers: str
+    client_id: str = "teaching-agent"
+    security_protocol: str | None = None
+    consumer_group_id: str = "teaching-agent-consumer"
+    poll_timeout_ms: int = 1000
+
+    @classmethod
+    def from_env(cls, dotenv_path: str = ".env.local") -> "KafkaRuntimeConfig":
+        """Build Kafka runtime config from environment variables."""
+        from pathlib import Path
+        if Path(dotenv_path).exists():
+            load_dotenv(dotenv_path=dotenv_path, override=False)
+        bootstrap_servers = os.environ.get("BACKEND_KAFKA_BOOTSTRAP_SERVERS", "").strip()
+        if not bootstrap_servers:
+            raise RuntimeError("BACKEND_KAFKA_BOOTSTRAP_SERVERS is required")
+        return cls(
+            bootstrap_servers=bootstrap_servers,
+            security_protocol=os.environ.get("BACKEND_KAFKA_SECURITY_PROTOCOL") or None,
+            poll_timeout_ms=_read_int("BACKEND_KAFKA_POLL_TIMEOUT_MS", 1000),
+        )
+
+    def producer_kwargs(self) -> dict:
+        """Return kafka-python kwargs for the producer."""
+        kwargs: dict = {
+            "bootstrap_servers": self.bootstrap_servers,
+            "client_id": self.client_id,
+        }
+        if self.security_protocol:
+            kwargs["security_protocol"] = self.security_protocol
+        return kwargs
+
+    def consumer_kwargs(self) -> dict:
+        """Return kafka-python kwargs for the consumer."""
+        kwargs: dict = {
+            "bootstrap_servers": self.bootstrap_servers,
+            "client_id": self.client_id,
+            "group_id": self.consumer_group_id,
+            "auto_offset_reset": "earliest",
+            "enable_auto_commit": True,
+        }
+        if self.security_protocol:
+            kwargs["security_protocol"] = self.security_protocol
+        return kwargs

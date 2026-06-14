@@ -1,0 +1,15 @@
+{
+  "status": "ok",
+  "output_mode": "advanced",
+  "content": {
+    "explanation": "A 5-part expert-level explanation:\n1. Formal definition or specification: A loop is a control flow construct that allows code to be executed repeatedly based on a given condition.\n2. Internal mechanics and implementation details: Loops are typically implemented using a combination of conditional statements and jump instructions.\n3. Complexity analysis or performance characteristics: The time complexity of a loop is typically O(n), where n is the number of iterations, but can be optimized using techniques such as loop unrolling and caching.\n4. Edge cases, failure modes, and subtle invariants: Edge cases include infinite loops, which can occur when the loop condition is always true, and loop variable overflow, which can occur when the loop variable exceeds its maximum value.\n5. Relationship to related concepts or alternative approaches: Loops are related to recursion, which can be used to solve the same problems, but have different performance characteristics and use cases.",
+    "diagram": null,
+    "notes": "Key invariants: loop variables should be initialized before the loop, and the loop condition should be re-evaluated after each iteration.\nComplexity bounds: O(n) for a simple loop, but can be optimized to O(log n) or O(1) using techniques such as loop unrolling and caching.\nGotchas: infinite loops, loop variable overflow, and incorrect loop termination conditions.\nNon-obvious behaviour: the loop variable may not be incremented or decremented in the expected way, depending on the programming language and implementation.",
+    "example": "A non-trivial usage example: using a loop to implement a cache-aware matrix multiplication algorithm, which can achieve significant performance improvements over a naive implementation by minimizing cache misses and maximizing data locality.\nCommentary: this approach is chosen over simpler alternatives because it takes into account the underlying hardware architecture and optimizes the algorithm for performance, rather than just correctness."
+  },
+  "metadata": {
+    "topic": "What is a loop in programming?",
+    "tokens_used": 393,
+    "model": "groq/llama-3.3-70b-versatile"
+  }
+}

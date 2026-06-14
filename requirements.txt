@@ -1,7 +1,25 @@
+# --- Shared ---
 pydantic>=2.0
+python-dotenv>=1.0.0
+
+# --- RAG Agent ---
 pymupdf>=1.27.0
-sentence-transformers>=2.7.0
 litellm>=1.40.0
 langgraph>=0.2.0
+
+# --- Planner Agent ---
+# Add planner-specific dependencies here.
+
+# --- Teaching Agent ---
+litellm>=1.40.0
+kafka-python>=2.0.2
+
+# --- Backend Service ---
+fastapi>=0.110.0
+uvicorn>=0.29.0
+kafka-python>=2.0.2
+python-socketio>=5.11
+python-multipart>=0.0.9
+
+# --- Development / Testing ---
 pytest>=8.0.0
-python-dotenv>=1.0.0
