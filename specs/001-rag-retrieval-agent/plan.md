@@ -1,112 +1,95 @@
-# Implementation Plan: [FEATURE]
+# Implementation Plan: RAG Kafka Worker Boilerplate Reduction
 
-**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
-**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
-
-**Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
+**Branch**: `001-build-rag-retrieval-agent` | **Date**: 2026-06-14 | **Spec**: `specs/001-rag-retrieval-agent/spec.md`
+**Input**: Feature specification from `/specs/001-rag-retrieval-agent/spec.md`
 
 ## Summary
 
-[Extract from feature spec: primary requirement + technical approach from research]
+Refactor the RAG worker runtime to keep the same poll -> process -> publish functional flow while reducing boilerplate and indirection. The key changes are: remove Kafka Protocol stubs in favor of concrete kafka-python types, remove constructor-level dependency injection in `RAGWorker`, remove trivial Kafka wrapper functions, simplify `tools.py` to operate only on open `fitz.Document` handles, and inline poll/dispatch logic directly inside `_poll_loop`. Keep only basic exception handling and retain TODO markers for deferred hardening.
 
 ## Technical Context
 
-<!--
-  ACTION REQUIRED: Replace the content in this section with the technical details
-  for the project. The structure here is presented in advisory capacity to guide
-  the iteration process.
--->
-
-**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
-**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
-**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
-**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
-**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]  
-**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
-**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
-**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
+**Language/Version**: Python 3.11  
+**Primary Dependencies**: kafka-python, pydantic v2, PyMuPDF (`fitz`), LiteLLM, python-dotenv  
+**Storage**: N/A (Kafka topics are external transport; PDF files are local inputs)  
+**Testing**: pytest (`rag_agent/tests/`), ruff, compileall  
+**Target Platform**: Linux worker runtime (local docker-compose Kafka and CI Linux)  
+**Project Type**: Backend worker service (threaded Kafka consumer loop)  
+**Performance Goals**: startup topic check warning/readiness always logged; worker keeps polling without idle exit; p95 poll-to-completion within existing budget for this integration  
+**Constraints**: no FastAPI runtime ownership in RAG worker, no startup topic creation, direct consumer-to-agent dispatch, basic exception handling only, reduced abstraction surface, explicit type annotations at module boundaries  
+**Scale/Scope**: single RAG worker consuming `rag` and publishing `rag-complete`; code-reduction scope limited to `rag_agent/kafka.py`, `rag_agent/worker.py`, and `rag_agent/utils/tools.py`
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- Code Quality Gate: Define linting/formatting/static analysis checks and failure policy.
-- Testing Gate: Define required unit/integration/contract coverage for this feature and
-  regression test expectations.
-- UX Consistency Gate: Document which existing UX patterns, accessibility requirements, and
-  acceptance criteria apply.
-- Performance Gate: Define measurable budgets (latency/throughput/memory/render/startup as
-  applicable) and validation approach.
-- Maintainability Gate: Confirm observability and documentation updates for non-obvious
-  decisions.
+- Code Quality Gate: Pass `ruff check project rag_agent` and `ruff format --check project rag_agent`; reject changes that add new abstraction-only wrappers or dead code paths.
+- Testing Gate: Maintain/update tests for worker lifecycle, consume/process/publish path, startup topic checks, and contract payload behavior in `rag_agent/tests/`; run `pytest rag_agent/tests -q`.
+- UX Consistency Gate: N/A for direct end-user UI; for operator-facing behavior, logs must stay consistent (`startup_topic_check`, `consumed`, `processing_started`, `processing_completed`, `publish_completed`, `error`).
+- Performance Gate: Startup topic check must not block worker start when topics are missing; poll loop remains non-terminating on single-event failures.
+- Maintainability Gate: Remove unnecessary indirection (Protocol stubs, trivial wrappers, injected factories, batch dispatch helper), keep TODO markers for deferred hardening, and preserve clear module ownership.
+
+Post-Design Re-check (Phase 1): PASS
+- No unresolved clarifications remain.
+- Design artifacts align with FR-001 to FR-023 and SC-001 to SC-007.
+- Simplification decisions reduce code surface without changing core event flow.
 
 ## Project Structure
 
 ### Documentation (this feature)
 
 ```text
-specs/[###-feature]/
-├── plan.md              # This file (/speckit.plan command output)
-├── research.md          # Phase 0 output (/speckit.plan command)
-├── data-model.md        # Phase 1 output (/speckit.plan command)
-├── quickstart.md        # Phase 1 output (/speckit.plan command)
-├── contracts/           # Phase 1 output (/speckit.plan command)
-└── tasks.md             # Phase 2 output (/speckit.tasks command - NOT created by /speckit.plan)
+specs/001-rag-retrieval-agent/
+├── plan.md
+├── research.md
+├── data-model.md
+├── quickstart.md
+├── contracts/
+│   └── rag-agent-contract.md
+└── tasks.md
 ```
 
 ### Source Code (repository root)
-<!--
-  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
-  for this feature. Delete unused options and expand the chosen structure with
-  real paths (e.g., apps/admin, packages/something). The delivered plan must
-  not include Option labels.
--->
 
 ```text
-# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
-src/
-├── models/
-├── services/
-├── cli/
-└── lib/
+project/
+└── schemas.py
 
-tests/
-├── contract/
-├── integration/
-└── unit/
+rag_agent/
+├── agent.py
+├── kafka.py
+├── worker.py
+└── utils/
+    ├── content_helpers.py
+    ├── helpers.py
+    ├── llm_client.py
+    ├── prompts.py
+    └── tools.py
 
-# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
-backend/
-├── src/
-│   ├── models/
-│   ├── services/
-│   └── api/
-└── tests/
-
-frontend/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── services/
-└── tests/
-
-# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
-api/
-└── [same as backend above]
-
-ios/ or android/
-└── [platform-specific structure: feature modules, UI flows, platform tests]
+rag_agent/tests/
+├── test_request_event.py
+├── test_completion_event.py
+├── test_worker_runtime.py
+├── test_kafka_integration.py
+├── test_rag_agent.py
+└── test_logging.py
 ```
 
-**Structure Decision**: [Document the selected structure and reference the real
-directories captured above]
+**Structure Decision**: Keep the existing worker-centric layout and apply simplification in-place. Preserve `kafka.py` as transport boundary, `worker.py` as lifecycle orchestrator, `agent.py` as Kafka-agnostic processor, and `tools.py` as extraction/relevance utilities with reduced abstraction.
+
+## Phase 0: Research Output
+
+- Updated `research.md` with decisions for concrete Kafka type annotations, constructor simplification, wrapper cleanup strategy, document-only extraction APIs, and inlined poll/dispatch loop.
+
+## Phase 1: Design Output
+
+- Updated `data-model.md` to reflect removal of Protocol and callback-typed entities and to encode simplified ownership boundaries.
+- Updated `contracts/rag-agent-contract.md` to formalize retained vs removed functions and module boundaries.
+- Updated `quickstart.md` to document the streamlined runtime flow and implementation guardrails.
+- Updated agent context reference in `CLAUDE.md` to point to this plan.
 
 ## Complexity Tracking
 
-> **Fill ONLY if Constitution Check has violations that must be justified**
-
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |-----------|------------|-------------------------------------|
-| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
-| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
+| None | N/A | N/A |

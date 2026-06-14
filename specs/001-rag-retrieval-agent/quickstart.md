@@ -46,9 +46,17 @@ Expected startup sequence:
 
 For each consumed request event:
 1. consumer loop receives payload from `rag`
-2. consumer loop calls `agent.py` directly
+2. `_poll_loop` dispatches directly to `process_request_event` (no `process_consumer_batch` indirection)
+3. `process_request_event` calls `agent.py` directly
 3. `agent.py` returns output only (no Kafka publishing)
 4. consumer loop publishes completion event to `rag-complete` via `kafka.py`
+
+Implementation simplification notes:
+- `kafka.py` keeps only logic-bearing functions (create producer/consumer, topic check, publish complete)
+- trivial consume/close wrappers are removed
+- Kafka boundaries use concrete `KafkaConsumer`/`KafkaProducer` types
+- `RAGWorker` constructor does not accept injectable factories
+- `tools.py` extraction APIs accept open `fitz.Document` only
 
 ## 6. Smoke-test payload
 

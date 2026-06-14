@@ -26,6 +26,14 @@ Simplify the RAGRequestEventHandler by only focusing on ingesting Kafka events a
 - Q: Should `agent.py` publish to Kafka directly? → A: No. `agent.py` only returns processing output; the consumer loop publishes the completion event.
 - Q: How should `helpers.py` be simplified? → A: Keep only environment-variable extraction helper functions; remove classes and validators, and defer advanced validation/exception behavior as TODO tasks.
 
+### Session 2026-06-14
+
+- Q: Should `kafka.py` Protocol stubs (`KafkaConsumerProtocol`, `KafkaProducerProtocol`, `ConsumerRecordProtocol`) be kept? → A: No. Remove all three Protocol stubs; annotate with concrete `KafkaConsumer` / `KafkaProducer` types from `kafka-python` directly. Eliminates ~35 lines of structural typing for a single concrete implementation.
+- Q: Should `RAGWorker.__init__` retain injectable factory callables (`producer_factory`, `consumer_factory`, `request_processor`)? → A: No. Remove all three injectable parameters; call `create_producer`, `create_consumer`, and `process_request_event` directly inside the worker. Tests monkeypatch those module-level functions instead.
+- Q: Should trivial one-line wrapper functions in `kafka.py` (`consumer_subscribe_rag`, `poll_records`, `close_consumer`, `close_producer`) be retained? → A: No. Remove those four wrappers; call `consumer.subscribe()`, `consumer.poll()`, and `.close()` at the call sites. Keep the logic-bearing functions (`create_producer`, `create_consumer`, `publish_rag_complete`, `check_required_topics`) and inline `apply_kafka_security_options` from `helpers.py` directly into `kafka.py`'s private kwargs builders.
+- Q: Should `tools.py` retain `_with_optional_open` and the str-path branching that lets callers pass a file path or an open `fitz.Document`? → A: No. Remove `_with_optional_open` and all path-string support; extraction functions accept only `fitz.Document` directly. The agent always passes an open document; the str-path branch is dead code.
+- Q: Should `process_consumer_batch` remain a standalone function passed as a callable into `_poll_loop`? → A: No. Remove `process_consumer_batch`; inline the poll-and-dispatch logic directly into `_poll_loop`. Eliminates the function and the `processor` parameter threading through the call chain.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Run RAG as a Kafka Worker Process (Priority: P1)
@@ -83,6 +91,8 @@ As a maintainer, I need the consumer loop to call the RAG agent directly and pub
 - Consumer receives malformed event payloads while strict validation is deferred.
 - Duplicate request events arrive for the same request identifier.
 - RAG pipeline execution fails for one event while worker must continue processing subsequent events.
+- `fitz.Document` handle is `None` or already-closed when extraction functions are called (caller responsibility; document lifecycle is managed by `agent.py`).
+- Monkeypatched module-level functions in tests (`create_producer`, `create_consumer`, `process_request_event`) must be restored between test cases to avoid state leakage.
 
 ## Requirements *(mandatory)*
 
@@ -96,18 +106,21 @@ As a maintainer, I need the consumer loop to call the RAG agent directly and pub
 - **FR-006**: The system MUST consume request events from topic `rag` and dispatch them to the existing RAG pipeline path.
 - **FR-007**: The system MUST publish completion events to topic `rag-complete` after each processing attempt reaches terminal state.
 - **FR-008**: The system MUST remove the request handler abstraction; the consumer loop MUST ingest Kafka events and dispatch directly to `agent.py`.
-- **FR-009**: Public function interfaces in the worker, `kafka.py`, `agent.py`, and helper modules MUST use explicit typed inputs and outputs and SHOULD avoid untyped generic placeholders.
+- **FR-009**: Public function interfaces in the worker, `kafka.py`, `agent.py`, and helper modules MUST use explicit typed inputs and outputs and SHOULD avoid untyped generic placeholders. Concrete `kafka-python` types (`KafkaConsumer`, `KafkaProducer`) MUST be used directly for all Kafka-related type annotations; structural Protocol stubs (`KafkaConsumerProtocol`, `KafkaProducerProtocol`, `ConsumerRecordProtocol`) MUST be removed.
 - **FR-010**: The worker MUST continue processing after single-event failures and MUST log error stages without terminating the process.
 - **FR-011**: The system MUST support clean shutdown by stopping the consumer loop thread and closing Kafka producer/consumer resources.
 - **FR-012**: The runtime MUST remove non-functional `service.py` from active structure and rely on a simplified worker-centric module layout.
 - **FR-013**: The worker startup path in `worker.py` MUST initialize the threaded consumer loop and perform a direct Kafka topic presence check before entering steady-state polling.
-- **FR-014**: The `kafka.py` module MUST initialize Kafka connector settings from environment variables directly and MUST expose producer/consumer creation functions.
-- **FR-015**: Producer/consumer-associated helper functions MUST live only in `kafka.py`; other modules MUST use those functions rather than owning Kafka client lifecycle.
+- **FR-014**: The `kafka.py` module MUST initialize Kafka connector settings from environment variables directly and MUST expose producer/consumer creation functions (`create_producer`, `create_consumer`), a completion-event publisher (`publish_rag_complete`), and a topic-presence checker (`check_required_topics`). Trivial one-line wrapper functions (`consumer_subscribe_rag`, `poll_records`, `close_consumer`, `close_producer`) MUST be removed; callers MUST invoke consumer and producer methods directly.
+- **FR-015**: Security option application (`apply_kafka_security_options`) MUST be inlined directly into `kafka.py`'s private kwargs builder functions and MUST be removed from `helpers.py`. No other module should own Kafka client lifecycle or security-option wiring.
 - **FR-016**: The `agent.py` module MUST remain Kafka-agnostic and MUST only return processing output; it MUST NOT publish events directly.
-- **FR-017**: `helpers.py` MUST be simplified to environment-variable extraction functions only; classes and validator abstractions are out of scope for this phase and should be tracked as TODO tasks if needed later.
+- **FR-017**: `helpers.py` MUST contain only environment-variable extraction helper functions (`get_text_llm_config`, `get_vlm_config`, `get_embedding_config`, `get_kafka_runtime_config`, and private `_read_*` helpers). Security-option application MUST be moved to `kafka.py`. All class-based abstractions and validators are out of scope and MUST be deferred as TODO tasks if needed.
 - **FR-018**: The system MUST define stable event contract expectations for inbound request and outbound completion messages.
 - **FR-019**: The system MUST define measurable performance and reliability expectations for poll-to-completion throughput and emission success.
 - **FR-020**: The system MUST define observability requirements for lifecycle stages across startup checks, consume, process, publish, and failures.
+- **FR-021**: `RAGWorker.__init__` MUST NOT accept injectable factory callables (`producer_factory`, `consumer_factory`, `request_processor`). The worker MUST call `create_producer`, `create_consumer`, and `process_request_event` directly. Test isolation MUST be achieved by monkeypatching those module-level functions rather than injecting alternatives through the constructor.
+- **FR-022**: `process_consumer_batch` MUST be removed as a standalone function. Poll-and-dispatch logic MUST be inlined directly into `_poll_loop`, eliminating the processor-callable indirection and the `RequestProcessor` type alias.
+- **FR-023**: Extraction functions in `tools.py` (`extract_text_from_page`, `extract_tables_from_page`, `extract_images_from_page`) MUST accept only an open `fitz.Document` object. The `_with_optional_open` helper and all path-string branching MUST be removed. The `open_pdf` utility function MAY remain as the caller-side document opener. The `_page_from_source` internal guard (`if page_number < 1`) MUST be removed; the agent guarantees 1-based page numbers from its own loop.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -116,7 +129,9 @@ As a maintainer, I need the consumer loop to call the RAG agent directly and pub
 - **WorkerRuntimeState**: Process-level state tracking loop status, startup topic check outcome, and shutdown signals.
 - **TopicPresenceCheckResult**: Startup check output identifying required topics, discovered topics, and missing-topic warnings.
 - **RequestLifecycleLogEntry**: Structured lifecycle record with request correlation and stage metadata.
-- **KafkaRuntimeGateway**: Functions in `kafka.py` responsible for env-based connector initialization and for creating/using producer and consumer objects.
+- **KafkaRuntimeGateway**: Functions in `kafka.py` responsible for env-based connector initialization and for creating/using producer and consumer objects. Annotated with concrete `KafkaConsumer` / `KafkaProducer` types; no Protocol stubs.
+- ~~`KafkaConsumerProtocol` / `KafkaProducerProtocol` / `ConsumerRecordProtocol`~~: **Removed.** Structural typing stubs replaced by concrete kafka-python types (FR-009).
+- ~~`RequestProcessor`~~: **Removed.** Type alias and injectable callback pattern replaced by direct function calls (FR-021, FR-022).
 
 ## Success Criteria *(mandatory)*
 
@@ -128,6 +143,7 @@ As a maintainer, I need the consumer loop to call the RAG agent directly and pub
 - **SC-004**: 100% of single-event failures are logged without terminating the worker process.
 - **SC-005**: Under representative load, p95 poll-to-completion latency remains within the agreed budget for this integration.
 - **SC-006**: 100% of exported function boundaries in worker Kafka modules are type-annotated in implementation review.
+- **SC-007**: After boilerplate reduction, the combined line count across `kafka.py`, `worker.py`, and `tools.py` MUST decrease (no new abstractions or stubs introduced to compensate for removed ones).
 
 ## Assumptions
 

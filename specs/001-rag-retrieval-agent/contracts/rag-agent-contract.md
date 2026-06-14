@@ -39,9 +39,27 @@ Primary flow:
 ## Module Ownership Contract
 
 - `worker.py`: startup orchestration, thread lifecycle, and consume/process/publish loop control
-- `kafka.py`: Kafka connector init, producer/consumer objects, and helper functions for consume/publish/check
+- `kafka.py`: Kafka connector init, producer/consumer objects, topic-check and completion-publish functions
 - `agent.py`: processing logic only; returns output payload data and does not publish to Kafka
-- `helpers.py`: environment extraction helper functions only; no classes and no validators in this phase
+- `helpers.py`: environment extraction helper functions only; no classes, validators, or Kafka security wiring in this phase
+
+### `kafka.py` Function Contract
+
+Retained (required):
+- `create_producer(...)`
+- `create_consumer(...)`
+- `publish_rag_complete(...)`
+- `check_required_topics(...)`
+
+Removed (boilerplate wrappers):
+- `consumer_subscribe_rag(...)`
+- `poll_records(...)`
+- `close_consumer(...)`
+- `close_producer(...)`
+
+Type annotation rule:
+- Public Kafka boundaries use concrete `KafkaConsumer` and `KafkaProducer` types.
+- Protocol stubs (`KafkaConsumerProtocol`, `KafkaProducerProtocol`, `ConsumerRecordProtocol`) are out of scope.
 
 ## Incoming Event Contract (`rag`)
 
@@ -78,10 +96,16 @@ Baseline completion payload:
 
 ## Type Safety Contract
 
-Public function boundaries in `worker.py`, `kafka.py`, `agent.py`, and helper modules use explicit type annotations and avoid untyped placeholders where practical.
+Public function boundaries in `worker.py`, `kafka.py`, `agent.py`, and helper modules use explicit type annotations and avoid untyped placeholders where practical. Concrete kafka-python types are used directly for Kafka boundaries.
 
 ## Failure and Deferred Scope Contract
 
 - Per-event failures are non-fatal; loop continues.
 - Missing topics at startup are warning-level only.
 - Advanced validation, edge-case hardening, and deep exception handling are deferred and represented by TODO tasks in implementation.
+
+## Loop Simplification Contract
+
+- `process_consumer_batch` helper abstraction is removed.
+- `_poll_loop` in `worker.py` owns direct poll-and-dispatch execution.
+- `RAGWorker.__init__` does not expose injectable factory arguments; tests monkeypatch module-level functions instead.

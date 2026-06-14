@@ -30,6 +30,31 @@
 - Rationale: Current phase prioritizes core flow simplification and type-safe boundaries.
 - Alternatives considered: Full hardening now (scope expansion beyond clarified requirement).
 
+## Decision 7: Use Concrete Kafka Types, Remove Protocol Stubs
+- Decision: Remove `KafkaConsumerProtocol`, `KafkaProducerProtocol`, and `ConsumerRecordProtocol` from `kafka.py`; annotate public function boundaries with concrete kafka-python types.
+- Rationale: Worker runtime has one concrete transport implementation; structural stubs add boilerplate with no runtime value.
+- Alternatives considered: Keep Protocol-based typing for flexibility (rejected due to unnecessary abstraction in current scope).
+
+## Decision 8: Simplify `RAGWorker` Constructor Surface
+- Decision: Remove injectable constructor callables (`producer_factory`, `consumer_factory`, `request_processor`) from `RAGWorker`; call module-level functions directly.
+- Rationale: Direct flow improves readability and keeps lifecycle orchestration straightforward.
+- Alternatives considered: Keep injection for testability (rejected; tests can monkeypatch module-level functions).
+
+## Decision 9: Keep Kafka Ownership, Remove Trivial Wrappers
+- Decision: Retain logic-bearing Kafka functions (`create_producer`, `create_consumer`, `publish_rag_complete`, `check_required_topics`) and remove trivial one-line wrappers (`consumer_subscribe_rag`, `poll_records`, `close_consumer`, `close_producer`).
+- Rationale: Preserves clear transport ownership while reducing no-op indirection.
+- Alternatives considered: Keep all wrappers for naming consistency (rejected; method calls are already explicit).
+
+## Decision 10: Document-Only Extraction APIs in `tools.py`
+- Decision: Remove `_with_optional_open` and path-string branching; extraction functions accept only open `fitz.Document` values.
+- Rationale: Agent flow already opens documents upfront; path-or-document polymorphism is unused boilerplate.
+- Alternatives considered: Keep dual input support (rejected; dead path adds complexity and extra validation code).
+
+## Decision 11: Inline Poll-and-Dispatch in `_poll_loop`
+- Decision: Remove standalone `process_consumer_batch`; place poll-and-dispatch logic directly in `_poll_loop`.
+- Rationale: Reduces call chaining and makes runtime behavior easier to read.
+- Alternatives considered: Keep helper function for reuse (rejected; no second caller exists).
+
 ## Deferred TODO Scope
 - Payload semantic validation beyond baseline schema checks.
 - Retry and backoff policy tuning for consume/process/publish failures.

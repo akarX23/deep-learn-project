@@ -46,15 +46,25 @@
 - Fields:
   - `running`: bool
   - `stop_event_set`: bool
-  - `consumer_thread_alive`: bool
-  - `startup_check_complete`: bool
+  - `poll_thread_alive`: bool
+  - `startup_topic_check_complete`: bool
+  - `startup_topic_check_warnings`: list[str]
 
 ### KafkaRuntimeGateway
-- Description: Function-level boundary in `rag_agent/kafka.py` for env-based connector setup, producer/consumer creation, poll, and publish operations.
+- Description: Function-level boundary in `rag_agent/kafka.py` for env-based connector setup, producer/consumer creation, topic checks, and publish operations.
 - Responsibilities:
   - Read Kafka env values directly
   - Create consumer and producer objects
-  - Expose consume/publish helper functions for other modules
+  - Expose startup topic check and completion publish functions
+  - Apply Kafka security options inside `kafka.py` private kwargs builders (no helper indirection in `helpers.py`)
+
+### Kafka Client Types
+- Description: Concrete transport client types used at public module boundaries.
+- Types:
+  - `KafkaConsumer`
+  - `KafkaProducer`
+- Model note:
+  - Protocol stubs are removed from runtime data model scope.
 
 ### HelpersEnvValues
 - Description: Values returned by simple env extraction helper functions in `helpers.py`.
@@ -64,7 +74,7 @@
 ## Relationships
 - One `RAGRequestEvent` maps to one `RAGCompletionEvent` per terminal processing attempt.
 - `worker.py` orchestrates startup check and threaded loop.
-- `kafka.py` owns Kafka transport functions used by worker.
+- `kafka.py` owns Kafka transport functions used by worker (without trivial one-line wrappers).
 - `agent.py` remains Kafka-agnostic and returns processing output only.
 
 ## State Transitions
@@ -80,3 +90,9 @@
 2. `processing_started` -> `processing_completed`
 3. `processing_completed` -> `publish_completed`
 4. any state -> `error` (non-fatal for worker runtime)
+
+### Poll loop execution
+1. worker thread enters `_poll_loop`
+2. `_poll_loop` calls `consumer.poll(timeout_ms=...)`
+3. `_poll_loop` validates and dispatches each record directly to `process_request_event`
+4. loop continues on per-record and per-iteration exceptions
