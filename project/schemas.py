@@ -408,6 +408,29 @@ class TeachingAgentOutput(BaseModel):
             raise ValueError("status must be 'ok' or 'error'")
         return value
 
+# class TeachingCompletionEvent(BaseModel):
+#     """Kafka completion payload published by the Teaching Agent to 'teaching-complete'."""
+
+#     request_id: str
+#     session_ctx: dict[str, Any]
+#     topic: str
+#     output_mode: str
+#     status: str
+#     content: Optional[TeachingContent] = None
+#     tokens_used: int = Field(default=0, ge=0)
+#     model: str
+#     started_at: str
+#     completed_at: str
+#     duration_ms: int = Field(default=0, ge=0)
+#     errors: List[str] = Field(default_factory=list)
+#     source: str = "teaching-agent"
+
+#     @field_validator("request_id", "topic", "output_mode", "model", "started_at", "completed_at")
+#     @classmethod
+#     def validate_non_empty_fields(cls, value: str) -> str:
+#         if not value.strip():
+#             raise ValueError("value cannot be empty")
+#         return value
 
 # ---------------------------------------------------------------------------
 # Quiz Agent schemas
@@ -559,31 +582,6 @@ class QuizAgentInput(BaseModel):
             raise ValueError("value cannot be empty")
         return value
     
-
-class TeachingCompletionEvent(BaseModel):
-    """Kafka completion payload published by the Teaching Agent to 'teaching-complete'."""
-
-    request_id: str
-    session_ctx: dict[str, Any]
-    topic: str
-    output_mode: str
-    status: str
-    content: Optional[TeachingContent] = None
-    tokens_used: int = Field(default=0, ge=0)
-    model: str
-    started_at: str
-    completed_at: str
-    duration_ms: int = Field(default=0, ge=0)
-    errors: List[str] = Field(default_factory=list)
-    source: str = "teaching-agent"
-
-    @field_validator("request_id", "topic", "output_mode", "model", "started_at", "completed_at")
-    @classmethod
-    def validate_non_empty_fields(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("value cannot be empty")
-        return value
-
 
 class QuizAgentOutput(BaseModel):
     """Output payload returned by both phases of the Quiz Agent."""
