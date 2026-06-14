@@ -1,4 +1,4 @@
-# Data Model: RAG Kafka Worker Simplification
+# Data Model: RAG Agent Parallel Page Processing
 
 ## Entities
 
@@ -11,9 +11,47 @@
   - `file_paths`: list[str]
   - `created_at`: str | None
   - `source`: str | None
+
+### PagePointer
+- Description: Unit of per-page work derived from input documents.
+- Fields:
+  - `file_path`: str
+  - `file_name`: str
+  - `page_number`: int (1-based)
 - Validation rules:
-  - Baseline schema validation remains in shared schemas.
-  - Additional semantic validation is deferred as TODO scope.
+  - `page_number >= 1`
+  - Derived only from opened document page counts.
+
+### PageTaskResult
+- Description: Per-page output produced by independent page processing.
+- Fields:
+  - `page`: `ExtractedPage`
+  - `retained_payload`: dict[str, object] | None
+  - `errors`: list[str]
+  - `pointer_order`: int
+- Validation rules:
+  - `pointer_order` maps to original pointer sequence for deterministic reduce.
+
+### ParallelExecutionConfig
+- Description: Runtime page-concurrency settings resolved from environment.
+- Fields:
+  - `page_parallelism`: int
+  - `raw_env_value`: str | None
+  - `used_default`: bool
+- Validation rules:
+  - Missing/invalid env -> `page_parallelism = 4`
+  - Effective minimum -> `max(1, page_parallelism)`
+
+### AgentState (LangGraph)
+- Description: State payload passed through LangGraph nodes.
+- Fields:
+  - `request`: `RAGAgentInput`
+  - `pointers`: list[`PagePointer`]
+  - `page_results`: list[`PageTaskResult`]
+  - `retained_pages`: list[dict[str, object]]
+  - `extracted_pages`: list[`ExtractedPage`]
+  - `errors`: list[str]
+  - `parallelism`: int
 
 ### RAGCompletionEvent
 - Description: Outgoing Kafka payload produced to topic `rag-complete`.
@@ -31,68 +69,24 @@
   - `duration_ms`: int
   - `source`: str
 
-### TopicPresenceCheckResult
-- Description: Startup check result based on Kafka metadata query.
-- Fields:
-  - `required_topics`: list[str]
-  - `existing_topics`: list[str]
-  - `missing_topics`: list[str]
-  - `warning_message`: str | None
-- Validation rules:
-  - Missing topics generate warnings but do not block worker startup.
-
-### WorkerRuntimeState
-- Description: Process-level runtime state for threaded consumer operation.
-- Fields:
-  - `running`: bool
-  - `stop_event_set`: bool
-  - `poll_thread_alive`: bool
-  - `startup_topic_check_complete`: bool
-  - `startup_topic_check_warnings`: list[str]
-
-### KafkaRuntimeGateway
-- Description: Function-level boundary in `rag_agent/kafka.py` for env-based connector setup, producer/consumer creation, topic checks, and publish operations.
-- Responsibilities:
-  - Read Kafka env values directly
-  - Create consumer and producer objects
-  - Expose startup topic check and completion publish functions
-  - Apply Kafka security options inside `kafka.py` private kwargs builders (no helper indirection in `helpers.py`)
-
-### Kafka Client Types
-- Description: Concrete transport client types used at public module boundaries.
-- Types:
-  - `KafkaConsumer`
-  - `KafkaProducer`
-- Model note:
-  - Protocol stubs are removed from runtime data model scope.
-
-### HelpersEnvValues
-- Description: Values returned by simple env extraction helper functions in `helpers.py`.
-- Model note:
-  - No config classes and no validators in `helpers.py` for this phase.
-
 ## Relationships
-- One `RAGRequestEvent` maps to one `RAGCompletionEvent` per terminal processing attempt.
-- `worker.py` orchestrates startup check and threaded loop.
-- `kafka.py` owns Kafka transport functions used by worker (without trivial one-line wrappers).
-- `agent.py` remains Kafka-agnostic and returns processing output only.
+
+- One `RAGRequestEvent` expands to many `PagePointer` items.
+- Each `PagePointer` yields one `PageTaskResult`.
+- Reduced `PageTaskResult` collection produces final `RAGCompletionEvent` content.
 
 ## State Transitions
 
-### Worker lifecycle
-1. `starting` -> `checking_topics`
-2. `checking_topics` -> `running` (ready or warning message)
-3. `running` -> `stopping`
-4. `stopping` -> `stopped`
+### Agent execution
+1. `initialized` -> `documents_opened`
+2. `documents_opened` -> `pointers_built`
+3. `pointers_built` -> `pages_dispatched_parallel`
+4. `pages_dispatched_parallel` -> `results_reduced`
+5. `results_reduced` -> `material_compiled`
+6. `material_compiled` -> `completed`
 
-### Request lifecycle
-1. `consumed` -> `processing_started`
-2. `processing_started` -> `processing_completed`
-3. `processing_completed` -> `publish_completed`
-4. any state -> `error` (non-fatal for worker runtime)
-
-### Poll loop execution
-1. worker thread enters `_poll_loop`
-2. `_poll_loop` calls `consumer.poll(timeout_ms=...)`
-3. `_poll_loop` validates and dispatches each record directly to `process_request_event`
-4. loop continues on per-record and per-iteration exceptions
+### Parallel dispatch lifecycle
+1. pointer emitted for processing
+2. page extraction/relevance task runs independently
+3. task result emitted to reducer
+4. reducer merges in deterministic pointer order

@@ -1,4 +1,4 @@
-# Quickstart: RAG Kafka Worker Simplification
+# Quickstart: RAG Agent Parallel Page Processing
 
 ## 1. Install dependencies
 
@@ -6,9 +6,9 @@
 pip install -r requirements.txt
 ```
 
-## 2. Configure Kafka environment
+## 2. Configure environment
 
-Set Kafka connection values in `.env.local`:
+Set runtime values in `.env.local`:
 
 ```env
 BACKEND_KAFKA_BOOTSTRAP_SERVERS=localhost:9092
@@ -18,11 +18,12 @@ BACKEND_KAFKA_SASL_MECHANISM=
 BACKEND_KAFKA_SASL_USERNAME=
 BACKEND_KAFKA_SASL_PASSWORD=
 BACKEND_KAFKA_SSL_CAFILE=
+RAG_PAGE_PARALLELISM=4
 ```
 
-Notes:
-- `kafka.py` reads these values directly.
-- No backend topic-creation API call is used in this flow.
+Parallelism behavior:
+- missing/invalid `RAG_PAGE_PARALLELISM` -> default `4`
+- values below `1` are clamped to `1`
 
 ## 3. Start local Kafka (optional)
 
@@ -42,25 +43,17 @@ Expected startup sequence:
 3. missing-topic warnings are logged (startup continues)
 4. threaded consumer loop starts polling `rag`
 
-## 5. Event processing flow
+## 5. Request processing flow
 
 For each consumed request event:
-1. consumer loop receives payload from `rag`
-2. `_poll_loop` dispatches directly to `process_request_event` (no `process_consumer_batch` indirection)
-3. `process_request_event` calls `agent.py` directly
-4. `agent.py` returns output only (no Kafka publishing)
-5. consumer loop publishes completion event to `rag-complete` via `kafka.py`
-
-Implementation simplification notes:
-- `kafka.py` keeps only logic-bearing functions (create producer/consumer, topic check, publish complete)
-- trivial consume/close wrappers are removed
-- Kafka boundaries use concrete `KafkaConsumer`/`KafkaProducer` types
-- `RAGWorker` constructor does not accept injectable factories
-- `tools.py` extraction APIs accept open `fitz.Document` only
+1. worker receives payload from `rag`
+2. worker dispatches request to `process_request_event`
+3. `agent.py` opens documents and builds page pointers
+4. LangGraph StateGraph dispatches page processing in bounded parallel mode
+5. per-page results are reduced and compiled into final material
+6. worker publishes completion event to `rag-complete`
 
 ## 6. Smoke-test payload
-
-Example request payload on `rag`:
 
 ```json
 {
@@ -71,15 +64,11 @@ Example request payload on `rag`:
 }
 ```
 
-## 7. Verify logs
+## 7. Validate bounded concurrency behavior
 
-Check lifecycle stages:
-- `startup_topic_check`
-- `consumed`
-- `processing_started`
-- `processing_completed`
-- `publish_completed`
-- `error`
+- Use a request with multiple pages and verify processing overlaps in logs.
+- Confirm in-flight page tasks do not exceed `RAG_PAGE_PARALLELISM`.
+- Confirm output status and extracted page semantics match prior behavior.
 
 ## 8. Run validation checks
 
@@ -92,4 +81,4 @@ Check lifecycle stages:
 
 ## 9. Deferred scope reminders
 
-Advanced validation, richer edge-case handling, and deeper exception taxonomy are intentionally deferred and should be tracked as TODO implementation tasks.
+Advanced retry policy tuning, rich metrics instrumentation, and expanded exception taxonomy remain TODO scope.

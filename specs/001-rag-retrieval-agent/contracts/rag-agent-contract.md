@@ -1,12 +1,12 @@
-# Contract: RAG Kafka Worker Integration
+# Contract: RAG Kafka Worker Integration (Parallel Page Update)
 
 ## Purpose
 
-Define runtime and event contracts for the simplified worker architecture where `worker.py` orchestrates consume/process/publish directly, `kafka.py` owns Kafka transport functions, and `agent.py` remains Kafka-agnostic.
+Define runtime and event contracts for worker-managed Kafka flow and LangGraph-managed parallel page processing inside `agent.py`.
 
 ## Environment Contract
 
-`kafka.py` reads Kafka settings from environment values directly:
+Kafka runtime settings (existing):
 - `BACKEND_KAFKA_BOOTSTRAP_SERVERS` (required)
 - `BACKEND_KAFKA_CLIENT_ID` (optional)
 - `BACKEND_KAFKA_SECURITY_PROTOCOL` (optional)
@@ -15,55 +15,43 @@ Define runtime and event contracts for the simplified worker architecture where 
 - `BACKEND_KAFKA_SASL_PASSWORD` (optional)
 - `BACKEND_KAFKA_SSL_CAFILE` (optional)
 
-Removed from active contract:
-- backend topic bootstrap API URL dependencies
-- startup topic creation flow
+Agent parallelism setting (new):
+- `RAG_PAGE_PARALLELISM` (optional)
+  - missing/invalid -> default `4`
+  - effective value clamped to minimum `1`
 
 ## Topic Contract
 
-Topic names come from centralized registry in `project/topics.py`:
+Topic names from `project/topics.py`:
 - request topic: `rag`
 - completion topic: `rag-complete`
 
 ## Runtime Flow Contract
 
-Primary flow:
-1. `worker.py` starts
-2. `worker.py` invokes `kafka.py` env/config + producer/consumer setup helpers
-3. `worker.py` runs startup topic presence check via `kafka.py`
-4. worker logs warning and continues if topics are missing
-5. threaded consumer loop polls events from `rag`
-6. consumer loop calls `agent.py` directly
-7. consumer loop publishes completion to `rag-complete` via `kafka.py`
+1. `worker.py` starts and initializes Kafka producer/consumer.
+2. startup topic presence check runs; missing topics emit warning but do not block startup.
+3. worker poll loop consumes from `rag`.
+4. worker dispatches request to `agent.py`.
+5. `agent.py` uses LangGraph StateGraph to process pages in bounded parallel fashion.
+6. `agent.py` returns output payload only (Kafka-agnostic).
+7. worker publishes completion event to `rag-complete`.
+
+## Parallel Page Processing Contract
+
+- Pages are processed independently and may execute concurrently.
+- Maximum in-flight page processing is bounded by configured parallelism.
+- No separate page-batching orchestration layer is introduced in agent logic.
+- Per-page extraction/relevance/status logic remains behaviorally equivalent to prior sequential implementation.
+- Reduction stage must preserve deterministic result ordering for stable outputs.
 
 ## Module Ownership Contract
 
-- `worker.py`: startup orchestration, thread lifecycle, and consume/process/publish loop control
-- `kafka.py`: Kafka connector init, producer/consumer objects, topic-check and completion-publish functions
-- `agent.py`: processing logic only; returns output payload data and does not publish to Kafka
-- `helpers.py`: environment extraction helper functions only; no classes, validators, or Kafka security wiring in this phase
-
-### `kafka.py` Function Contract
-
-Retained (required):
-- `create_producer(...)`
-- `create_consumer(...)`
-- `publish_rag_complete(...)`
-- `check_required_topics(...)`
-
-Removed (boilerplate wrappers):
-- `consumer_subscribe_rag(...)`
-- `poll_records(...)`
-- `close_consumer(...)`
-- `close_producer(...)`
-
-Type annotation rule:
-- Public Kafka boundaries use concrete `KafkaConsumer` and `KafkaProducer` types.
-- Protocol stubs (`KafkaConsumerProtocol`, `KafkaProducerProtocol`, `ConsumerRecordProtocol`) are out of scope.
+- `worker.py`: startup orchestration, thread lifecycle, consume/process/publish control.
+- `kafka.py`: Kafka connector setup, producer/consumer creation, topic checks, completion publishing.
+- `agent.py`: page extraction orchestration and material compilation; no Kafka publishing.
+- `helpers.py`: environment extraction helpers, including page-parallelism extraction policy.
 
 ## Incoming Event Contract (`rag`)
-
-Baseline request payload:
 
 ```json
 {
@@ -75,8 +63,6 @@ Baseline request payload:
 ```
 
 ## Outgoing Event Contract (`rag-complete`)
-
-Baseline completion payload:
 
 ```json
 {
@@ -96,16 +82,10 @@ Baseline completion payload:
 
 ## Type Safety Contract
 
-Public function boundaries in `worker.py`, `kafka.py`, `agent.py`, and helper modules use explicit type annotations and avoid untyped placeholders where practical. Concrete kafka-python types are used directly for Kafka boundaries.
+Public boundaries remain explicitly typed. Kafka boundaries use concrete `KafkaConsumer` and `KafkaProducer` types. Agent state and page task structures remain typed for predictable merge behavior.
 
 ## Failure and Deferred Scope Contract
 
-- Per-event failures are non-fatal; loop continues.
-- Missing topics at startup are warning-level only.
-- Advanced validation, edge-case hardening, and deep exception handling are deferred and represented by TODO tasks in implementation.
-
-## Loop Simplification Contract
-
-- `process_consumer_batch` helper abstraction is removed.
-- `_poll_loop` in `worker.py` owns direct poll-and-dispatch execution.
-- `RAGWorker.__init__` does not expose injectable factory arguments; tests monkeypatch module-level functions instead.
+- Per-event processing failures are non-fatal for worker runtime.
+- Startup missing topics are warning-level only.
+- Advanced retries/metrics and richer exception taxonomies remain deferred TODO scope.

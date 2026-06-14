@@ -33,6 +33,8 @@ Simplify the RAGRequestEventHandler by only focusing on ingesting Kafka events a
 - Q: Should trivial one-line wrapper functions in `kafka.py` (`consumer_subscribe_rag`, `poll_records`, `close_consumer`, `close_producer`) be retained? → A: No. Remove those four wrappers; call `consumer.subscribe()`, `consumer.poll()`, and `.close()` at the call sites. Keep the logic-bearing functions (`create_producer`, `create_consumer`, `publish_rag_complete`, `check_required_topics`) and inline `apply_kafka_security_options` from `helpers.py` directly into `kafka.py`'s private kwargs builders.
 - Q: Should `tools.py` retain `_with_optional_open` and the str-path branching that lets callers pass a file path or an open `fitz.Document`? → A: No. Remove `_with_optional_open` and all path-string support; extraction functions accept only `fitz.Document` directly. The agent always passes an open document; the str-path branch is dead code.
 - Q: Should `process_consumer_batch` remain a standalone function passed as a callable into `_poll_loop`? → A: No. Remove `process_consumer_batch`; inline the poll-and-dispatch logic directly into `_poll_loop`. Eliminates the function and the `processor` parameter threading through the call chain.
+- Q: How should page processing concurrency be handled inside the RAG agent loop? → A: Process pages in parallel with a fixed maximum concurrency controlled by an environment variable; avoid separate batching logic.
+- Q: How should invalid or missing page-concurrency env var values be handled? → A: Use default `4` when missing or invalid, and clamp minimum to `1`.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -91,6 +93,7 @@ As a maintainer, I need the consumer loop to call the RAG agent directly and pub
 - Consumer receives malformed event payloads while strict validation is deferred.
 - Duplicate request events arrive for the same request identifier.
 - RAG pipeline execution fails for one event while worker must continue processing subsequent events.
+- Page concurrency env var is missing, non-numeric, or less than `1`; runtime falls back to bounded safe values without startup failure.
 - `fitz.Document` handle is `None` or already-closed when extraction functions are called (caller responsibility; document lifecycle is managed by `agent.py`).
 - Monkeypatched module-level functions in tests (`create_producer`, `create_consumer`, `process_request_event`) must be restored between test cases to avoid state leakage.
 
@@ -121,6 +124,10 @@ As a maintainer, I need the consumer loop to call the RAG agent directly and pub
 - **FR-021**: `RAGWorker.__init__` MUST NOT accept injectable factory callables (`producer_factory`, `consumer_factory`, `request_processor`). The worker MUST call `create_producer`, `create_consumer`, and `process_request_event` directly. Test isolation MUST be achieved by monkeypatching those module-level functions rather than injecting alternatives through the constructor.
 - **FR-022**: `process_consumer_batch` MUST be removed as a standalone function. Poll-and-dispatch logic MUST be inlined directly into `_poll_loop`, eliminating the processor-callable indirection and the `RequestProcessor` type alias.
 - **FR-023**: Extraction functions in `tools.py` (`extract_text_from_page`, `extract_tables_from_page`, `extract_images_from_page`) MUST accept only an open `fitz.Document` object. The `_with_optional_open` helper and all path-string branching MUST be removed. The `open_pdf` utility function MAY remain as the caller-side document opener. The `_page_from_source` internal guard (`if page_number < 1`) MUST be removed; the agent guarantees 1-based page numbers from its own loop.
+- **FR-024**: `agent.py` MUST process document pages independently in parallel rather than strictly sequentially. Parallel execution MUST use a fixed maximum concurrency limit.
+- **FR-025**: The maximum page-parallelism value MUST be configured through an environment variable. If the variable is missing or invalid, the runtime MUST default to `4`; effective values MUST be clamped to a minimum of `1`.
+- **FR-026**: The implementation MUST NOT introduce a separate page-batching orchestration layer; the agent should dispatch page work directly and rely on the downstream inference server to manage request-level batching behavior.
+- **FR-027**: Individual page-processing logic and per-page output semantics MUST remain functionally equivalent to the current single-page processing behavior.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -144,6 +151,7 @@ As a maintainer, I need the consumer loop to call the RAG agent directly and pub
 - **SC-005**: Under representative load, p95 poll-to-completion latency remains within the agreed budget for this integration.
 - **SC-006**: 100% of exported function boundaries in worker Kafka modules are type-annotated in implementation review.
 - **SC-007**: After boilerplate reduction, the combined line count across `kafka.py`, `worker.py`, and `tools.py` MUST decrease (no new abstractions or stubs introduced to compensate for removed ones).
+- **SC-008**: With parallel page execution enabled, the agent MUST enforce the configured maximum in-flight page tasks and MUST never exceed the configured concurrency cap.
 
 ## Assumptions
 

@@ -1,38 +1,53 @@
-# Implementation Plan: RAG Kafka Worker Boilerplate Reduction
+# Implementation Plan: RAG Agent Parallel Page Processing on LangGraph
 
-**Branch**: `001-build-rag-retrieval-agent` | **Date**: 2026-06-14 | **Spec**: `specs/001-rag-retrieval-agent/spec.md`
+**Branch**: `[001-build-rag-retrieval-agent]` | **Date**: 2026-06-14 | **Spec**: [spec.md](specs/001-rag-retrieval-agent/spec.md)
 **Input**: Feature specification from `/specs/001-rag-retrieval-agent/spec.md`
 
 ## Summary
 
-Refactor the RAG worker runtime to keep the same poll -> process -> publish functional flow while reducing boilerplate and indirection. The key changes are: remove Kafka Protocol stubs in favor of concrete kafka-python types, remove constructor-level dependency injection in `RAGWorker`, remove trivial Kafka wrapper functions, simplify `tools.py` to operate only on open `fitz.Document` handles, and inline poll/dispatch logic directly inside `_poll_loop`. Keep only basic exception handling and retain TODO markers for deferred hardening.
+Evolve the existing LangGraph-driven RAG flow from sequential page iteration to bounded parallel page execution using the LangGraph StateGraph stack. The agent will process pages independently, enforce max in-flight work via an environment-controlled concurrency limit, preserve per-page extraction semantics, and avoid adding any separate batching orchestration layer.
 
 ## Technical Context
 
-**Language/Version**: Python 3.11  
-**Primary Dependencies**: kafka-python, pydantic v2, PyMuPDF (`fitz`), LiteLLM, python-dotenv  
-**Storage**: N/A (Kafka topics are external transport; PDF files are local inputs)  
-**Testing**: pytest (`rag_agent/tests/`), ruff, compileall  
-**Target Platform**: Linux worker runtime (local docker-compose Kafka and CI Linux)  
-**Project Type**: Backend worker service (threaded Kafka consumer loop)  
-**Performance Goals**: startup topic check warning/readiness always logged; worker keeps polling without idle exit; p95 poll-to-completion within existing budget for this integration  
-**Constraints**: no FastAPI runtime ownership in RAG worker, no startup topic creation, direct consumer-to-agent dispatch, basic exception handling only, reduced abstraction surface, explicit type annotations at module boundaries  
-**Scale/Scope**: single RAG worker consuming `rag` and publishing `rag-complete`; code-reduction scope limited to `rag_agent/kafka.py`, `rag_agent/worker.py`, and `rag_agent/utils/tools.py`
+**Language/Version**: Python 3.11
+**Primary Dependencies**: langgraph, kafka-python, PyMuPDF (fitz), pydantic v2, litellm
+**Storage**: N/A (stateless worker runtime; Kafka topics are transport only)
+**Testing**: pytest, ruff check, ruff format --check, python -m compileall
+**Target Platform**: Linux server worker process
+**Project Type**: Backend worker service
+**Performance Goals**:
+- Maintain SC-003 publish-success expectation (>=99% terminal attempts emit `rag-complete`)
+- Enforce configured parallelism cap deterministically (SC-008)
+- Improve multi-page request throughput versus strict sequential processing under representative load
+**Constraints**:
+- Keep worker-only architecture (no FastAPI runtime)
+- Preserve Kafka-agnostic `agent.py` output contract
+- No extra page-batching coordinator layer; inference server handles request batching
+- Env-driven concurrency: default `4`, clamp minimum `1`
+**Scale/Scope**:
+- One request may include multiple documents and pages
+- Page extraction workloads include text + optional table/image extraction + relevance scoring
+- Parallelism applies within a single request execution
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- Code Quality Gate: Pass `ruff check project rag_agent` and `ruff format --check project rag_agent`; reject changes that add new abstraction-only wrappers or dead code paths.
-- Testing Gate: Maintain/update tests for worker lifecycle, consume/process/publish path, startup topic checks, and contract payload behavior in `rag_agent/tests/`; run `pytest rag_agent/tests -q`.
-- UX Consistency Gate: N/A for direct end-user UI; for operator-facing behavior, logs must stay consistent (`startup_topic_check`, `consumed`, `processing_started`, `processing_completed`, `publish_completed`, `error`).
-- Performance Gate: Startup topic check must not block worker start when topics are missing; poll loop remains non-terminating on single-event failures.
-- Maintainability Gate: Remove unnecessary indirection (Protocol stubs, trivial wrappers, injected factories, batch dispatch helper), keep TODO markers for deferred hardening, and preserve clear module ownership.
-
-Post-Design Re-check (Phase 1): PASS
-- No unresolved clarifications remain.
-- Design artifacts align with FR-001 to FR-023 and SC-001 to SC-007.
-- Simplification decisions reduce code surface without changing core event flow.
+- Code Quality Gate: PASS
+  - Preserve simplification direction (no new boilerplate abstractions).
+  - Keep explicit typing across public boundaries.
+  - Enforce via `ruff check` and `ruff format --check`.
+- Testing Gate: PASS
+  - Update/add tests for env var parsing, default/clamp behavior, and bounded in-flight processing.
+  - Keep existing worker/kafka integration tests green.
+- UX Consistency Gate: PASS (N/A direct UI)
+  - Operational UX remains structured logs and actionable warning messages.
+- Performance Gate: PASS
+  - Add measurable bounded concurrency behavior (SC-008).
+  - Validate no unbounded task fan-out and compare throughput/latency on representative fixtures.
+- Maintainability Gate: PASS
+  - Keep TODO markers for deferred hardening only.
+  - Document parallel execution flow in quickstart and contract artifacts.
 
 ## Project Structure
 
@@ -53,43 +68,66 @@ specs/001-rag-retrieval-agent/
 
 ```text
 project/
-└── schemas.py
+├── schemas.py
+└── topics.py
 
 rag_agent/
 ├── agent.py
 ├── kafka.py
 ├── worker.py
-└── utils/
-    ├── content_helpers.py
-    ├── helpers.py
-    ├── llm_client.py
-    ├── prompts.py
-    └── tools.py
-
-rag_agent/tests/
-├── test_request_event.py
-├── test_completion_event.py
-├── test_worker_runtime.py
-├── test_kafka_integration.py
-├── test_rag_agent.py
-└── test_logging.py
+├── utils/
+│   ├── helpers.py
+│   ├── llm_client.py
+│   ├── prompts.py
+│   └── tools.py
+└── tests/
+    ├── test_rag_agent.py
+    ├── test_worker_runtime.py
+    ├── test_kafka_integration.py
+    └── test_logging.py
 ```
 
-**Structure Decision**: Keep the existing worker-centric layout and apply simplification in-place. Preserve `kafka.py` as transport boundary, `worker.py` as lifecycle orchestrator, `agent.py` as Kafka-agnostic processor, and `tools.py` as extraction/relevance utilities with reduced abstraction.
+**Structure Decision**: Keep the existing worker-centric Python package structure. Implement parallel-page behavior inside `rag_agent/agent.py` using LangGraph StateGraph primitives and bounded concurrency configuration.
 
-## Phase 0: Research Output
+## Phase 0: Outline & Research
 
-- Updated `research.md` with decisions for concrete Kafka type annotations, constructor simplification, wrapper cleanup strategy, document-only extraction APIs, and inlined poll/dispatch loop.
+1. Research LangGraph StateGraph fan-out patterns suitable for independent page processing.
+2. Research bounded-concurrency controls compatible with LangGraph graph invocation.
+3. Research env-var configuration strategy for deterministic fallback (`default=4`, `min=1`).
+4. Consolidate decisions and alternatives in `research.md`.
 
-## Phase 1: Design Output
+## Phase 1: Design & Contracts
 
-- Updated `data-model.md` to reflect removal of Protocol and callback-typed entities and to encode simplified ownership boundaries.
-- Updated `contracts/rag-agent-contract.md` to formalize retained vs removed functions and module boundaries.
-- Updated `quickstart.md` to document the streamlined runtime flow and implementation guardrails.
-- Updated agent context reference in `CLAUDE.md` to point to this plan.
+1. Update data model for parallel page task execution and runtime concurrency config.
+2. Update contract to codify:
+- new env variable for page parallelism
+- bounded in-flight guarantees
+- unchanged page-processing semantics
+3. Update quickstart with configuration and runtime flow changes.
+4. Update agent context reference in `.github/copilot-instructions.md` to this plan.
+
+## Phase 2: Implementation Planning (Tasking Input)
+
+Planned implementation slices:
+1. Concurrency config loading and validation in helper/env layer.
+2. LangGraph StateGraph refactor from sequential pointer index loop to parallel page execution path.
+3. Deterministic merge/reduction of extracted page outputs and errors.
+4. Regression and behavior tests for bounded concurrency + fallback defaults.
+5. Validation gates: pytest + lint + format + compileall.
+
+## Post-Design Constitution Check
+
+- Code Quality Gate: PASS
+  - Design keeps direct runtime flow and avoids abstraction re-introduction.
+- Testing Gate: PASS
+  - Test plan includes behavior + regression coverage for new parallel semantics.
+- UX Consistency Gate: PASS
+  - No user-facing UI changes; operator-facing diagnostics remain explicit.
+- Performance Gate: PASS
+  - Bounded concurrency and SC-008 are encoded in requirements/contracts.
+- Maintainability Gate: PASS
+  - Artifacts updated with explicit ownership and constraints.
 
 ## Complexity Tracking
 
-| Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
-| None | N/A | N/A |
+No constitution violations requiring exception.
