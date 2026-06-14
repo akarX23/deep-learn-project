@@ -89,6 +89,14 @@ class KafkaSettings(BaseModel):
             kwargs["ssl_cafile"] = self.ssl_cafile
         return kwargs
 
+    def consumer_kwargs(self, group_id: str) -> dict[str, object]:
+        """Build kwargs for a KafkaConsumer sharing this connection config."""
+
+        kwargs = self.admin_kwargs()
+        kwargs["group_id"] = group_id
+        kwargs["auto_offset_reset"] = "latest"
+        return kwargs
+
 
 class ComposeSettings(BaseModel):
     kafka_service_name: str = "kafka"

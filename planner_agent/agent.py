@@ -219,7 +219,7 @@ class PlannerAgent:
                 sid=state["sid"],
             )
             self._publish(
-                PlannerAgentTopics.TEACHING_REQUEST.value,
+                PlannerTopics.TEACHING.value,
                 event.model_dump(mode="json"),
                 state["request_id"],
             )

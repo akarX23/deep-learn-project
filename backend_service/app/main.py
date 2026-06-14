@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
@@ -16,7 +17,7 @@ from backend_service.app.api.test_events import router as test_events_router
 from backend_service.app.api.topics import router as topics_router
 from backend_service.app.config import KafkaSettings
 from backend_service.app.kafka_admin import KafkaAdminService
-from backend_service.app.socket import connection_manager, socket_asgi_app
+from backend_service.app.socket import connection_manager, run_consumer, socket_asgi_app
 from project.topics import get_all_topic_names
 
 logger = logging.getLogger(__name__)
@@ -62,9 +63,14 @@ def create_app(
             len(result.errors),
         )
 
+        # Start the backend Kafka consumer that forwards events to Socket.IO.
+        consumer_task = asyncio.create_task(run_consumer(resolved_settings))
+        app.state.consumer_task = consumer_task
+
         try:
             yield
         finally:
+            consumer_task.cancel()
             app.state.kafka_admin.close()
 
     app = FastAPI(title="Kafka Backend Service", version="0.1.0", lifespan=lifespan)

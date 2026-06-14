@@ -120,34 +120,68 @@
 
 ### WebSocketEvents
 
-**Purpose**: Shared `project/events.py` module defining WebSocket event-name constants and their event body schemas, importable by both frontend and backend.
+**Purpose**: Shared `project/events.py` module defining WebSocket event-name constants importable by both frontend and backend.
 
-**Representation**: A `str` Enum for event names and schema models for event bodies.
+**Representation**: A `str` Enum for event names.
 
 | Member | Value | Description |
 |---|---|---|
-| `STREAM_TOKENS` | `"stream-tokens"` | Server → client token stream event; emission logic implemented later (TODO) |
+| `STREAM_TOKENS` | `"stream-tokens"` | Kafka topic name for token/content streaming |
+| `CLARIFY_USER_LEVEL_SKT` | `"clarify-user-level-skt"` | Socket event name: backend → client clarification request |
+| `STREAM_TOKENS_SKT` | `"stream-tokens-skt"` | Socket event name: backend → client token stream |
 
 **Validation rules**:
 - Event-name values are stable string literals — renaming a value is a breaking contract change for the frontend.
-- Module import must have no side effects (no Socket.IO or network calls) so the frontend toolchain can read contracts safely.
+- Module import must have no side effects (no Socket.IO or network calls) so the frontend toolchain can read constants safely.
+- The module also re-exports `StreamTokensEventBody` from `project/schemas.py` by reference so schema changes are automatically visible.
 
-**Extension rule**: New WebSocket events are added as enum members plus corresponding body schemas in the same shared module.
+**Extension rule**: New WebSocket events are added as enum members; body schemas are defined/updated in `project/schemas.py`.
 
 ---
 
 ### StreamTokensEventBody
 
-**Purpose**: Shared WebSocket body schema for the `stream-tokens` event.
+**Purpose**: Kafka payload schema produced by agents to the `stream-tokens` topic and forwarded by the backend to Socket.IO clients. Defined in `project/schemas.py` and re-exported from `project/events.py`.
 
 | Field | Type | Description |
 |---|---|---|
-| `from_service` | `str` | Emitting backend/agent service identifier |
-| `content` | `str` | Token/content payload chunk |
-| `metadata` | `dict[str, Any]` | Additional event context and stream metadata |
+| `from_service` | `str` | Emitting agent/service identifier (e.g., `rag-agent`, `teaching-agent`) |
+| `sid` | `str` | Target Socket.IO session ID (== application session_id) |
+| `data` | `dict[str, Any]` | Agent-specific payload (varies by service; generic dict accommodates all agent schemas) |
 
 **Validation rules**:
 - No custom validation or exception handling in this iteration.
+- The `data` field is a plain dict to avoid requiring per-agent schema variants.
+
+**State transitions**:
+- Produced by agents on the Kafka `stream-tokens` topic → consumed by `backend-service-consumer` → emitted to Socket.IO as `stream-tokens-skt` event with payload passed verbatim.
+
+---
+
+### BackendServiceConsumer
+
+**Purpose**: Background `asyncio` task that consumes Kafka topics (`clarify-user-level` and `stream-tokens`) and routes payloads to Socket.IO sessions via `emit_event`.
+
+| Field | Type | Description |
+|---|---|---|
+| `consumer` | `KafkaConsumer` | kafka-python consumer instance subscribed to both topics |
+| `task` | `asyncio.Task \| None` | Reference to the running asyncio task (created during lifespan startup) |
+| `running` | `bool` | Task state flag |
+
+**Behavior**:
+- Created via `asyncio.create_task(...)` in FastAPI lifespan startup.
+- Runs a continuous loop: poll consumer → validate payload → extract `sid` → emit socket event.
+- **For `clarify-user-level` topic**: validate as `ClarifyUserLevelEvent`, emit `clarify-user-level-skt` to matching `sid`.
+- **For `stream-tokens` topic**: validate as `StreamTokensEventBody`, emit `stream-tokens-skt` to matching `sid`.
+- On error or unknown `sid`, emit is skipped (TODO: add logging per edge case).
+
+**Validation rules**:
+- Task must be created before the lifespan yields (before service is ready).
+- Consumer is independent of request/response cycles; polling continues even when no client is connected.
+
+---
+
+### ClarifyUserLevelEvent (shared schema, reused)
 - Field presence/type are schema-driven only.
 
 ---

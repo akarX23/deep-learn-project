@@ -22,10 +22,15 @@ class RAGTopics(str, Enum):
 class PlannerAgentTopics(str, Enum):
     """Topics produced by the planner agent to trigger downstream agents."""
 
-    TEACHING_REQUEST = "teaching-request"
     QUIZ_REQUEST = "quiz-request"
     CLARIFY_USER_LEVEL = "clarify-user-level"
     WORKFLOW_COMPLETE = "workflow-complete"
+
+
+class BackendStreamTopics(str, Enum):
+    """Topics the backend consumes to forward events to Socket.IO sessions."""
+
+    STREAM_TOKENS = "stream-tokens"
 
 
 class AgentCompletionTopics(str, Enum):
@@ -33,8 +38,8 @@ class AgentCompletionTopics(str, Enum):
 
     TEACHING_COMPLETE = "teaching-complete"
     QUIZ_COMPLETE = "quiz-complete"
-    
-    
+
+
 class TeachingTopics(str, Enum):
     """Topics owned by the Teaching Agent."""
 
@@ -69,4 +74,14 @@ def get_all_topic_names() -> list[str]:
         + [topic.value for topic in PlannerAgentTopics]
         + [topic.value for topic in AgentCompletionTopics]
         + [topic.value for topic in TeachingTopics]
+        + [topic.value for topic in BackendStreamTopics]
     )
+
+
+def get_backend_consumer_topic_names() -> list[str]:
+    """Return topics the backend consumer subscribes to for Socket.IO forwarding."""
+
+    return [
+        PlannerAgentTopics.CLARIFY_USER_LEVEL.value,
+        BackendStreamTopics.STREAM_TOKENS.value,
+    ]

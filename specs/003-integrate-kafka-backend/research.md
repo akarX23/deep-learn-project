@@ -110,3 +110,18 @@
 - **Rationale**: This makes Swagger UI expose the request model as separate, typed fields while preserving multipart file uploads via `files`.
 - **Alternatives considered**: Single JSON string field (harder to use in Swagger), ad hoc endpoint-only DTOs (duplicates shared contract).
 
+## Decision 23: StreamTokensEventBody Schema Location and Re-Export Pattern
+- **Decision**: Define `StreamTokensEventBody` as the single canonical schema in `project/schemas.py` with fields `from_service` (str), `sid` (str), and `data` (dict). `project/events.py` imports and re-exports this schema by reference; any field change in `schemas.py` is automatically reflected everywhere.
+- **Rationale**: Single source of truth eliminates schema duplication and keeps `project/events.py` free of backend-only dependencies (frontend can import event names only if needed), while ensuring the WebSocket + Kafka payload remain synchronized.
+- **Alternatives considered**: Define separate Kafka and WebSocket schemas (duplication risk), keep schema only in `events.py` (makes it backend-specific and harder to reuse), import with alias (unclear which is canonical).
+
+## Decision 24: Backend Consumer Lifecycle Model (asyncio Background Task)
+- **Decision**: Implement the `backend-service-consumer` as an `asyncio` background task created via `asyncio.create_task(...)` inside the FastAPI lifespan startup block, before the service yields. The task runs continuously polling the `clarify-user-level` and `stream-tokens` Kafka topics, consuming messages and routing them to Socket.IO sessions via `emit_event`.
+- **Rationale**: Consistent with the existing lifespan pattern for synchronous Kafka admin operations; `asyncio` tasks are lightweight and naturally integrate with FastAPI's event loop, and they start/stop with the application lifecycle without needing a separate background thread or process.
+- **Alternatives considered**: Dedicated background thread (compatible but adds thread-safety complexity), separate worker process (over-engineered for in-process routing), manual polling in request handlers (couples WebSocket to request path, inefficient).
+
+## Decision 25: Socket Event Name Constants in WebSocketEvents Enum
+- **Decision**: Add two new socket event-name constants to the `WebSocketEvents` enum in `project/events.py`: `CLARIFY_USER_LEVEL_SKT = "clarify-user-level-skt"` and `STREAM_TOKENS_SKT = "stream-tokens-skt"`. Use these constants in all emit calls and listener registrations.
+- **Rationale**: Centralizing all socket event names in one enum (alongside the existing `STREAM_TOKENS` constant for the Kafka topic) prevents typos, simplifies refactoring, and ensures frontend and backend can share a single import of constant names without backend-specific schema dependencies.
+- **Alternatives considered**: Inline string literals in consumer code (typo risk, harder to refactor), separate constants file (one more import path), no constants at all (no type safety).
+

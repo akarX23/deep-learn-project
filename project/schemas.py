@@ -230,6 +230,18 @@ class UserRequest(BaseModel):
     sid: str
 
 
+class StreamTokensEventBody(BaseModel):
+    """Kafka payload for the ``stream-tokens`` topic, forwarded to Socket.IO.
+
+    ``data`` is a generic dict so any producing agent can attach its own payload
+    without requiring a per-agent schema variant.
+    """
+
+    from_service: str
+    sid: str
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
 # ---------------------------------------------------------------------------
 # Planner Agent schemas
 # ---------------------------------------------------------------------------
@@ -408,6 +420,7 @@ class TeachingAgentOutput(BaseModel):
             raise ValueError("status must be 'ok' or 'error'")
         return value
 
+
 # class TeachingCompletionEvent(BaseModel):
 #     """Kafka completion payload published by the Teaching Agent to 'teaching-complete'."""
 
@@ -555,7 +568,9 @@ class QuizResult(BaseModel):
     @classmethod
     def validate_recommended_action(cls, value: str) -> str:
         if value not in {"re-teach", "practice-more", "advance"}:
-            raise ValueError("recommended_action must be one of: re-teach, practice-more, advance")
+            raise ValueError(
+                "recommended_action must be one of: re-teach, practice-more, advance"
+            )
         return value
 
 
@@ -581,7 +596,7 @@ class QuizAgentInput(BaseModel):
         if not value.strip():
             raise ValueError("value cannot be empty")
         return value
-    
+
 
 class QuizAgentOutput(BaseModel):
     """Output payload returned by both phases of the Quiz Agent."""
@@ -597,9 +612,4 @@ class QuizAgentOutput(BaseModel):
     def validate_status(cls, value: str) -> str:
         if value not in {"generated", "evaluated", "error"}:
             raise ValueError("status must be one of: generated, evaluated, error")
-    @field_validator("status")
-    @classmethod
-    def validate_status(cls, value: str) -> str:
-        if value not in {"ok", "error"}:
-            raise ValueError("status must be 'ok' or 'error'")
         return value

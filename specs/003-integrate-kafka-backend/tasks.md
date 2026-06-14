@@ -1,209 +1,328 @@
-# Tasks: Backend Kafka Startup Bootstrap + RAG Test-Event API + WebSocket Channel + User-Request API
+---
+description: "Task list for Feature 003: Backend Kafka Integration + WebSocket Channel"
+---
 
-**Input**: Design documents from `/specs/003-integrate-kafka-backend/`
-**Prerequisites**: `plan.md` (required), `spec.md` (required for user stories), `research.md`, `data-model.md`, `contracts/`, `quickstart.md`
+# Tasks: Backend Kafka Startup Bootstrap + RAG Test-Event API + WebSocket Channel
 
-**Tests**: Include test tasks by default (constitution requires testing evidence).
+**Feature**: 003-integrate-kafka-backend  
+**Branch**: `003-integrate-kafka-backend`  
+**Input**: Design documents from `/specs/003-integrate-kafka-backend/`  
+**Prerequisites**: plan.md ✓, spec.md ✓, research.md ✓, data-model.md ✓, contracts/ ✓
 
-**Organization**: Tasks are grouped by user story so each story can be implemented and validated independently.
+**Note**: Tests included as per feature requirements; implementation tasks follow for each user story.
+**Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
+
+---
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-**Purpose**: Ensure shared dependencies and contracts are present for all stories.
+**Purpose**: Initialize project dependencies and shared modules
 
-- [x] T001 [P] Add/verify Socket.IO and multipart dependencies in `requirements.txt`
-- [x] T002 [P] Add/verify shared WebSocket contracts in `project/events.py`
-- [x] T003 [P] Add/verify `UserRequest` and `PlannerRequestEvent` schemas in `project/schemas.py`
-- [x] T004 [P] Add/verify Kafka topic registry entries in `project/topics.py`
+- [ ] T001 Install/verify Python 3.11+ and dependencies (kafka-python, python-socketio, etc.) from requirements.txt
+- [ ] T002 Verify pytest and ruff are configured in pytest.ini and via requirements.txt
+- [ ] T003 [P] Create .gitignore entry for ./uploads directory (file storage for user requests)
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-**Purpose**: Core wiring that must be complete before implementing user stories.
+**Purpose**: Core infrastructure required before any user story can start
 
-**Critical**: No user story work starts before this phase is complete.
+**⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [x] T005 [P] Add/verify test-event route policy config in `backend_service/app/config.py`
-- [x] T006 [P] Add/verify startup bootstrap and shared producer support in `backend_service/app/kafka_admin.py`
-- [x] T007 Add/verify app startup route wiring and lifecycle setup in `backend_service/app/main.py`
-- [x] T008 [P] Add/verify reusable defaults factory in `backend_service/app/utils.py`
-- [x] T009 [P] Add/verify baseline backend fixtures in `backend_service/tests/conftest.py`
+- [ ] T004 [P] Add `StreamTokensEventBody` Pydantic model to project/schemas.py with fields (from_service: str, sid: str, data: dict[str, Any])
+- [ ] T005 [P] Add `ClarifyUserLevelEvent` Pydantic model to project/schemas.py with fields (request_id: str, user_prompt: str, sid: str, reason: str | None)
+- [ ] T006 [P] Add `UserRequest` Pydantic model to project/schemas.py with fields (user_prompt: str, user_level: list[str], sid: str)
+- [ ] T007 [P] Create `WebSocketEvents` enum in project/events.py with constants STREAM_TOKENS, CLARIFY_USER_LEVEL_SKT, STREAM_TOKENS_SKT
+- [ ] T008 [P] Add re-export pattern in project/events.py: re-export StreamTokensEventBody and ClarifyUserLevelEvent from project.schemas
+- [ ] T009 Update project/topics.py to include Kafka topic registry with all required topics (rag, rag-complete, clarify-user-level, stream-tokens)
+- [ ] T010 [P] Create backend_service/app/config.py with UPLOAD_DIR, TEST_ROUTES_ENABLED (env-based), and Kafka bootstrap server settings
+- [ ] T011 Add `TestEventPublishResult` Pydantic model to project/schemas.py with fields (request_id: str, topic: str, publish_status: str, metadata: dict[str, int | None] | None)
+- [ ] T012 Create backend_service/app/utils.py with factory function `default_rag_test_event()` returning RAGRequestEvent with test defaults
 
-**Checkpoint**: Foundational runtime is ready; user stories can be developed independently.
+**Checkpoint**: All schemas, enums, and configs defined - ready for user story implementation
 
 ---
 
-## Phase 3: User Story 1 - Bootstrap Kafka Topics from Project Registry on Startup (Priority: P1) 🎯 MVP
+## Phase 3: User Story 1 - Bootstrap Kafka Topics from Project Registry on Startup (Priority: P1) 🎯
 
-**Goal**: Create all topics from `project/topics` during startup with idempotent behavior.
+**Goal**: Automatically create required Kafka topics on application startup with idempotent behavior
 
-**Independent Test**: Start backend against Kafka and verify all registry topics exist after startup; repeat with existing topics and verify no failure.
+**Independent Test**: Verify that on startup, all topics from project/topics.py are created or already exist; repeated startups do not error
 
 ### Tests for User Story 1
 
-- [x] T010 [P] [US1] Add startup bootstrap success/idempotency tests in `backend_service/tests/test_startup.py`
-- [x] T011 [P] [US1] Add startup Kafka retry/failure tests in `backend_service/tests/test_startup.py`
-- [x] T012 [P] [US1] Add topic bootstrap API contract tests in `backend_service/tests/test_topics_api.py`
+- [ ] T013 [P] [US1] Add test_kafka_admin.py in backend_service/tests/ to verify KafkaAdminService.bootstrap_topics() behavior: topics created on first run, idempotent on second run
+- [ ] T014 [P] [US1] Add test_startup.py in backend_service/tests/ to verify FastAPI lifespan startup sequence: admin connect → topic bootstrap → success log output
 
 ### Implementation for User Story 1
 
-- [x] T013 [US1] Implement/verify topic bootstrap orchestration in `backend_service/app/main.py`
-- [x] T014 [US1] Implement/verify per-topic create/idempotent handling in `backend_service/app/kafka_admin.py`
-- [x] T015 [US1] Add/verify startup bootstrap summary logging and TODO markers in `backend_service/app/main.py`
+- [ ] T015 [P] [US1] Extend backend_service/app/kafka_admin.py: add KafkaAdminService class with bootstrap_topics() method that creates topics from project.topics registry using AdminClient.create_topics() with NewTopic descriptors
+- [ ] T016 [P] [US1] Implement idempotent topic creation: catch TopicAlreadyExistsError and other recoverable errors, return StartupTopicBootstrapResult with created/already_existed/errors lists
+- [ ] T017 [US1] Update backend_service/app/main.py lifespan startup: instantiate KafkaAdminService, call bootstrap_topics(), log results (topic count summaries), store admin reference in app state
+- [ ] T018 [US1] Add logging to bootstrap_topics() with request correlation and per-topic debug output (created vs. already exists)
 
-**Checkpoint**: User Story 1 is complete and independently testable.
+**Checkpoint**: Topic bootstrap runs on startup and logs outcome; all required topics exist after first run
 
 ---
 
 ## Phase 4: User Story 2 - Real-Time WebSocket Channel for Frontend Session Routing (Priority: P2)
 
-**Goal**: Provide Socket.IO channel and per-session event routing via `sid`.
+**Goal**: Establish WebSocket connectivity with Socket.IO and per-session routing capability
 
-**Independent Test**: Connect Socket.IO client, capture `sid`, emit event to that `sid`, verify only that session receives it.
+**Independent Test**: Verify frontend can connect via Socket.IO, server assigns and stores session ID, emit_event routes messages to correct session only
 
 ### Tests for User Story 2
 
-- [x] T016 [P] [US2] Add connection manager get/set mapping tests in `backend_service/tests/test_connection_manager.py`
-- [x] T017 [P] [US2] Add Socket.IO emit routing tests in `backend_service/tests/test_socket.py`
-- [x] T018 [P] [US2] Add stream-tokens schema contract tests in `backend_service/tests/test_socket.py`
-- [x] T019 [P] [US2] Add `UserRequest` schema regression tests in `backend_service/tests/test_utils.py`
+- [ ] T019 [P] [US2] Add test_connection_manager.py in backend_service/tests/ to verify ConnectionManager.set/get behavior: store and retrieve connections by session_id, return None for unknown session_id
+- [ ] T020 [P] [US2] Add test_socket.py in backend_service/tests/ to verify Socket.IO server instantiation and emit_event function: emit to known session succeeds, emit to unknown session is skipped
 
 ### Implementation for User Story 2
 
-- [x] T020 [P] [US2] Implement/verify minimal `ConnectionManager` in `backend_service/app/connection_manager.py`
-- [x] T021 [P] [US2] Implement/verify Socket.IO listeners and `emit_event` in `backend_service/app/socket.py`
-- [x] T022 [US2] Implement/verify Socket.IO mounting and session wiring in `backend_service/app/main.py`
-- [x] T023 [US2] Add TODO markers for deferred disconnect/missing-session handling in `backend_service/app/socket.py`
-- [x] T024 [US2] Implement/verify rag test-event publish endpoint in `backend_service/app/api/test_events.py`
+- [ ] T021 [P] [US2] Create backend_service/app/connection_manager.py with ConnectionManager class: methods set(session_id, connection) and get(session_id) using dict storage
+- [ ] T022 [P] [US2] Create backend_service/app/socket.py with Socket.IO server instantiation (`socketio.AsyncServer` with async_mode='asgi')
+- [ ] T023 [P] [US2] Implement connect listener in socket.py: register sid in ConnectionManager (TODO: full listener body)
+- [ ] T024 [P] [US2] Implement disconnect listener in socket.py: lightweight stub (TODO: cleanup deferred)
+- [ ] T025 [US2] Implement emit_event(event, payload, session_id) function in socket.py: retrieve connection from manager, call sio.emit(event, payload, skip_sid=None, to=session_id)
+- [ ] T026 [US2] Mount Socket.IO app onto FastAPI in backend_service/app/main.py via app.add_asgi_middleware or equivalent ASGI integration
+- [ ] T027 [US2] Add logging to emit_event for session dispatch (debug: sent to session_id, skip: unknown session)
 
-**Checkpoint**: User Story 2 is complete and independently testable.
+**Checkpoint**: Socket.IO mounted, connections registered by session, emit_event routes to correct session
 
 ---
 
 ## Phase 5: User Story 3 - Ingest User Requests with File Uploads and Route to Planner (Priority: P3)
 
-**Goal**: Accept parsed `UserRequest` form fields and files, save files, publish `PlannerRequestEvent` to `init-planner`.
+**Goal**: Accept user requests with file uploads via HTTP multipart form and publish to planner Kafka topic
 
-**Independent Test**: Call `POST /api/chat/request` with form fields (`user_prompt`, `user_level`, `sid`) and 1-3 files, verify file persistence, Kafka publish payload, and success/error responses.
+**Independent Test**: Verify POST /api/chat/request accepts multipart form data, validates UserRequest fields, publishes to planner topic, returns request_id correlation
 
 ### Tests for User Story 3
 
-- [x] T025 [P] [US3] Add parsed form-field request validation tests for `/api/chat/request` in `backend_service/tests/test_chat_request_api.py`
-- [x] T026 [P] [US3] Add file upload/save path tests (absolute path assertions) in `backend_service/tests/test_chat_request_api.py`
-- [x] T027 [P] [US3] Add publish success/failure tests for `init-planner` in `backend_service/tests/test_chat_request_api.py`
-- [x] T028 [P] [US3] Add max-files warning/non-rejection tests in `backend_service/tests/test_chat_request_api.py`
-- [x] T029 [P] [US3] Add 400/500 error envelope tests (`{error: ...}`) in `backend_service/tests/test_chat_request_api.py`
+- [ ] T028 [P] [US3] Add test_chat_api.py in backend_service/tests/ to verify POST /api/chat/request contract: accepts multipart form fields (user_prompt, user_level, sid), files parameter, validates UserRequest schema
+- [ ] T029 [P] [US3] Add integration test for /api/chat/request: publish to Kafka, verify PlannerRequestEvent on planner topic with correct fields and request_id correlation
 
 ### Implementation for User Story 3
 
-- [x] T030 [US3] Add/verify `UPLOAD_DIR` configuration with default `./uploads` in `backend_service/app/config.py`
-- [x] T031 [US3] Add/verify uploads ignore rules in `.gitignore`
-- [x] T032 [US3] Implement/verify `/api/chat/request` endpoint with parsed form-model fields in `backend_service/app/api/chat_request.py`
-- [x] T033 [US3] Implement/verify repeated multipart `files` upload parsing in `backend_service/app/api/chat_request.py`
-- [x] T034 [US3] Implement/verify file persistence and absolute path collection in `backend_service/app/api/chat_request.py`
-- [x] T035 [US3] Implement/verify max-3 file warning behavior (no reject) in `backend_service/app/api/chat_request.py`
-- [x] T036 [US3] Implement/verify `PlannerRequestEvent` publish to `init-planner` in `backend_service/app/api/chat_request.py`
-- [x] T037 [US3] Implement/verify success response message and error envelopes in `backend_service/app/api/chat_request.py`
-- [x] T038 [P] [US3] Add TODO markers for deferred file validation/cleanup/retry handling in `backend_service/app/api/chat_request.py`
+- [ ] T030 [P] [US3] Create backend_service/app/api/chat.py with POST /api/chat/request endpoint
+- [ ] T031 [US3] Implement multipart form parsing in chat.py endpoint: extract user_prompt (str), user_level (list[str] as comma-separated or JSON), sid (str) from form; extract files parameter
+- [ ] T032 [US3] Validate UserRequest fields in chat.py: non-empty user_prompt, non-empty user_level list, non-empty sid; return 400 on validation failure
+- [ ] T033 [P] [US3] Create PlannerRequestEvent Pydantic model in project/schemas.py with fields (request_id: str, user_prompt: str, user_level: list[str], sid: str, file_paths: list[str], created_at: str | None)
+- [ ] T034 [US3] Implement file storage and path tracking in chat.py: save uploaded files to UPLOAD_DIR, build file_paths list, pass to PlannerRequestEvent
+- [ ] T035 [US3] Publish PlannerRequestEvent to planner-init-request Kafka topic with request_id as key (enables per-request routing)
+- [ ] T036 [US3] Return 201 Created response from chat.py with request_id in response body for client correlation
+- [ ] T037 [US3] Add logging to chat.py with request_id prefix for all events (received, validation, publish, response)
 
-**Checkpoint**: User Story 3 is complete and independently testable.
-
----
-
-## Phase 6: Polish & Cross-Cutting Concerns
-
-**Purpose**: Validate quality gates and finalize docs/contracts.
-
-- [x] T039 [P] Run backend test suite and confirm story coverage in `backend_service/tests/`
-- [x] T040 [P] Run lint/format checks (`ruff check`, `ruff format --check`) for `project/` and `backend_service/`
-- [x] T041 [P] Run bytecode compile validation in `project/` and `backend_service/`
-- [x] T042 [P] Verify quickstart request examples for parsed form-fields in `specs/003-integrate-kafka-backend/quickstart.md`
-- [x] T043 [P] Verify user-request API contract examples in `specs/003-integrate-kafka-backend/contracts/backend-user-request-api-contract.md`
-- [x] T044 [P] Verify cross-artifact consistency across `spec.md`, `plan.md`, `research.md`, and `data-model.md`
+**Checkpoint**: User requests can be submitted with files and published to planner; frontend receives request_id for tracking
 
 ---
 
-## Dependencies & Execution Order
+## Phase 6: User Story 4 - Consume Kafka Events and Forward to Frontend Sessions (Priority: P2)
+
+**Goal**: Run background asyncio consumer task to route Kafka events to Socket.IO sessions based on session_id field
+
+**Independent Test**: Verify consumer starts on app startup, polls clarify-user-level and stream-tokens topics, emits correct Socket.IO events to matching session_id
+
+### Tests for User Story 4
+
+- [ ] T038 [P] [US4] Add test_consumer.py in backend_service/tests/ to verify consumer task initialization and message routing: consume from clarify-user-level topic, validate ClarifyUserLevelEvent, route to socket emit
+- [ ] T039 [P] [US4] Add test_consumer.py continuation: consume from stream-tokens topic, validate StreamTokensEventBody, route to socket emit with STREAM_TOKENS_SKT event name
+
+### Implementation for User Story 4
+
+- [ ] T040 [US4] Extend backend_service/app/socket.py with `run_consumer(app)` async function that creates KafkaConsumer for topics (clarify-user-level, stream-tokens)
+- [ ] T041 [US4] Implement consumer polling loop in run_consumer: poll consumer, route by topic name, validate payload schema, extract sid field
+- [ ] T042 [US4] Add to run_consumer: For clarify-user-level topic, validate as ClarifyUserLevelEvent, call emit_event(WebSocketEvents.CLARIFY_USER_LEVEL_SKT, payload, sid)
+- [ ] T043 [US4] Add to run_consumer: For stream-tokens topic, validate as StreamTokensEventBody, call emit_event(WebSocketEvents.STREAM_TOKENS_SKT, payload, sid)
+- [ ] T044 [US4] Add error handling in run_consumer: catch validation errors (log), catch unknown sid (log and skip), continue polling (BLE001 override)
+- [ ] T045 [US4] Integrate consumer startup into FastAPI lifespan: call `asyncio.create_task(run_consumer(app))` in startup before yield
+- [ ] T046 [US4] Add logging to consumer loop with message topic, session_id, and event name at debug level
+
+**Checkpoint**: Consumer task started on app startup, routes Kafka events to matching Socket.IO sessions
+
+---
+
+## Phase 7: Feature 001 - RAG Test-Event API (Bonus: Re-integrate existing test-event route)
+
+**Goal**: Add test-event API for rag topic to enable manual testing
+
+**Independent Test**: Verify POST /api/v1/test-events/rag publishes RAGRequestEvent with default values, returns TestEventPublishResult with metadata
+
+### Tests for User Story (Bonus)
+
+- [ ] T047 [P] Add test_test_events_api.py in backend_service/tests/ to verify POST /api/v1/test-events/rag endpoint contract: publish with default_rag_test_event(), return TestEventPublishResult
+
+### Implementation
+
+- [ ] T048 [P] Create/update backend_service/app/api/test_events.py with POST /api/v1/test-events/rag endpoint (gated by TEST_ROUTES_ENABLED from config)
+- [ ] T049 Implement endpoint: call default_rag_test_event(), publish to rag topic via shared producer, return TestEventPublishResult with metadata
+- [ ] T050 Add logging to test_events.py with request correlation and publish outcome
+
+**Checkpoint**: Test-event API available for manual Kafka testing in dev/test environments
+
+---
+
+## Phase 8: Polish & Cross-Cutting Concerns
+
+**Purpose**: Improvements, validation, and final quality checks
+
+- [ ] T051 [P] Run ruff check and ruff format on project/ and backend_service/ to verify code quality gates pass
+- [ ] T052 [P] Run python -m compileall project backend_service -q to verify bytecode compilation (no syntax errors)
+- [ ] T053 [P] Run pytest backend_service/tests -q to verify all tests pass
+- [ ] T054 Review and verify all TODO markers in socket.py and kafka.py are documented (defer cleanup, missing sid handling, auth)
+- [ ] T055 Update .github/copilot-instructions.md to reference specs/003-integrate-kafka-backend/plan.md for speckit context
+- [ ] T056 [P] Run quickstart.md validation: start Kafka, start backend, verify topic bootstrap log output, publish test event, verify response in Kafka UI
+- [ ] T057 Add docstrings to all new functions/classes in backend_service/app/ and project/ (brief one-liners sufficient)
+- [ ] T058 Verify project/schemas.py and project/events.py have no circular import issues (test via `python -c "from project.events import *; from project.schemas import *"`)
+
+**Checkpoint**: All code quality gates pass, all tests pass, quickstart validated, ready for integration with feature 001/002
+
+
+
+---
+
+## Dependencies & Execution Strategy
 
 ### Phase Dependencies
 
-- **Phase 1 (Setup)**: No dependencies.
-- **Phase 2 (Foundational)**: Depends on Phase 1; blocks all user stories.
-- **Phase 3+ (User Stories)**: Depend on Phase 2 completion.
-- **Phase 6 (Polish)**: Depends on completion of all targeted stories.
+| Phase | Depends On | Status |
+|-------|-----------|--------|
+| Phase 1 (Setup) | — | Ready immediately |
+| Phase 2 (Foundational) | Phase 1 | BLOCKS all user stories |
+| Phase 3 (US1 - Bootstrap) | Phase 2 | Ready after Phase 2 |
+| Phase 4 (US2 - WebSocket) | Phase 2 | Ready after Phase 2 |
+| Phase 5 (US3 - User Requests) | Phase 2 | Ready after Phase 2 |
+| Phase 6 (US4 - Consumer) | Phase 2, Phase 4 | Requires WebSocket (Phase 4) for emit routing |
+| Phase 7 (Bonus - Test-Event) | Phase 2 | Ready after Phase 2 |
+| Phase 8 (Polish) | All phases | Final validation after all implementation |
 
-### User Story Dependencies
+### Parallel Opportunities
 
-- **US1 (P1)**: Starts after Phase 2; no dependency on US2/US3.
-- **US2 (P2)**: Starts after Phase 2; no hard dependency on US1/US3.
-- **US3 (P3)**: Starts after Phase 2; no hard dependency on US1/US2.
+**After Phase 2 Completes**:
+- Phase 3 (US1 - Bootstrap), Phase 4 (US2 - WebSocket), Phase 5 (US3 - User Requests), Phase 7 (Test-Event) can run in parallel
+- Phase 6 (US4 - Consumer) requires Phase 4 to be mostly complete (socket.py structure)
+- Phase 8 (Polish) runs after all feature phases
 
-### Within Each User Story
+**Within Each Phase**:
+- All tasks marked `[P]` can run in parallel (e.g., T013-T014, T019-T020, T028-T029, T038-T039 are all independent)
+- Schema/config definitions (T004-T012) are all independent in Phase 2
 
-- Tests first, then implementation.
-- Schemas/contracts before runtime wiring.
-- Endpoint behavior before polish/documentation checks.
+### Suggested Execution Order
+
+1. **Phase 1** (Setup): T001-T003 (1 person, ~15 min)
+2. **Phase 2** (Foundational): T004-T012 in parallel, then T009 (serial after T004-T008) (~60 min)
+3. **Parallel Group A** (Phase 3): T013-T018 (bootstrap feature) (~90 min)
+4. **Parallel Group B** (Phase 4): T019-T027 (WebSocket feature) (~120 min)
+5. **Parallel Group C** (Phase 5): T028-T037 (user request API) (~120 min)
+6. **Phase 6** (Phase 4 must complete first): T038-T046 (consumer integration) (~90 min)
+7. **Phase 7** (Bonus): T047-T050 (test-event API) (~60 min)
+8. **Phase 8** (Polish): T051-T058 (quality gates + validation) (~45 min)
+
+**Total Estimated Effort**: ~600-660 minutes (~10-11 hours) for single developer; highly parallelizable for team
 
 ---
 
-## Parallel Opportunities
+## Independent Test Criteria (Per User Story)
 
-- Setup tasks T001-T004 can run in parallel.
-- Foundational tasks T005, T006, T008, T009 can run in parallel.
-- US1 tests T010-T012 can run in parallel.
-- US2 tests T016-T019 can run in parallel.
-- US2 implementation tasks T020 and T021 can run in parallel.
-- US3 tests T025-T029 can run in parallel.
-- US3 implementation tasks T032 and T033 can run in parallel; T034-T037 follow.
-- Polish tasks T039-T044 can run in parallel where file overlap is avoided.
+### User Story 1 - Bootstrap (P1)
 
----
+**Test Scope**: 
+- [ ] Topic bootstrap on startup succeeds and logs results
+- [ ] Second startup is idempotent (no errors, no duplicate creates)
+- [ ] Topics appear in Kafka UI after bootstrap
 
-## Parallel Example: User Story 3
-
+**Validation**:
 ```bash
-# Write/execute US3 tests together
-Task: "Add parsed form-field request validation tests for /api/chat/request in backend_service/tests/test_chat_request_api.py"
-Task: "Add file upload/save path tests (absolute path assertions) in backend_service/tests/test_chat_request_api.py"
-Task: "Add publish success/failure tests for init-planner in backend_service/tests/test_chat_request_api.py"
+python -m backend_service.app.main
+# Expected: "INFO Topic bootstrap complete: X created, Y already existed, Z errors"
+curl http://localhost:8080  # Kafka UI - confirm topics present
+```
 
-# Implement non-conflicting US3 tasks together
-Task: "Add/verify UPLOAD_DIR configuration with default ./uploads in backend_service/app/config.py"
-Task: "Add/verify uploads ignore rules in .gitignore"
+### User Story 2 - WebSocket (P2)
+
+**Test Scope**:
+- [ ] Frontend Socket.IO client can connect and receive `sid`
+- [ ] Multiple concurrent sessions are routed independently
+- [ ] emit_event successfully sends payload to matching session only
+- [ ] Unknown session_id is skipped without error
+
+**Validation**:
+```bash
+pytest backend_service/tests/test_socket.py::test_emit_event_routes_to_correct_session -v
+pytest backend_service/tests/test_connection_manager.py -v
+```
+
+### User Story 3 - User Requests (P3)
+
+**Test Scope**:
+- [ ] POST /api/chat/request accepts multipart form data with user_prompt, user_level, sid
+- [ ] Files are stored in UPLOAD_DIR with trackable paths
+- [ ] PlannerRequestEvent published to Kafka with correct fields and request_id key
+- [ ] Response includes request_id for client correlation
+
+**Validation**:
+```bash
+curl -s -X POST http://localhost:8001/api/chat/request \
+  -F "user_prompt=Test" -F "user_level=beginner" -F "sid=test-sid-123" \
+  -F "files=@sample.pdf" | jq .request_id
+# Should print request_id UUID
+```
+
+### User Story 4 - Consumer (P2)
+
+**Test Scope**:
+- [ ] Consumer task starts on app startup
+- [ ] clarify-user-level messages are validated and routed via Socket.IO
+- [ ] stream-tokens messages are validated and routed via Socket.IO
+- [ ] Consumer recovers from validation errors and continues polling
+- [ ] Unknown session_id messages are logged and skipped
+
+**Validation**:
+```bash
+pytest backend_service/tests/test_consumer.py -v
+# Observe debug logs for each message route decision
 ```
 
 ---
 
-## Implementation Strategy
+## MVP Scope (Recommended for Initial Release)
 
-### MVP First (User Story 1)
+**Deliver**:
+1. ✅ Phase 1 (Setup)
+2. ✅ Phase 2 (Foundational - all schemas/configs)
+3. ✅ Phase 3 (US1 - Bootstrap) - enables Kafka infrastructure
+4. ✅ Phase 4 (US2 - WebSocket) - enables frontend connectivity
+5. ✅ Phase 6 (US4 - Consumer) - enables backend-to-frontend routing
+6. ⏭️ Phase 5 (US3 - User Requests) - defer to Phase 2 release if timeline tight
+7. ⏭️ Phase 7 (Bonus - Test-Event API) - defer to Phase 2 if timeline tight
+8. ✅ Phase 8 (Polish - quality gates)
 
-1. Complete Phase 1 and Phase 2.
-2. Deliver US1 (startup bootstrap).
-3. Validate startup behavior independently before adding other stories.
+**MVP Duration**: ~480-540 minutes (~8-9 hours) with Phases 1-4, 6, 8
 
-### Incremental Delivery
-
-1. Deliver US1 (Kafka bootstrap).
-2. Deliver US2 (WebSocket routing).
-3. Deliver US3 (chat request ingestion with parsed form fields + uploads).
-4. Run Phase 6 quality/documentation gates.
-
-### Parallel Team Strategy
-
-1. Team completes Setup + Foundational together.
-2. Then parallelize by story:
-   - Dev A: US1
-   - Dev B: US2
-   - Dev C: US3
-3. Converge for polish and release checks.
+**Phase 2 Backlog**: Phases 5, 7
 
 ---
 
-## Notes
+## Notes on Task Implementation Strategy
 
-- `[P]` tasks target different files and no unmet dependencies.
-- User story labels map directly to spec priorities (`US1`, `US2`, `US3`).
-- Keep implementation minimal and preserve TODO markers where spec defers edge-case handling.
-- Parsed form-model requirement for `/api/chat/request` must remain consistent across code, tests, and contracts.
+**Simplicity First** (Per User Guidance):
+- Keep validation basic (non-empty checks, type validation via Pydantic)
+- Defer edge cases (disconnect cleanup, auth, back-pressure) via explicit TODO markers
+- Use Pydantic for all schema validation (no custom validators)
+- Minimal error handling: log exceptions, continue loop (Kafka consumer)
+
+**Schema Organization**:
+- All schemas centralized in project/schemas.py (single source of truth)
+- project/events.py re-exports schemas and defines event-name constants
+- No local schema duplication across backend_service/ modules
+
+**Testing Approach**:
+- Test contracts first (input/output shapes)
+- Test routing logic (correct message delivery)
+- Test recovery from errors (consumer continues on bad message)
+- Integration tests verify end-to-end flows (publish → consume → emit)
+
+**Logging Pattern**:
+- All Kafka operations logged with request_id or message_id prefix
+- Socket.IO routing logged at debug level (session_id, event name, outcome)
+- Errors logged but not raised (consumer resilience)

@@ -21,6 +21,13 @@
 - Q: Should test-event metadata require new schema models? → A: No. Keep test-event metadata inline in the response payload; do not add additional schema models for metadata.
 - Q: Where should the shared producer live? → A: Create the single producer in the Kafka admin layer and expose it there for the test-events API to reuse.
 
+### Session 2026-06-14
+
+- Q: What should the field name be for the source agent in `StreamTokensEventBody`? → A: `from_service` — matches existing `project/events.py` convention, requires no alias, and keeps the schema family consistent.
+- Q: Where should `StreamTokensEventBody` be defined, and how does `project/events.py` reference it? → A: Define the single canonical schema in `project/schemas.py`; `project/events.py` imports and re-exports it so any field change is automatically reflected everywhere.
+- Q: Which consumer lifecycle model should the backend use for `clarify-user-level` and `stream-tokens`? → A: An `asyncio` background task (`asyncio.create_task`) started inside the FastAPI lifespan — consistent with the existing lifespan pattern and compatible with `python-socketio`.
+- Q: Should socket-side event name constants (`clarify-user-level-skt`, `stream-tokens-skt`) be added to the `WebSocketEvents` enum? → A: Yes — add both constants to `WebSocketEvents` in `project/events.py` so frontend and backend share the same names without risk of typos.
+
 ### Session 2026-06-13
 
 - Q: Where should the default input factory for the test-event API live? → A: In `backend_service/app/utils.py` — one level above the `api/` package, shared across all app modules.
@@ -94,8 +101,29 @@ As a frontend user, I need to submit a query along with optional document files 
 
 ---
 
+---
+
+### User Story 4 - Consume Kafka Events and Forward to Frontend Sessions (Priority: P2)
+
+As a frontend client, I need the backend to listen on the `clarify-user-level` and `stream-tokens` Kafka topics and forward their payloads to my active Socket.IO session in real time, so that agent-generated events reach me without polling.
+
+**Why this priority**: Agents publish intermediate results (clarification requests, streamed tokens) to Kafka; the backend is the bridge that translates these Kafka events into Socket.IO emissions routed to the originating session.
+
+**Independent Test**: Can be tested by publishing a `ClarifyUserLevelEvent` to `clarify-user-level` and a `StreamTokensEventBody` to `stream-tokens`, then verifying that the backend consumer emits `clarify-user-level-skt` and `stream-tokens-skt` respectively to the correct Socket.IO session.
+
+**Acceptance Scenarios**:
+
+1. **Given** the backend consumer is running, **When** a `ClarifyUserLevelEvent` arrives on `clarify-user-level`, **Then** the backend validates the payload and emits socket event `clarify-user-level-skt` with the entire object to the session identified by the payload's `sid`.
+2. **Given** the backend consumer is running, **When** a `StreamTokensEventBody` arrives on `stream-tokens`, **Then** the backend emits socket event `stream-tokens-skt` with the entire payload to the session identified by the payload's `sid`.
+3. **Given** the backend is starting up, **When** the FastAPI lifespan runs, **Then** the `backend-service-consumer` asyncio task is created and begins polling both topics before the service yields.
+4. **Given** a `stream-tokens` event is consumed with an unrecognized `sid`, **Then** the emit is silently skipped (TODO: log a warning).
+
+---
+
 ### Edge Cases
 
+- `clarify-user-level` consumed but the `sid` in the payload is not present in the connection manager — emit is skipped; handling deferred as a TODO.
+- `stream-tokens` consumed but the target session has disconnected — emit is skipped; handling deferred as a TODO.
 - One or more topics from the registry already exist in Kafka — creation must be idempotent.
 - The project topic registry returns an empty list — startup proceeds without creating any topics.
 - Kafka admin connection is established but topic creation encounters a transient broker error — current behavior logs and continues; full error-handling strategy is deferred as a TODO.
@@ -131,7 +159,7 @@ As a frontend user, I need to submit a query along with optional document files 
 - **FR-019**: The `rag` default factory in `backend_service/app/utils.py` MUST return a `RAGRequestEvent` with a dynamically generated `request_id` (using `uuid4`) and all other required fields set to representative default values.
 - **FR-020**: The backend service MUST expose a WebSocket interface using Socket.IO (`python-socketio`) mounted on the FastAPI ASGI app, to which the frontend connects.
 - **FR-021**: Shared WebSocket event contracts MUST be defined in `project/events.py`, importable by both frontend and backend; this module MUST include event-name constants and corresponding event body schemas.
-- **FR-022**: `project/events.py` MUST define a `stream-tokens` event constant and a `stream-tokens` body schema containing `from_service`, `content`, and `metadata`; emission logic remains TODO.
+- **FR-022**: `project/events.py` MUST define a `stream-tokens` event constant and re-export the `StreamTokensEventBody` schema from `project/schemas.py`; the schema contains `from_service` (str), `sid` (str), and `data` (dict) — emission logic for prior TODOs is now partially fulfilled by US4.
 - **FR-023**: The backend service MUST provide a simple connection manager class that maintains a mapping of `session_id` to connection, exposing minimal `get` and `set` functions; complex exception handling and lifecycle logic are deferred as TODOs.
 - **FR-024**: The connection manager MUST key connections by `session_id`, where the `session_id` IS the Socket.IO-generated `sid`. Sessions MUST be treated independently even when a single user owns multiple sessions.
 - **FR-025**: WebSocket event listeners MUST be placed in a dedicated `socket.py` file as lightweight listeners; their full behavior is to be implemented later (TODO).
@@ -149,6 +177,13 @@ As a frontend user, I need to submit a query along with optional document files 
 - **FR-037**: The `PlannerRequestEvent` schema MUST be defined in `project/schemas.py` under the planner agent section with fields `user_prompt`, `user_level` (list of strings), `sid`, and `file_paths` (list of absolute paths).
 - **FR-038**: The user-request API implementation MUST use simple, minimal code with TODO markers for future enhancements (e.g., file validation, cleanup policies, advanced error handling).
 - **FR-039**: No advanced exception handling or validation is required for file uploads in this iteration — focus on core save-and-publish flow.
+- **FR-040**: The backend service MUST initialize a Kafka consumer named `backend-service-consumer` subscribed to both the `clarify-user-level` and `stream-tokens` topics.
+- **FR-041**: The `backend-service-consumer` MUST run as an `asyncio` background task created via `asyncio.create_task` inside the FastAPI lifespan startup block, before the service yields.
+- **FR-042**: On consuming a message from `clarify-user-level`, the backend MUST validate the payload against `ClarifyUserLevelEvent` and emit socket event `clarify-user-level-skt` with the entire validated payload to the session identified by the payload's `sid`.
+- **FR-043**: On consuming a message from `stream-tokens`, the backend MUST validate the payload against `StreamTokensEventBody` and emit socket event `stream-tokens-skt` with the entire payload to the session identified by the payload's `sid`.
+- **FR-044**: The socket event name constants `CLARIFY_USER_LEVEL_SKT = "clarify-user-level-skt"` and `STREAM_TOKENS_SKT = "stream-tokens-skt"` MUST be added to the `WebSocketEvents` enum in `project/events.py`.
+- **FR-045**: `StreamTokensEventBody` MUST be defined in `project/schemas.py` with fields `from_service` (str), `sid` (str), and `data` (dict); `project/events.py` MUST import and re-export it so that any schema change in `schemas.py` is automatically reflected for all importers of `events.py`.
+- **FR-046**: The `data` field in `StreamTokensEventBody` MUST be a plain `dict` to accommodate agent-specific payload shapes without requiring per-agent schema variants.
 
 ### Key Entities
 
@@ -158,7 +193,9 @@ As a frontend user, I need to submit a query along with optional document files 
 - **TestEventPublishResult**: API response payload containing request identifier, target topic, publish status, and an inline optional Kafka metadata object; no dedicated metadata schema is introduced.
 - **KafkaProducerHandle**: Shared producer instance exposed by the Kafka admin layer and reused by the test-events API.
 - **TestEventDefaultFactory**: Pure functions in `backend_service/app/utils.py`, one per topic, that return a fully initialized default instance of each topic's input schema. No validators, no exception handling — type-safe initialized values only. The `rag` factory returns `RAGRequestEvent` with a fresh `uuid4`-based `request_id` on every call.
-- **WebSocketEvents**: The shared `project/events.py` module containing both WebSocket event-name constants and event body schemas. For now this includes the `stream-tokens` event name and its body schema fields: `from_service`, `content`, and `metadata`.
+- **WebSocketEvents**: The `WebSocketEvents` enum in `project/events.py` containing all socket event-name constants shared by frontend and backend. Includes: `STREAM_TOKENS = "stream-tokens"`, `CLARIFY_USER_LEVEL_SKT = "clarify-user-level-skt"`, and `STREAM_TOKENS_SKT = "stream-tokens-skt"`. Body schemas are defined in `project/schemas.py` and re-exported from `project/events.py`.
+- **StreamTokensEventBody**: Kafka and WebSocket payload schema defined in `project/schemas.py` with fields `from_service` (str — the producing agent), `sid` (str — target session), and `data` (dict — agent-specific payload). Re-exported from `project/events.py`. All agents publishing to the `stream-tokens` Kafka topic MUST conform to this schema.
+- **BackendServiceConsumer**: The `asyncio` background task started in the FastAPI lifespan, subscribing to `clarify-user-level` and `stream-tokens` topics under consumer group/client-id `backend-service-consumer`. Routes each consumed message to the matching Socket.IO session via `emit_event`.
 - **UserRequest**: Backend request schema in `project/schemas.py` with fields `user_prompt` (string), `user_level` (`list[str]`), and `sid` (string); implemented without additional custom validation or exception handling in this iteration. In the multipart request, this schema is parsed from separate form fields: `user_prompt`, `user_level`, and `sid`.
 - **ConnectionManager**: A simple class mapping `session_id` (== Socket.IO `sid`) to its connection, with minimal `get`/`set` functions and no complex logic. Sessions are independent even when owned by the same user.
 - **SocketModule**: The dedicated `socket.py` file holding lightweight Socket.IO event listeners (implemented later) and the `emit_event(event, payload, session_id)` function that routes a payload to a session.
@@ -178,8 +215,11 @@ As a frontend user, I need to submit a query along with optional document files 
 - **SC-006**: For successful `rag` test-event API calls, Kafka broker metadata fields are returned whenever the producer result exposes them.
 - **SC-007**: A frontend Socket.IO client can establish a WebSocket connection to the backend and be registered in the connection manager keyed by its `session_id` (`sid`).
 - **SC-008**: A payload emitted via `emit_event(event, payload, session_id)` is delivered only to the connection mapped to that `session_id` and to no other session.
-- **SC-009**: The shared `project/events.py` defines the `stream-tokens` event constant and is importable by both frontend and backend without backend-only dependencies.
-- **SC-010**: The shared `project/events.py` defines a `stream-tokens` body schema with fields `from_service`, `content`, and `metadata`.
+- **SC-009**: `project/events.py` defines the `stream-tokens`, `clarify-user-level-skt`, and `stream-tokens-skt` event constants and is importable by both frontend and backend without backend-only dependencies.
+- **SC-010**: `project/schemas.py` defines `StreamTokensEventBody` with fields `from_service` (str), `sid` (str), and `data` (dict); `project/events.py` re-exports it via a plain import.
+- **SC-017**: On consuming a `clarify-user-level` Kafka message, the backend emits `clarify-user-level-skt` to the Socket.IO session matching the payload's `sid` with the entire `ClarifyUserLevelEvent` payload.
+- **SC-018**: On consuming a `stream-tokens` Kafka message, the backend emits `stream-tokens-skt` to the Socket.IO session matching the payload's `sid` with the entire `StreamTokensEventBody` payload.
+- **SC-019**: The `backend-service-consumer` asyncio task is created and begins consuming before the FastAPI lifespan yields (i.e., before the service becomes ready).
 - **SC-011**: `project/schemas.py` defines `UserRequest` with fields `user_prompt`, `user_level` (`list[str]`), and `sid`.
 - **SC-012**: A `POST /api/chat/request` call with valid `UserRequest` provided via parsed form fields (`user_prompt`, `user_level`, `sid`) and 1–3 file uploads (in form field `files`) succeeds: files are saved to the configured directory, a `PlannerRequestEvent` is published to Kafka, and the API responds with a confirmation message.
 - **SC-013**: A `POST /api/chat/request` call with invalid `UserRequest` data returns a 400 error with a simple error message.
