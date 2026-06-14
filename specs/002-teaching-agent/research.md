@@ -53,3 +53,21 @@
 - Decision: Add `TeachingAgentInput`, `TeachingAgentOutput`, `TeachingContent`, `TeachingMetadata`, and `OutputMode` to `project/schemas.py` alongside existing RAG agent schemas.
 - Rationale: `project/schemas.py` is the established shared contract file for inter-agent communication. Downstream agents (Planner, Quiz, Evaluation) import from one location.
 - Alternatives considered: Separate `teaching_agent/schemas.py` (breaks the shared contract pattern; downstream agents would need to import from two locations).
+
+## Decision 10: Kafka Integration Architecture (Phase 2)
+
+- Decision: Implement the Kafka layer as three separate files — `teaching_agent/kafka.py` (I/O primitives and Protocol types), `teaching_agent/handlers.py` (business logic, zero Kafka I/O), `teaching_agent/worker.py` (lifecycle and poll loop) — following the identical structure used by `rag_agent/kafka.py`, `rag_agent/handlers.py`, and `rag_agent/worker.py`.
+- Rationale: Consistency across agents reduces the cognitive overhead for any developer moving between agent codebases. The three-file separation makes each layer independently unit-testable: `handlers.py` can be tested with a fake agent and a fake publisher; `worker.py` can be tested with fake consumer/producer factories. Protocol types in `kafka.py` enable simple dict-based fakes without any mocking framework.
+- Alternatives considered: Single `kafka_worker.py` combining all three layers (harder to test business logic in isolation; tight coupling between I/O and domain logic); embedding Kafka logic in `agent.py` (violates single-responsibility; makes the core pipeline harder to test and reuse).
+
+## Decision 11: Always-Publish Completion Event
+
+- Decision: `TeachingRequestEventHandler.process_request()` always publishes a `TeachingCompletionEvent` to `"teaching-complete"` regardless of whether the core pipeline returns `status: "ok"` or `status: "error"`. A failed completion event carries `status: "error"`, `content: null`, `tokens_used: 0`, and the error message in `errors`.
+- Rationale: The Planner Agent must always receive a response to avoid hanging indefinitely. A schema-valid error completion event is more operationally useful than silence — the Planner can log it, retry, or surface it to the user. This mirrors the RAG agent pattern (`publish_rag_complete` is called in both success and failure branches of `RAGRequestEventHandler.process_request()`).
+- Alternatives considered: Publish only on success, log on failure (leaves Planner waiting on failures); publish to a dead-letter topic on failure (adds infrastructure complexity without benefit at this stage; deferred to future iteration).
+
+## Decision 12: Kafka Event Schema Placement
+
+- Decision: `TeachingRequestEvent` and `TeachingCompletionEvent` go in `project/schemas.py` in the Teaching Agent section. `"teaching"` is added to the existing `PlannerTopics` enum (consistent with `PlannerTopics.RAG`); a new `TeachingTopics` enum with only `TEACHING_COMPLETE = "teaching-complete"` goes in `project/topics.py`. Both are included in `get_all_topic_names()`.
+- Rationale: Mirrors the RAG agent pattern exactly — `RAGRequestEvent` and `RAGCompletionEvent` live in `project/schemas.py`; `PlannerTopics` and `RAGTopics` live in `project/topics.py`. The backend service calls `get_all_topic_names()` at startup to bootstrap all topics; adding `TeachingTopics` there ensures the `"teaching"` and `"teaching-complete"` topics are created automatically without any backend service changes.
+- Alternatives considered: Event schemas inside `teaching_agent/` (breaks the shared contract pattern; forces the Planner and Quiz Agent to import from a peer agent module, creating cross-agent coupling).

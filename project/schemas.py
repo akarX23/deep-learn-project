@@ -407,3 +407,218 @@ class TeachingAgentOutput(BaseModel):
         if value not in {"ok", "error"}:
             raise ValueError("status must be 'ok' or 'error'")
         return value
+
+
+# ---------------------------------------------------------------------------
+# Quiz Agent schemas
+# ---------------------------------------------------------------------------
+
+
+class QuestionType(str, Enum):
+    """Discriminator for question variants in a generated quiz."""
+
+    MCQ_SINGLE = "mcq-single"
+    MCQ_MULTI = "mcq-multi"
+    DESCRIPTIVE = "descriptive"
+
+
+class MCQOption(BaseModel):
+    """A single selectable option within an MCQ question."""
+
+    id: str
+    text: str
+    is_correct: bool
+    explanation: str  # Why correct or why incorrect / why it should have been selected
+
+
+class UIHints(BaseModel):
+    """Rendering directives consumed by the frontend quiz UI."""
+
+    mcq_single_input: str = "radio"
+    mcq_multi_input: str = "checkbox"
+    mcq_multi_hint_text: str = "Select all that apply"
+    descriptive_target_words: int = 150
+    descriptive_soft_warning_below: int = 80
+
+
+class QuizMetadata(BaseModel):
+    """Quiz-level metadata attached to every generated Quiz; read by the UI."""
+
+    question_type_counts: dict  # {"mcq-single": n, "mcq-multi": n, "descriptive": n}
+    total_questions: int = Field(ge=1)
+    max_score: int = Field(ge=1)
+    mcq_max_score: int = Field(ge=0)
+    descriptive_max_score: int = Field(ge=0)
+    ui_hints: UIHints = Field(default_factory=UIHints)
+
+
+class Question(BaseModel):
+    """A single quiz question with all fields needed for rendering and grading."""
+
+    id: str
+    type: QuestionType
+    prompt: str
+    sub_concept: str
+    max_points: int = Field(ge=1, default=1)
+    # MCQ fields
+    options: List[MCQOption] = Field(default_factory=list)
+    topic_deep_dive: Optional[str] = None
+    # Descriptive field
+    rubric: List[str] = Field(default_factory=list)
+
+    @field_validator("prompt", "sub_concept")
+    @classmethod
+    def validate_non_empty(cls, value: str) -> str:
+class TeachingRequestEvent(BaseModel):
+    """Kafka request payload published by the Planner Agent to the 'teaching' topic."""
+
+    request_id: str
+    session_ctx: dict[str, Any]
+    topic: str
+    output_mode: str
+    context: str = ""
+    created_at: str | None = None
+    source: str | None = None
+
+    @field_validator("request_id", "topic", "output_mode")
+    @classmethod
+    def validate_required_strings(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value cannot be empty")
+        return value
+
+
+class Quiz(BaseModel):
+    """A generated collection of questions for a single teaching-content item."""
+
+    quiz_id: str
+    topic: str
+    questions: List[Question] = Field(min_length=1)
+    metadata: QuizMetadata
+
+
+class SubmittedAnswer(BaseModel):
+    """A learner's response to one question."""
+
+    question_id: str
+    selected_option_ids: List[str] = Field(default_factory=list)  # MCQ
+    free_text: str = ""  # Descriptive
+
+
+class PerOptionExplanation(BaseModel):
+    """Explanation panel for a single mishandled MCQ option on the results screen."""
+
+    option_id: str
+    explanation_type: str  # "wrong-selected" | "missed-correct"
+    explanation: str
+
+
+class QuestionResult(BaseModel):
+    """Per-question scoring outcome returned in QuizResult."""
+
+    question_id: str
+    score: float = Field(ge=0)
+    max_score: int = Field(ge=0)
+    # MCQ single
+    is_correct: Optional[bool] = None
+    wrong_answer_explanation: Optional[str] = None
+    # MCQ multi / single on wrong
+    topic_deep_dive: Optional[str] = None
+    per_option_explanations: List[PerOptionExplanation] = Field(default_factory=list)
+    # Descriptive
+    model_answer: Optional[str] = None
+    feedback: Optional[str] = None
+
+
+class QuizResult(BaseModel):
+    """Aggregated evaluation outcome returned by QuizAgent.evaluate()."""
+
+    overall_score: float = Field(ge=0)
+    max_score: int = Field(ge=1)
+    overall_percentage: float = Field(ge=0, le=100)
+    mcq_subtotal: float = Field(ge=0)
+    descriptive_subtotal: float = Field(ge=0)
+    question_results: List[QuestionResult] = Field(default_factory=list)
+    weak_sub_concepts: List[str] = Field(default_factory=list)
+    recommended_action: str  # "re-teach" | "practice-more" | "advance"
+
+    @field_validator("recommended_action")
+    @classmethod
+    def validate_recommended_action(cls, value: str) -> str:
+        if value not in {"re-teach", "practice-more", "advance"}:
+            raise ValueError("recommended_action must be one of: re-teach, practice-more, advance")
+        return value
+
+
+class QuizAgentMetadata(BaseModel):
+    """Audit record for a Quiz Agent response."""
+
+    topic: str
+    tokens_used: int = Field(ge=0)
+    model: str
+
+
+class QuizAgentInput(BaseModel):
+    """Input payload sent to QuizAgent.generate()."""
+
+    topic: str
+    teaching_content: str
+    mcq_single_count: int = Field(default=5, ge=1)
+    mcq_multi_count: int = Field(default=3, ge=1)
+
+    @field_validator("topic", "teaching_content")
+    @classmethod
+    def validate_non_empty(cls, value: str) -> str:
+    @field_validator("session_ctx")
+    @classmethod
+    def validate_session_ctx(cls, value: dict[str, Any]) -> dict[str, Any]:
+        if value is None:
+            raise ValueError("session_ctx cannot be null")
+        return value
+
+
+class TeachingCompletionEvent(BaseModel):
+    """Kafka completion payload published by the Teaching Agent to 'teaching-complete'."""
+
+    request_id: str
+    session_ctx: dict[str, Any]
+    topic: str
+    output_mode: str
+    status: str
+    content: Optional[TeachingContent] = None
+    tokens_used: int = Field(default=0, ge=0)
+    model: str
+    started_at: str
+    completed_at: str
+    duration_ms: int = Field(default=0, ge=0)
+    errors: List[str] = Field(default_factory=list)
+    source: str = "teaching-agent"
+
+    @field_validator("request_id", "topic", "output_mode", "model", "started_at", "completed_at")
+    @classmethod
+    def validate_non_empty_fields(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value cannot be empty")
+        return value
+
+
+class QuizAgentOutput(BaseModel):
+    """Output payload returned by both phases of the Quiz Agent."""
+
+    status: str  # "generated" | "evaluated" | "error"
+    quiz: Optional[Quiz] = None
+    result: Optional[QuizResult] = None
+    metadata: Optional[QuizAgentMetadata] = None
+    errors: List[str] = Field(default_factory=list)
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str) -> str:
+        if value not in {"generated", "evaluated", "error"}:
+            raise ValueError("status must be one of: generated, evaluated, error")
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str) -> str:
+        if value not in {"ok", "error"}:
+            raise ValueError("status must be 'ok' or 'error'")
+        return value

@@ -10,6 +10,7 @@ class PlannerTopics(str, Enum):
 
     RAG = "rag"
     INIT_PLANNER = "init-planner"
+    TEACHING = "teaching"
 
 
 class RAGTopics(str, Enum):
@@ -32,12 +33,24 @@ class AgentCompletionTopics(str, Enum):
 
     TEACHING_COMPLETE = "teaching-complete"
     QUIZ_COMPLETE = "quiz-complete"
+    
+    
+class TeachingTopics(str, Enum):
+    """Topics owned by the Teaching Agent."""
+
+    TEACHING_COMPLETE = "teaching-complete"
 
 
 def get_rag_topic_names() -> list[str]:
     """Return the full set of topics required by the RAG Kafka service."""
 
     return [PlannerTopics.RAG.value, RAGTopics.RAG_COMPLETE.value]
+
+
+def get_teaching_topic_names() -> list[str]:
+    """Return the full set of topics required by the Teaching Agent Kafka service."""
+
+    return [PlannerTopics.TEACHING.value, TeachingTopics.TEACHING_COMPLETE.value]
 
 
 def get_all_topic_names() -> list[str]:
@@ -55,4 +68,5 @@ def get_all_topic_names() -> list[str]:
         + [topic.value for topic in RAGTopics]
         + [topic.value for topic in PlannerAgentTopics]
         + [topic.value for topic in AgentCompletionTopics]
+        + [topic.value for topic in TeachingTopics]
     )

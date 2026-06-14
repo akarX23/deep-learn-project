@@ -11,15 +11,14 @@ langgraph>=1.2.0
 langchain-core>=1.4.0
 
 # --- Teaching Agent ---
-# Add teaching-specific dependencies here.
-
-# --- Backend Service (Kafka) ---
+litellm>=1.40.0
 kafka-python>=2.0.2
 
-# --- Backend Service (WebSocket) ---
+# --- Backend Service ---
+fastapi>=0.110.0
+uvicorn>=0.29.0
+kafka-python>=2.0.2
 python-socketio>=5.11
-
-# --- Backend Service (File Uploads) ---
 python-multipart>=0.0.9
 
 # --- Development / Testing ---
