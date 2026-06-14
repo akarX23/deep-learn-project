@@ -13,6 +13,12 @@
 - Q: Should planner inference use RAG's LiteLLM configuration? → A: No. Planner agent must use its own LiteLLM configuration and environment variables.
 - Q: What type-safety and schema-conformance constraints apply? → A: Planner code must enforce strong typing end-to-end; inbound/outbound messages must conform to `project/schemas.py`; function signatures must declare argument and return types; `Any` is disallowed except unavoidable cases.
 
+### Session 2026-06-14 (Continued)
+
+- Q: How should environment variables be loaded in the planner agent? → A: Use `dotenv` package to load environment variables without overriding existing variables (apply `override=False` in `load_dotenv()`); this allows local `.env.local` files to coexist with system-set variables.
+- Q: Should the planner consume completion topic events and resume interrupted workflows? → A: Yes. The planner must consume `rag-complete`, `teaching-complete`, and `quiz-complete` topics, then use LangGraph's `Command(resume=...)` API to resume graph execution where it was interrupted (after dispatch nodes `run_rag`, `teach_node`, `run_quiz`); completion-driven resumption is now in scope for this phase.
+- Q: How strict should boilerplate minimization be relative to logging and type-safety? → A: Minimize boilerplate only where it does not compromise observability or type-safety; every stage must log; function signatures must declare types. Trade-off favors correctness and debuggability over brevity.
+
 ## User Scenarios & Testing
 
 ### User Story 1 - Consume init-planner Events and Request Assignment (Priority: P1)
@@ -74,18 +80,19 @@ The planner produces events to designated Kafka topics (e.g., `rag-request`, `te
 
 ### User Story 4 - Workflow Status Tracking and Intermediate Output Storage (Priority: P2)
 
-As agents complete their work, they produce completion events (e.g., `rag-complete`, `teaching-complete`, `quiz-complete`) to Kafka. The planner agent consumes these events, updates an in-memory workflow state (e.g., marking RAG as done, marking specific Teaching level as done), and saves intermediate outputs (e.g., RAG-extracted materials, teaching artifacts) for later compilation or review. When all agents in the workflow finish, the planner produces a `workflow-complete` event.
+As agents complete their work, they produce completion events (e.g., `rag-complete`, `teaching-complete`, `quiz-complete`) to Kafka. The planner agent consumes these events, updates an in-memory workflow state (e.g., marking RAG as done, marking specific Teaching level as done), extracts intermediate outputs (e.g., RAG-extracted materials, teaching artifacts), and uses LangGraph's `Command(resume=...)` API to resume graph execution where it was interrupted (at the dispatch node). When all agents in the workflow finish, the planner produces a `workflow-complete` event.
 
-**Why this priority**: Tracking workflow progress and collecting outputs enables monitoring, debugging, and final compilation of results; this is essential for non-trivial user journeys.
+**Why this priority**: Tracking workflow progress, collecting outputs, and implementing resumption enables non-linear workflows and proper state management; this is essential for production-quality orchestration.
 
-**Independent Test**: Submit a request that triggers RAG + Teaching (2 levels). Verify planner consumes completion events in any order, updates workflow state correctly, stores outputs, and produces `workflow-complete` only after all agents finish.
+**Independent Test**: Submit a request that triggers RAG + Teaching (2 levels). Verify planner consumes completion events in any order, resumes graph execution at correct node, stores outputs, updates state correctly, and produces `workflow-complete` only after all agents finish.
 
 **Acceptance Scenarios**:
 
-1. **Given** agents finish in any order, **When** completion events are consumed, **Then** workflow state is updated independently of order.
-2. **Given** all agents in workflow have completed, **When** final event is processed, **Then** `workflow-complete` event is produced with request_id and collected outputs.
-3. **Given** intermediate outputs from agents, **When** stored, **Then** they are retrievable by request_id for later steps.
-4. **Given** an agent fails or times out, **When** no completion event arrives, **Then** the workflow state reflects the missing agent and continues (basic handling, no rollback).
+1. **Given** agents complete and produce completion events, **When** events are consumed, **Then** intermediate outputs are extracted and stored by request_id.
+2. **Given** a completion event arrives for a dispatched agent, **When** processed, **Then** `Command(resume=...)` is invoked to resume graph execution at the correct node with updated state.
+3. **Given** agents finish in any order, **When** completion events are consumed, **Then** graph resumes correctly regardless of event order.
+4. **Given** all agents in workflow have completed, **When** final agent completes, **Then** `workflow-complete` event is produced with request_id and collected outputs.
+5. **Given** an agent fails or times out, **When** no completion event arrives, **Then** the workflow state reflects the missing agent and continues (basic handling, no rollback).
 
 ---
 
@@ -118,6 +125,9 @@ As agents complete their work, they produce completion events (e.g., `rag-comple
 - **FR-015**: System MUST use planner-local LiteLLM configuration for all planner LLM calls (planner-specific model/base URL/key/temperature/token settings) and MUST NOT depend on rag_agent runtime config.
 - **FR-016**: System MUST validate and serialize all inbound and outbound planner Kafka messages using their corresponding schemas from `project/schemas.py`.
 - **FR-017**: System MUST provide explicit type annotations for planner function parameters and return values; `Any` MAY be used only in unavoidable interoperability boundaries and must be minimized.
+- **FR-018**: System MUST load environment variables using `dotenv` package with `override=False` so that system-set variables are never overwritten by `.env.local` files.
+- **FR-019**: System MUST consume `rag-complete`, `teaching-complete`, and `quiz-complete` completion topics and extract payloads (request_id, output artifacts) from each event.
+- **FR-020**: System MUST implement LangGraph `Command(resume=...)` API to resume graph execution at the node where it was interrupted (after `run_rag`, `teach_node`, `run_quiz` dispatch nodes) when a matching completion event is received; state and intermediate outputs are updated before resumption.
 
 ### Key Entities
 
@@ -142,6 +152,8 @@ As agents complete their work, they produce completion events (e.g., `rag-comple
 - **SC-010**: 100% of planner LLM calls resolve configuration from planner-local settings (no rag_agent configuration imports for planner inference).
 - **SC-011**: 100% of planner-produced and planner-consumed Kafka payloads are schema-validated against `project/schemas.py` in unit tests.
 - **SC-012**: Planner modules pass static type checking with no unresolved `Any` usage except explicitly documented unavoidable boundaries.
+- **SC-013**: Environment variables are loaded via `dotenv` with `override=False` in `planner_agent/config.py`, verified by unit tests confirming system-set variables are never overwritten.
+- **SC-014**: Planner consumes all completion events and resumes workflows correctly; verified by tests confirming intermediate outputs are restored, state is consistent, and graph resumes at correct node.
 
 ## Assumptions
 
@@ -156,3 +168,5 @@ As agents complete their work, they produce completion events (e.g., `rag-comple
 - Type safety is enforced at implementation boundaries; message contracts are treated as strict schema boundaries.
 - Request workflows remain active indefinitely without timeout; agent completion is the primary lifecycle trigger. Timeout logic deferred to future phase.
 - "Eval agent" is designed but not invoked; placeholders/TODOs mark its future integration.
+- Environment variables for planner configuration are loaded from `.env.local` (or system environment) using `dotenv.load_dotenv(override=False)`; this ensures local overrides do not suppress system-set variables.
+- Completion event consumption and `Command(resume=...)` workflow resumption are now in-scope as part of this phase (US4); the planner will subscribe to completion topics immediately on startup and maintain a resume callback registry indexed by request_id.

@@ -37,8 +37,10 @@
 - [x] T013 Implement stage-level logger calls in `planner_agent/agent.py` and `planner_agent/worker.py` for consume, assign, infer, route, dispatch, finish paths
 - [x] T014 [P] Add foundational contract tests for schema/topic conformance in `planner_agent/tests/test_planner_agent.py`
 - [x] T015 [P] Add foundational typing/signature tests and lint expectations in `planner_agent/tests/test_worker_runtime.py` and `planner_agent/tests/test_level_inference.py`
+- [ ] T015a [P] Implement dotenv environment variable loading in `planner_agent/config.py` using `load_dotenv(override=False)` to preserve system-set variables
+- [ ] T015b [P] Add unit test verifying dotenv does not override system-set environment variables in `planner_agent/tests/`
 
-**Checkpoint**: Core planner plumbing, schema boundaries, and observability are ready.
+**Checkpoint**: Core planner plumbing, schema boundaries, observability, and environment management are ready.
 
 ---
 
@@ -121,9 +123,9 @@
 
 ## Phase 6: User Story 4 - Workflow Status Tracking and Intermediate Output Storage (Priority: P2)
 
-**Goal**: Track state through completion path, produce `workflow-complete`, and keep memory checkpoints retrievable by `request_id`.
+**Goal**: Track state through completion path, consume completion events, resume workflows via `Command(resume=...)`, produce `workflow-complete`, and keep memory checkpoints retrievable by `request_id`.
 
-**Independent Test**: Verify final payload composition and state completion markers using pre-populated state snapshots.
+**Independent Test**: Verify final payload composition, completion event consumption, graph resumption at correct nodes, state consistency, and output collection using pre-populated state snapshots.
 
 ### Tests for User Story 4
 
@@ -131,14 +133,23 @@
 - [x] T046 [P] [US4] Add finish-node test for `workflow_status = "complete"` in `planner_agent/tests/test_planner_agent.py`
 - [x] T047 [P] [US4] Add checkpoint retrieval test by `thread_id = request_id` in `planner_agent/tests/test_planner_agent.py`
 - [x] T048 [P] [US4] Add deferred test placeholder for `Command(resume=...)` completion updates in `planner_agent/tests/test_planner_agent.py`
+- [ ] T048a [P] [US4] Add test for completion event consumption from `rag-complete`, `teaching-complete`, `quiz-complete` topics in `planner_agent/tests/`
+- [ ] T048b [P] [US4] Add test verifying `Command(resume=...)` is issued with correct state after completion event in `planner_agent/tests/`
+- [ ] T048c [P] [US4] Add test verifying intermediate outputs are extracted from completion events and merged into workflow state in `planner_agent/tests/`
+- [ ] T048d [P] [US4] Add test verifying resumption correctness (graph resumes at dispatch node, state is restored, outputs preserved) in `planner_agent/tests/`
 
 ### Implementation for User Story 4
 
 - [x] T049 [US4] Implement `_finish` node in `planner_agent/agent.py` publishing `WorkflowCompleteEvent`
 - [x] T050 [US4] Wire `finish -> END` and completion-path logs in `planner_agent/agent.py`
 - [x] T051 [US4] Add explicit TODO markers for deferred completion-consumer/resume flow in `planner_agent/agent.py` and `planner_agent/worker.py`
+- [ ] T051a [US4] Implement completion event consumer in `planner_agent/worker.py` that subscribes to `rag-complete`, `teaching-complete`, `quiz-complete` topics
+- [ ] T051b [US4] Implement completion event payload parsing and output extraction via schemas in `planner_agent/worker.py`
+- [ ] T051c [US4] Implement resumption callback registry (request_id -> resume_callback) in `planner_agent/agent.py` to coordinate graph/consumer interaction
+- [ ] T051d [US4] Implement `Command(resume=...)` invocation in completion consumer with updated state and outputs from completion event
+- [ ] T051e [US4] Add logging at completion event consumption, output extraction, and resumption points in both agent and consumer loops
 
-**Checkpoint**: US4 completion flow is independently testable with current phase scope.
+**Checkpoint**: US4 completion flow, event consumption, and graph resumption are independently testable and operational.
 
 ---
 
@@ -153,6 +164,9 @@
 - [x] T056 [P] Verify topic bootstrap regression in `backend_service/tests/test_startup.py` for expanded topic set from `project/topics.py`
 - [x] T057 [P] Validate sample inputs in `planner_agent/tests/inputs/sample_input.json` cover empty-level+files and predefined-level+no-files paths
 - [x] T058 [P] Update implementation notes and deferred-scope TODO references in `specs/004-planner-agent/quickstart.md` and `specs/004-planner-agent/research.md`
+- [ ] T058a [P] Add unit test evidence for dotenv `override=False` behavior in test run output
+- [ ] T058b [P] Add completion-event and resumption integration test evidence in test run output
+- [ ] T058c [P] Run final quality gates with new tasks: `pytest planner_agent/tests -q`, `ruff check project planner_agent`, `ruff format --check project planner_agent`
 
 ---
 
