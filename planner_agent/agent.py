@@ -1,10 +1,15 @@
 """Planner agent: LangGraph orchestrator for multi-agent learning workflows.
 
 Builds a StateGraph that infers the user's knowledge level, then dispatches work
-to the RAG, Teaching, and Quiz agents via Kafka. Dispatch nodes publish an event
-and the graph pauses (static ``interrupt_after``) with state checkpointed by
-``request_id``. Resumption from agent completion events is a future phase (see
-TODO markers).
+to the RAG, Teaching, and Quiz agents via Kafka. Each producer node publishes a
+request event keyed by ``request_id``; a dedicated *await* node that follows it
+calls LangGraph's :func:`interrupt` to pause the workflow with state checkpointed
+by ``request_id``. When an agent completion event arrives, :meth:`PlannerAgent.resume`
+resumes the workflow with ``Command(resume=...)``, delivering the completion
+outputs to the pending ``interrupt()`` call.
+
+Separating *produce* and *await* into distinct nodes ensures that resuming the
+graph re-executes only the await node (so request events are never re-published).
 
 All inbound/outbound Kafka payloads cross schema boundaries defined in
 ``project/schemas.py`` (FR-016), every function is explicitly typed (FR-017),
@@ -16,12 +21,12 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from typing import Protocol, TypedDict
+from typing import TypedDict
 
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.types import Send
+from langgraph.types import Command, interrupt
 
 from kafka import KafkaProducer
 
@@ -42,10 +47,6 @@ from project.topics import PlannerAgentTopics, PlannerTopics
 
 logger = logging.getLogger(__name__)
 
-# Nodes after which the graph pauses; state is checkpointed by request_id and
-# resumed via Command(resume=...) when an agent completion event arrives (future).
-DISPATCH_INTERRUPT_NODES = ["run_rag", "teach_node", "run_quiz"]
-
 
 class PlannerState(TypedDict, total=False):
     """Internal LangGraph state (not shared with other agents)."""
@@ -56,7 +57,6 @@ class PlannerState(TypedDict, total=False):
     user_levels: list[str]
     file_paths: list[str]
     quiz_requested: bool
-    current_level: str
     rag_compiled: str
     teaching_materials: dict[str, str]
     quiz_content: str
@@ -69,6 +69,10 @@ class PlannerAgent:
     def __init__(self, producer: KafkaProducer | None = None) -> None:
         self._producer: KafkaProducer | None = producer
         self._graph: CompiledStateGraph = self._build_graph()
+        # Resumption registry: request_ids of in-flight (paused) workflows that
+        # the completion consumer may resume. Populated by run(), cleared once a
+        # workflow reaches its terminal state.
+        self._active_requests: set[str] = set()
 
     # -- producer ---------------------------------------------------------
     @property
@@ -77,9 +81,11 @@ class PlannerAgent:
             self._producer = make_producer()
         return self._producer
 
-    def _publish(self, topic: str, payload: dict[str, object]) -> None:
-        logger.info("Publishing event to topic '%s'", topic)
-        self.producer.send(topic, payload)
+    def _publish(self, topic: str, payload: dict[str, object], request_id: str) -> None:
+        # request_id is the Kafka message key so downstream agents (and their
+        # completion events) stay correlated to this workflow.
+        logger.info("[%s] Publishing event to topic '%s'", request_id, topic)
+        self.producer.send(topic, value=payload, key=request_id)
 
     # -- graph construction ----------------------------------------------
     def _build_graph(self) -> CompiledStateGraph:
@@ -87,22 +93,30 @@ class PlannerAgent:
         graph.add_node("infer_level", self._infer_level)
         graph.add_node("clarify_and_end", self._clarify_and_end)
         graph.add_node("run_rag", self._run_rag)
-        graph.add_node("teach_node", self._teach_node)
+        graph.add_node("await_rag", self._await_rag)
+        graph.add_node("dispatch_teaching", self._dispatch_teaching)
+        graph.add_node("await_teaching", self._await_teaching)
         graph.add_node("run_quiz", self._run_quiz)
+        graph.add_node("await_quiz", self._await_quiz)
         graph.add_node("finish", self._finish)
 
         graph.add_edge(START, "infer_level")
         graph.add_conditional_edges("infer_level", self._route_after_infer)
         graph.add_edge("clarify_and_end", END)
-        graph.add_conditional_edges("run_rag", self._fan_out_teach)
-        graph.add_conditional_edges("teach_node", self._route_quiz)
-        graph.add_edge("run_quiz", "finish")
+        # RAG: publish -> pause (interrupt) -> teaching dispatch.
+        graph.add_edge("run_rag", "await_rag")
+        graph.add_edge("await_rag", "dispatch_teaching")
+        # Teaching: publish one request per level -> pause until all complete.
+        graph.add_edge("dispatch_teaching", "await_teaching")
+        graph.add_conditional_edges("await_teaching", self._route_quiz)
+        # Quiz: publish -> pause (interrupt) -> finish.
+        graph.add_edge("run_quiz", "await_quiz")
+        graph.add_edge("await_quiz", "finish")
         graph.add_edge("finish", END)
 
-        return graph.compile(
-            checkpointer=MemorySaver(),
-            interrupt_after=DISPATCH_INTERRUPT_NODES,
-        )
+        # Pausing is performed dynamically inside the await_* nodes via
+        # interrupt(); no static interrupt_after is configured.
+        return graph.compile(checkpointer=MemorySaver())
 
     # -- nodes ------------------------------------------------------------
     def _infer_level(self, state: PlannerState) -> dict[str, object]:
@@ -156,13 +170,15 @@ class PlannerAgent:
             reason=state.get("workflow_status", "clarifying"),
         )
         self._publish(
-            PlannerAgentTopics.CLARIFY_USER_LEVEL.value, event.model_dump(mode="json")
+            PlannerAgentTopics.CLARIFY_USER_LEVEL.value,
+            event.model_dump(mode="json"),
+            state["request_id"],
         )
         return {"workflow_status": "clarifying"}
 
     def _run_rag(self, state: PlannerState) -> dict[str, object]:
-        # NOTE: published to the RAG agent's inbound topic ("rag").
-        # TODO: resume the graph via Command(resume=...) when rag-complete arrives.
+        # Publishes to the RAG agent's inbound topic ("rag"). The subsequent
+        # await_rag node pauses the graph until a rag-complete event is consumed.
         logger.info("[%s] Dispatching RAG request", state["request_id"])
         event = RAGRequestEvent(
             request_id=state["request_id"],
@@ -171,30 +187,65 @@ class PlannerAgent:
             file_paths=list(state["file_paths"]),
             source="planner-agent",
         )
-        self._publish(PlannerTopics.RAG.value, event.model_dump(mode="json"))
+        self._publish(
+            PlannerTopics.RAG.value, event.model_dump(mode="json"), state["request_id"]
+        )
         return {}
 
-    def _teach_node(self, state: PlannerState) -> dict[str, object]:
-        # TODO: resume via Command(resume=...) to fill teaching_materials[level].
+    def _await_rag(self, state: PlannerState) -> dict[str, object]:
+        # Pauses here until resume() delivers the rag-complete outputs. On
+        # resume, only this node re-executes, so run_rag never re-publishes.
+        outputs = interrupt(
+            {"await": "rag-complete", "request_id": state["request_id"]}
+        )
+        logger.info("[%s] Resumed with RAG completion outputs", state["request_id"])
+        return {"rag_compiled": str(outputs.get("rag_compiled", ""))}
+
+    def _dispatch_teaching(self, state: PlannerState) -> dict[str, object]:
+        # Fan-out: publish one teaching request per user level. The graph waits
+        # for all of them in await_teaching.
+        levels = list(state.get("user_levels", []))
         logger.info(
-            "[%s] Dispatching teaching request for level=%s",
+            "[%s] Dispatching teaching requests for levels=%s",
             state["request_id"],
-            state["current_level"],
+            levels,
         )
-        event = TeachingRequestEvent(
-            request_id=state["request_id"],
-            user_prompt=state["user_prompt"],
-            user_level=state["current_level"],
-            rag_compiled=state.get("rag_compiled", ""),
-            sid=state["sid"],
-        )
-        self._publish(
-            PlannerAgentTopics.TEACHING_REQUEST.value, event.model_dump(mode="json")
-        )
+        for level in levels:
+            event = TeachingRequestEvent(
+                request_id=state["request_id"],
+                user_prompt=state["user_prompt"],
+                user_level=level,
+                rag_compiled=state.get("rag_compiled", ""),
+                sid=state["sid"],
+            )
+            self._publish(
+                PlannerAgentTopics.TEACHING_REQUEST.value,
+                event.model_dump(mode="json"),
+                state["request_id"],
+            )
         return {}
+
+    def _await_teaching(self, state: PlannerState) -> dict[str, object]:
+        # Gather node: interrupt once per dispatched level. Each resume delivers
+        # one teaching-complete payload (self-describing via user_level), so
+        # completion order does not matter. Re-executes wholly on each resume.
+        levels = list(state.get("user_levels", []))
+        materials: dict[str, str] = dict(state.get("teaching_materials", {}))
+        for _ in levels:
+            outputs = interrupt(
+                {"await": "teaching-complete", "request_id": state["request_id"]}
+            )
+            level = str(outputs.get("user_level", ""))
+            materials[level] = str(outputs.get("content", ""))
+            logger.info(
+                "[%s] Resumed with teaching completion for level=%s",
+                state["request_id"],
+                level,
+            )
+        return {"teaching_materials": materials}
 
     def _run_quiz(self, state: PlannerState) -> dict[str, object]:
-        # TODO: resume via Command(resume=...) to fill quiz_content.
+        # Publishes the quiz request; await_quiz pauses until quiz-complete.
         logger.info("[%s] Dispatching quiz request", state["request_id"])
         event = QuizRequestEvent(
             request_id=state["request_id"],
@@ -204,9 +255,18 @@ class PlannerAgent:
             sid=state["sid"],
         )
         self._publish(
-            PlannerAgentTopics.QUIZ_REQUEST.value, event.model_dump(mode="json")
+            PlannerAgentTopics.QUIZ_REQUEST.value,
+            event.model_dump(mode="json"),
+            state["request_id"],
         )
         return {}
+
+    def _await_quiz(self, state: PlannerState) -> dict[str, object]:
+        outputs = interrupt(
+            {"await": "quiz-complete", "request_id": state["request_id"]}
+        )
+        logger.info("[%s] Resumed with quiz completion outputs", state["request_id"])
+        return {"quiz_content": str(outputs.get("quiz_content", ""))}
 
     def _finish(self, state: PlannerState) -> dict[str, object]:
         logger.info("[%s] Workflow complete", state["request_id"])
@@ -218,23 +278,19 @@ class PlannerAgent:
             quiz_content=state.get("quiz_content", ""),
         )
         self._publish(
-            PlannerAgentTopics.WORKFLOW_COMPLETE.value, event.model_dump(mode="json")
+            PlannerAgentTopics.WORKFLOW_COMPLETE.value,
+            event.model_dump(mode="json"),
+            state["request_id"],
         )
         return {"workflow_status": "complete"}
 
     # -- routers ----------------------------------------------------------
-    def _route_after_infer(self, state: PlannerState) -> str | list[Send]:
+    def _route_after_infer(self, state: PlannerState) -> str:
         if state.get("workflow_status") == "clarifying":
             return "clarify_and_end"
         if state.get("file_paths"):
             return "run_rag"
-        return self._fan_out_teach(state)
-
-    def _fan_out_teach(self, state: PlannerState) -> list[Send]:
-        return [
-            Send("teach_node", {**state, "current_level": level})
-            for level in state.get("user_levels", [])
-        ]
+        return "dispatch_teaching"
 
     def _route_quiz(self, state: PlannerState) -> str:
         return "run_quiz" if state.get("quiz_requested") else "finish"
@@ -259,5 +315,26 @@ class PlannerAgent:
             "workflow_status": "active",
         }
         config: dict[str, object] = {"configurable": {"thread_id": request_id}}
+        self._active_requests.add(request_id)
         self._graph.invoke(initial_state, config)
-        return dict(self._graph.get_state(config).values)
+
+    # -- resumption -------------------------------------------------------
+    def resume(self, request_id: str, outputs: dict[str, object]) -> dict[str, object]:
+        """Resume a paused workflow with outputs from an agent completion event.
+
+        Delivers ``outputs`` to the pending ``interrupt()`` call in the await node
+        (keyed by ``request_id``) via ``Command(resume=...)`` and continues graph
+        execution. Teaching completions are self-describing (each carries its own
+        ``user_level``), so the gather node accumulates ``teaching_materials``
+        internally and out-of-order completions are handled safely.
+        """
+
+        if request_id not in self._active_requests:
+            logger.warning(
+                "[%s] Resume requested for unknown/inactive workflow", request_id
+            )
+        config: dict[str, object] = {"configurable": {"thread_id": request_id}}
+        logger.info(
+            "[%s] Resuming workflow with outputs: %s", request_id, list(outputs)
+        )
+        self._graph.invoke(Command(resume=outputs), config)

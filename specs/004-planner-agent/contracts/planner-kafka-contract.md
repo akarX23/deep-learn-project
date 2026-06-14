@@ -1,217 +1,114 @@
 # Contract: Planner Agent Kafka Topics
 
 **Feature**: `004-planner-agent`  
-**Version**: 1.0.0  
-**Date**: 2026-06-13
+**Version**: 1.1.0  
+**Date**: 2026-06-14
 
-This document defines the Kafka topic contracts for all events produced and consumed by the Planner Agent orchestrator.
+This contract defines all planner-consumed and planner-produced Kafka events for the single-worker, multi-topic consumer runtime.
 
----
-
-## Topics Overview
+## 1. Topic Matrix
 
 | Topic | Direction | Producer | Consumer |
 |---|---|---|---|
-| `init-planner` | inbound | Backend Service | Planner Agent |
-| `rag-request` | outbound | Planner Agent | RAG Worker |
+| `init-planner` | inbound | Backend Service | Planner Worker |
+| `rag-complete` | inbound | RAG Worker | Planner Worker |
+| `teaching-complete` | inbound | Teaching Agent | Planner Worker |
+| `quiz-complete` | inbound | Quiz Agent | Planner Worker |
+| `rag` | outbound | Planner Agent | RAG Worker |
 | `teaching-request` | outbound | Planner Agent | Teaching Agent |
-| `quiz-request` | outbound | Planner Agent | Quiz Agent (future) |
-| `clarify-user-level` | outbound | Planner Agent | Backend / WebSocket |
-| `workflow-complete` | outbound | Planner Agent | Backend / WebSocket |
-| `rag-complete` | inbound (future) | RAG Worker | Planner Agent (resume) |
-| `teaching-complete` | inbound (future) | Teaching Agent | Planner Agent (resume) |
-| `quiz-complete` | inbound (future) | Quiz Agent | Planner Agent (resume) |
+| `quiz-request` | outbound | Planner Agent | Quiz Agent |
+| `clarify-user-level` | outbound | Planner Agent | Backend/WebSocket |
+| `workflow-complete` | outbound | Planner Agent | Backend/WebSocket |
 
----
+## 2. Worker Routing Rules
 
-## Inbound: `init-planner`
+- Single consumer subscribes to all inbound topics.
+- Routing key is `message.topic`.
+- Topic-specific schema parse is mandatory before handler invocation.
+- Handler mapping:
+  - `init-planner` -> `PlannerAgent.run(payload)`
+  - completion topics -> `PlannerAgent.resume(request_id, outputs)`
 
-**Published by**: Backend Service  
-**Consumed by**: Planner Agent `worker.py`
+## 3. Keying Rule for Produced Events
+
+All planner-produced events MUST set Kafka message key to `request_id`.
+
+## 4. Payload Contracts
+
+### 4.1 `init-planner` (inbound)
+
+Schema: `PlannerRequestEvent`
 
 ```json
 {
-  "user_prompt": "Explain gradient descent to me",
+  "user_prompt": "Explain gradient descent",
   "user_level": [],
   "sid": "abc123",
   "file_paths": ["/uploads/notes.pdf"]
 }
 ```
 
-| Field | Type | Required | Notes |
-|---|---|---|---|
-| `user_prompt` | string | ✓ | Raw user learning request |
-| `user_level` | array[string] | ✓ | Empty → triggers level inference; non-empty → used directly |
-| `sid` | string | ✓ | WebSocket session identifier |
-| `file_paths` | array[string] | ✓ | Absolute paths; empty → RAG node skipped |
+### 4.2 `rag` (outbound)
 
----
-
-## Outbound: `rag-request`
-
-**Published by**: Planner Agent `run_rag` node  
-**Consumed by**: RAG Worker
+Schema: `RAGRequestEvent`
 
 ```json
 {
-  "request_id": "a1b2c3d4e5f6",
-  "user_prompt": "Explain gradient descent to me",
+  "request_id": "a1b2c3d4",
+  "session_ctx": {"sid": "abc123"},
+  "user_request": "Explain gradient descent",
   "file_paths": ["/uploads/notes.pdf"],
-  "sid": "abc123"
+  "source": "planner-agent"
 }
 ```
 
-| Field | Type | Required | Notes |
-|---|---|---|---|
-| `request_id` | string | ✓ | UUID hex; used to resume graph on completion |
-| `user_prompt` | string | ✓ | Forwarded from init-planner event |
-| `file_paths` | array[string] | ✓ | Non-empty (conditional edge guarantees files present) |
-| `sid` | string | ✓ | Session identifier |
+### 4.3 `teaching-request` (outbound)
 
----
-
-## Outbound: `teaching-request`
-
-**Published by**: Planner Agent `teach_node` (one event per user level)  
-**Consumed by**: Teaching Agent
+Schema: `TeachingRequestEvent`
 
 ```json
 {
-  "request_id": "a1b2c3d4e5f6",
-  "user_prompt": "Explain gradient descent to me",
+  "request_id": "a1b2c3d4",
+  "user_prompt": "Explain gradient descent",
   "user_level": "beginner",
-  "rag_compiled": "## Key Concepts\n...",
+  "rag_compiled": "## Key concepts",
   "sid": "abc123"
 }
 ```
 
-| Field | Type | Required | Notes |
-|---|---|---|---|
-| `request_id` | string | ✓ | Workflow correlation ID |
-| `user_prompt` | string | ✓ | Original user prompt |
-| `user_level` | string | ✓ | Single level (`beginner`, `intermediate`, `advanced`) |
-| `rag_compiled` | string | ✓ | Empty string if RAG was not in workflow |
-| `sid` | string | ✓ | Session identifier |
+### 4.4 `quiz-request` (outbound)
 
----
-
-## Outbound: `quiz-request`
-
-**Published by**: Planner Agent `run_quiz` node  
-**Consumed by**: Quiz Agent (future)
+Schema: `QuizRequestEvent`
 
 ```json
 {
-  "request_id": "a1b2c3d4e5f6",
-  "user_prompt": "Explain gradient descent to me, then quiz me",
-  "user_levels": ["beginner", "advanced"],
-  "teaching_materials": {
-    "beginner": "## Beginner explanation...",
-    "advanced": "## Advanced explanation..."
-  },
+  "request_id": "a1b2c3d4",
+  "user_prompt": "Explain and quiz me",
+  "user_levels": ["beginner"],
+  "teaching_materials": {"beginner": "lesson"},
   "sid": "abc123"
 }
 ```
 
-| Field | Type | Required | Notes |
-|---|---|---|---|
-| `request_id` | string | ✓ | Workflow correlation ID |
-| `user_prompt` | string | ✓ | Original user prompt |
-| `user_levels` | array[string] | ✓ | All levels that received teaching content |
-| `teaching_materials` | object | ✓ | Level → compiled teaching artifact mapping |
-| `sid` | string | ✓ | Session identifier |
+### 4.5 Completion Topics (inbound)
 
----
+- `rag-complete` -> `RAGCompletionEvent`
+- `teaching-complete` -> `TeachingCompletionEvent`
+- `quiz-complete` -> `QuizCompletionEvent`
 
-## Outbound: `clarify-user-level`
+Completion payloads are transformed into resume deltas and passed into graph resumption via `Command(resume=...)`.
 
-**Published by**: Planner Agent `infer_level` node (low confidence path)  
-**Consumed by**: Backend Service / WebSocket layer
+### 4.6 `clarify-user-level` (outbound)
 
-```json
-{
-  "request_id": "a1b2c3d4e5f6",
-  "user_prompt": "teach me stuff",
-  "sid": "abc123",
-  "reason": "confidence below threshold (0.42 < 0.75)"
-}
-```
+Schema: `ClarifyUserLevelEvent`
 
-| Field | Type | Required | Notes |
-|---|---|---|---|
-| `request_id` | string | ✓ | Request that could not be classified |
-| `user_prompt` | string | ✓ | Original prompt |
-| `sid` | string | ✓ | Session for frontend notification |
-| `reason` | string | ✓ | Human-readable explanation for clarification |
+### 4.7 `workflow-complete` (outbound)
 
----
+Schema: `WorkflowCompleteEvent`
 
-## Outbound: `workflow-complete`
+## 5. Error Handling Contract
 
-**Published by**: Planner Agent `finish` node  
-**Consumed by**: Backend Service / WebSocket layer
-
-```json
-{
-  "request_id": "a1b2c3d4e5f6",
-  "sid": "abc123",
-  "rag_compiled": "## Key Concepts\n...",
-  "teaching_materials": {
-    "beginner": "## Beginner explanation..."
-  },
-  "quiz_content": ""
-}
-```
-
-| Field | Type | Required | Notes |
-|---|---|---|---|
-| `request_id` | string | ✓ | Workflow correlation ID |
-| `sid` | string | ✓ | Session identifier |
-| `rag_compiled` | string | ✓ | Empty string if RAG not in workflow |
-| `teaching_materials` | object | ✓ | All teaching artifacts collected |
-| `quiz_content` | string | ✓ | Empty string if quiz not requested |
-
----
-
-## Inbound (Future Phase): Completion Events
-
-These topics are bootstrapped but consumed in a future implementation phase. The planner will use them to resume the LangGraph workflow.
-
-### `rag-complete`
-
-```json
-{
-  "request_id": "a1b2c3d4e5f6",
-  "compiled_material": "## Key Concepts\n...",
-  "status": "complete"
-}
-```
-
-### `teaching-complete`
-
-```json
-{
-  "request_id": "a1b2c3d4e5f6",
-  "user_level": "beginner",
-  "teaching_material": "## Beginner explanation...",
-  "status": "complete"
-}
-```
-
-### `quiz-complete`
-
-```json
-{
-  "request_id": "a1b2c3d4e5f6",
-  "quiz_content": "Q1: What is ...",
-  "status": "complete"
-}
-```
-
----
-
-## Message Encoding
-
-- All messages are JSON-serialized via `producer.send(topic, value=event.model_dump(mode="json"))`.
-- Kafka key: not set (default None). Future phase may key by `sid` or `request_id` for partitioning.
-- No schema registry in MVP; validation is done at application layer via Pydantic.
+- Unknown topics: log warning and ignore.
+- Schema validation failures: log exception and continue loop.
+- Planner handler failures: log exception and continue loop.
+- No retries/transactions required in MVP.

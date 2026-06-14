@@ -303,6 +303,37 @@ class WorkflowCompleteEvent(BaseModel):
     quiz_content: str = ""
 
 
+class TeachingCompletionEvent(BaseModel):
+    """Teaching agent -> planner completion event (one per user level)."""
+
+    request_id: str
+    sid: str
+    user_level: str
+    content: str = ""
+
+    @field_validator("request_id", "user_level")
+    @classmethod
+    def validate_non_empty_fields(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value cannot be empty")
+        return value
+
+
+class QuizCompletionEvent(BaseModel):
+    """Quiz agent -> planner completion event."""
+
+    request_id: str
+    sid: str
+    quiz_content: str = ""
+
+    @field_validator("request_id")
+    @classmethod
+    def validate_non_empty_fields(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value cannot be empty")
+        return value
+
+
 # ---------------------------------------------------------------------------
 # Teaching Agent schemas
 # ---------------------------------------------------------------------------

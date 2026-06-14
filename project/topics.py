@@ -28,7 +28,7 @@ class PlannerAgentTopics(str, Enum):
 
 
 class AgentCompletionTopics(str, Enum):
-    """Completion topics consumed by the planner to resume workflows (future phase)."""
+    """Completion topics consumed by the planner to resume paused workflows."""
 
     TEACHING_COMPLETE = "teaching-complete"
     QUIZ_COMPLETE = "quiz-complete"

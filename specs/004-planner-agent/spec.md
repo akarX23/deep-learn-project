@@ -19,6 +19,12 @@
 - Q: Should the planner consume completion topic events and resume interrupted workflows? → A: Yes. The planner must consume `rag-complete`, `teaching-complete`, and `quiz-complete` topics, then use LangGraph's `Command(resume=...)` API to resume graph execution where it was interrupted (after dispatch nodes `run_rag`, `teach_node`, `run_quiz`); completion-driven resumption is now in scope for this phase.
 - Q: How strict should boilerplate minimization be relative to logging and type-safety? → A: Minimize boilerplate only where it does not compromise observability or type-safety; every stage must log; function signatures must declare types. Trade-off favors correctness and debuggability over brevity.
 
+### Session 2026-06-14 (Worker/Interrupt Update)
+
+- Q: How should planner workers and Kafka consumption be structured? → A: Use a single `run_worker` function with one Kafka consumer subscribed to all required topics (`init-planner`, `rag-complete`, `teaching-complete`, `quiz-complete`).
+- Q: How should messages from multiple topics be handled? → A: Branch by `message.topic`, validate payload by topic schema, then call the appropriate planner function (`run` for init events, `resume` for completion events).
+- Q: What keying and graph pause/resume semantics are required? → A: For each produced event, use `request_id` as the Kafka message key. Use LangGraph `interrupt()` (not static `interrupt_after`) to pause execution and resume with `Command(resume=...)` when completion events arrive; if needed, place the interrupt in the node immediately after dispatch-producing nodes.
+
 ## User Scenarios & Testing
 
 ### User Story 1 - Consume init-planner Events and Request Assignment (Priority: P1)
@@ -80,7 +86,7 @@ The planner produces events to designated Kafka topics (e.g., `rag-request`, `te
 
 ### User Story 4 - Workflow Status Tracking and Intermediate Output Storage (Priority: P2)
 
-As agents complete their work, they produce completion events (e.g., `rag-complete`, `teaching-complete`, `quiz-complete`) to Kafka. The planner agent consumes these events, updates an in-memory workflow state (e.g., marking RAG as done, marking specific Teaching level as done), extracts intermediate outputs (e.g., RAG-extracted materials, teaching artifacts), and uses LangGraph's `Command(resume=...)` API to resume graph execution where it was interrupted (at the dispatch node). When all agents in the workflow finish, the planner produces a `workflow-complete` event.
+As agents complete their work, they produce completion events (e.g., `rag-complete`, `teaching-complete`, `quiz-complete`) to Kafka. A single planner worker with one multi-topic consumer handles both init and completion traffic by branching on topic name, updates an in-memory workflow state (e.g., marking RAG as done, marking specific Teaching level as done), extracts intermediate outputs (e.g., RAG-extracted materials, teaching artifacts), and uses LangGraph's `Command(resume=...)` API to resume graph execution where it was paused by `interrupt()`. When all agents in the workflow finish, the planner produces a `workflow-complete` event.
 
 **Why this priority**: Tracking workflow progress, collecting outputs, and implementing resumption enables non-linear workflows and proper state management; this is essential for production-quality orchestration.
 
@@ -89,7 +95,7 @@ As agents complete their work, they produce completion events (e.g., `rag-comple
 **Acceptance Scenarios**:
 
 1. **Given** agents complete and produce completion events, **When** events are consumed, **Then** intermediate outputs are extracted and stored by request_id.
-2. **Given** a completion event arrives for a dispatched agent, **When** processed, **Then** `Command(resume=...)` is invoked to resume graph execution at the correct node with updated state.
+2. **Given** a completion event arrives for a dispatched agent, **When** processed, **Then** `Command(resume=...)` is invoked to resume graph execution at the correct pause point with updated state.
 3. **Given** agents finish in any order, **When** completion events are consumed, **Then** graph resumes correctly regardless of event order.
 4. **Given** all agents in workflow have completed, **When** final agent completes, **Then** `workflow-complete` event is produced with request_id and collected outputs.
 5. **Given** an agent fails or times out, **When** no completion event arrives, **Then** the workflow state reflects the missing agent and continues (basic handling, no rollback).
@@ -108,13 +114,13 @@ As agents complete their work, they produce completion events (e.g., `rag-comple
 
 ### Functional Requirements
 
-- **FR-001**: System MUST consume events from the `init-planner` Kafka topic and extract user prompt, file paths, provided user levels (if any), and session ID (sid).
+- **FR-001**: System MUST run a single planner worker and consume required topics (`init-planner`, `rag-complete`, `teaching-complete`, `quiz-complete`) using one Kafka consumer.
 - **FR-002**: System MUST assign a unique `request_id` (UUID or sequential) to each consumed init-planner event and maintain request metadata in memory during workflow execution.
 - **FR-003**: System MUST infer user knowledge level (beginner, intermediate, advanced) from the user prompt using an LLM with a defined confidence threshold (FR-004).
 - **FR-004**: System MUST define a configurable confidence threshold (e.g., 0.75); if inference confidence is below this threshold, produce a `clarify-user-level` event and remove the request from memory.
 - **FR-005**: System MUST skip level inference if the init-planner event provides a pre-defined `user_level` list, using those levels directly.
 - **FR-006**: System MUST define and apply workflow orchestration rules: (a) if files uploaded, RAG event first; (b) Teaching events in parallel for each provided level; (c) Quiz event only if LLM-based detection identifies quiz intent in user prompt (using same LLM with confidence threshold); (d) Eval not included initially.
-- **FR-007**: System MUST produce events to Kafka topics (`rag-request`, `teaching-request`, `quiz-request`) with payload containing request_id, user_prompt, user_level, file_paths, and sid.
+- **FR-007**: System MUST produce events to Kafka topics (`rag-request`, `teaching-request`, `quiz-request`) with payload containing request_id, user_prompt, user_level, file_paths, and sid, and MUST set Kafka message key to `request_id` for each produced event.
 - **FR-008**: System MUST consume completion events (`rag-complete`, `teaching-complete`, `quiz-complete`) from Kafka and update in-memory workflow state (request_id -> agent status mapping).
 - **FR-009**: System MUST store intermediate outputs from completion events (e.g., `rag_materials`, `teaching_artifacts`) retrievable by request_id; simple storage to memory/dict is acceptable for MVP.
 - **FR-010**: System MUST produce a `workflow-complete` event when all agents in a workflow have completed, including the final request_id and collected intermediate outputs.
@@ -127,7 +133,8 @@ As agents complete their work, they produce completion events (e.g., `rag-comple
 - **FR-017**: System MUST provide explicit type annotations for planner function parameters and return values; `Any` MAY be used only in unavoidable interoperability boundaries and must be minimized.
 - **FR-018**: System MUST load environment variables using `dotenv` package with `override=False` so that system-set variables are never overwritten by `.env.local` files.
 - **FR-019**: System MUST consume `rag-complete`, `teaching-complete`, and `quiz-complete` completion topics and extract payloads (request_id, output artifacts) from each event.
-- **FR-020**: System MUST implement LangGraph `Command(resume=...)` API to resume graph execution at the node where it was interrupted (after `run_rag`, `teach_node`, `run_quiz` dispatch nodes) when a matching completion event is received; state and intermediate outputs are updated before resumption.
+- **FR-020**: System MUST implement LangGraph `interrupt()` to pause execution at workflow checkpoints (including the stage immediately following dispatch-producing nodes when needed) and MUST use `Command(resume=...)` to continue execution when matching completion events are received; state and intermediate outputs are updated before resumption.
+- **FR-021**: System MUST branch completion/init handling by source topic name (`message.topic`), validate payloads with topic-specific schemas, and invoke the appropriate planner function (`run` or `resume`).
 
 ### Key Entities
 
@@ -169,4 +176,5 @@ As agents complete their work, they produce completion events (e.g., `rag-comple
 - Request workflows remain active indefinitely without timeout; agent completion is the primary lifecycle trigger. Timeout logic deferred to future phase.
 - "Eval agent" is designed but not invoked; placeholders/TODOs mark its future integration.
 - Environment variables for planner configuration are loaded from `.env.local` (or system environment) using `dotenv.load_dotenv(override=False)`; this ensures local overrides do not suppress system-set variables.
-- Completion event consumption and `Command(resume=...)` workflow resumption are now in-scope as part of this phase (US4); the planner will subscribe to completion topics immediately on startup and maintain a resume callback registry indexed by request_id.
+- Completion event consumption and `Command(resume=...)` workflow resumption are now in-scope as part of this phase (US4); the planner will subscribe to init and completion topics via one consumer immediately on startup and route handling by topic.
+- Planner pause points are implemented with LangGraph `interrupt()` semantics rather than static `interrupt_after` graph configuration.
