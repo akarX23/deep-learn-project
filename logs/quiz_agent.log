@@ -1,0 +1,1651 @@
+2026-06-13 14:41:11,374 [INFO] quiz_agent — ================================================================
+2026-06-13 14:41:11,374 [INFO] quiz_agent — PHASE 1 — generate() START
+2026-06-13 14:41:11,374 [INFO] quiz_agent — ================================================================
+2026-06-13 14:41:11,374 [INFO] quiz_agent — [STEP 1] Validating QuizAgentInput schema
+2026-06-13 14:41:11,374 [DEBUG] quiz_agent — [STEP 1] Raw input received:
+{
+  "topic": "Gradient Descent Optimization",
+  "teaching_content": "Gradient descent is an iterative optimization algorithm used to minimize a loss function by moving in the direction of the steepest descent as defined by the negative of the gradient. At each iteration, the parameters are updated by subtracting a fraction of the gradient, where that fraction is determined by the learning rate. A high learning rate can cause the optimizer to overshoot the minimum, while a low learning rate leads to slow convergence. Stochastic gradient descent (SGD) uses a single training example per update, while mini-batch gradient descent uses a small subset. The loss function measures how far the model's predictions are from the actual values. Common variants include Adam, RMSProp, and Adagrad, each of which adapts the learning rate during training. Momentum helps accelerate SGD by accumulating gradients in directions of persistent descent. Convergence is reached when the gradient magnitude approaches zero. Regularization techniques such as L1 and L2 penalize large weights to prevent overfitting during optimization. Understanding the loss landscape \u00e2\u20ac\u201d including saddle points and local minima \u00e2\u20ac\u201d is critical for effective optimizer choice.",
+  "mcq_single_count": 5,
+  "mcq_multi_count": 3
+}
+2026-06-13 14:41:11,388 [INFO] quiz_agent — [STEP 1] QuizAgentInput validated OK — topic='Gradient Descent Optimization' mcq_single=5 mcq_multi=3
+2026-06-13 14:41:11,388 [INFO] quiz_agent — [STEP 2] Content length check — word_count=177 (min=100)
+2026-06-13 14:41:11,388 [DEBUG] quiz_agent — [STEP 2] Teaching content (first 500 chars):
+Gradient descent is an iterative optimization algorithm used to minimize a loss function by moving in the direction of the steepest descent as defined by the negative of the gradient. At each iteration, the parameters are updated by subtracting a fraction of the gradient, where that fraction is determined by the learning rate. A high learning rate can cause the optimizer to overshoot the minimum, while a low learning rate leads to slow convergence. Stochastic gradient descent (SGD) uses a single
+2026-06-13 14:41:11,388 [INFO] quiz_agent — [STEP 3] Content prepared — chars=1177 truncated=False
+2026-06-13 14:41:11,388 [INFO] quiz_agent — [STEP 4] Loading LLM generation config
+2026-06-13 14:41:11,388 [INFO] quiz_agent — [STEP 4] Config — model='anthropic/claude-sonnet-4-6' temperature=0.20 max_tokens=8000
+2026-06-13 14:41:11,388 [INFO] quiz_agent — [STEP 5] Generation prompt assembled — prompt_chars=3379
+2026-06-13 14:41:11,388 [DEBUG] quiz_agent — [STEP 5] Full generation prompt:
+You are an expert quiz designer for an AI Tutor application.
+
+Your task: Generate a complete, structured quiz from the teaching content provided below.
+
+TEACHING CONTENT:
+Gradient descent is an iterative optimization algorithm used to minimize a loss function by moving in the direction of the steepest descent as defined by the negative of the gradient. At each iteration, the parameters are updated by subtracting a fraction of the gradient, where that fraction is determined by the learning rate. A high learning rate can cause the optimizer to overshoot the minimum, while a low learning rate leads to slow convergence. Stochastic gradient descent (SGD) uses a single training example per update, while mini-batch gradient descent uses a small subset. The loss function measures how far the model's predictions are from the actual values. Common variants include Adam, RMSProp, and Adagrad, each of which adapts the learning rate during training. Momentum helps accelerate SGD by accumulating gradients in directions of persistent descent. Convergence is reached when the gradient magnitude approaches zero. Regularization techniques such as L1 and L2 penalize large weights to prevent overfitting during optimization. Understanding the loss landscape â€” including saddle points and local minima â€” is critical for effective optimizer choice.
+
+TOPIC: Gradient Descent Optimization
+
+REQUIREMENTS:
+- Generate exactly 5 MCQ single-answer questions (type: "mcq-single")
+- Generate exactly 3 MCQ multiple-answer questions (type: "mcq-multi")
+- Generate exactly 4 descriptive questions (type: "descriptive")
+- All questions MUST be grounded strictly in the teaching content — no external facts
+- Every question MUST include a sub_concept tag naming the sub-topic it tests
+- Assign max_points: 1 for each MCQ single, 2 for each MCQ multi, 5 for each descriptive
+
+For MCQ single-answer questions:
+- Provide exactly 4 options
+- Mark exactly 1 option as is_correct: true
+- For every option, provide an explanation:
+  - Correct option: explain WHY it is correct
+  - Incorrect options: explain WHY they are wrong (concise, topic-grounded)
+- Provide topic_deep_dive: a 3-5 sentence explanation of the concept, used when learner answers wrong
+
+For MCQ multiple-answer questions:
+- Provide 4-6 options
+- Mark 2 or more as is_correct: true
+- For every option provide an explanation (same rules as above)
+- Provide topic_deep_dive for the question
+
+For descriptive questions:
+- Provide a rubric: list of 4-6 key points expected in a complete answer (~150 words)
+- No options or topic_deep_dive needed
+
+RESPONSE FORMAT — return ONLY valid JSON, no markdown fences:
+{
+  "questions": [
+    {
+      "id": "q1",
+      "type": "mcq-single",
+      "prompt": "...",
+      "sub_concept": "...",
+      "max_points": 1,
+      "topic_deep_dive": "...",
+      "options": [
+        {"id": "q1a", "text": "...", "is_correct": true, "explanation": "..."},
+        {"id": "q1b", "text": "...", "is_correct": false, "explanation": "..."},
+        {"id": "q1c", "text": "...", "is_correct": false, "explanation": "..."},
+        {"id": "q1d", "text": "...", "is_correct": false, "explanation": "..."}
+      ]
+    },
+    {
+      "id": "q9",
+      "type": "descriptive",
+      "prompt": "...",
+      "sub_concept": "...",
+      "max_points": 5,
+      "rubric": ["key point 1", "key point 2", "..."]
+    }
+  ]
+}
+
+2026-06-13 14:41:11,388 [INFO] quiz_agent — [STEP 5] LLM generation call — attempt 1/2
+2026-06-13 14:42:38,155 [INFO] quiz_agent — [STEP 5] LLM response received — tokens_used=5825 response_chars=25251
+2026-06-13 14:42:38,156 [DEBUG] quiz_agent — [STEP 5] Raw LLM response:
+{
+  "questions": [
+    {
+      "id": "q1",
+      "type": "mcq-single",
+      "prompt": "What determines the fraction of the gradient subtracted from the parameters at each iteration of gradient descent?",
+      "sub_concept": "Learning Rate",
+      "max_points": 1,
+      "topic_deep_dive": "The learning rate is a hyperparameter that controls how large a step the optimizer takes in the direction of the negative gradient at each iteration. If the learning rate is too high, the optimizer may overshoot the minimum and fail to converge. If it is too low, convergence becomes very slow, requiring many more iterations to reach the minimum. Choosing an appropriate learning rate is therefore critical to effective optimization. Many advanced optimizers like Adam and RMSProp adapt the learning rate automatically during training to address this challenge.",
+      "options": [
+        {
+          "id": "q1a",
+          "text": "The learning rate",
+          "is_correct": true,
+          "explanation": "The learning rate is explicitly described in the content as the fraction that determines how much of the gradient is subtracted from the parameters at each update step."
+        },
+        {
+          "id": "q1b",
+          "text": "The momentum coefficient",
+          "is_correct": false,
+          "explanation": "Momentum accumulates gradients to accelerate descent in persistent directions, but it does not determine the fraction of the gradient subtracted at each iteration — that role belongs to the learning rate."
+        },
+        {
+          "id": "q1c",
+          "text": "The loss function value",
+          "is_correct": false,
+          "explanation": "The loss function measures prediction error and guides the direction of optimization, but it does not directly determine the fraction of the gradient used in the parameter update."
+        },
+        {
+          "id": "q1d",
+          "text": "The gradient magnitude",
+          "is_correct": false,
+          "explanation": "The gradient magnitude indicates how steep the loss landscape is and signals convergence when it approaches zero, but it is not the factor that determines the fraction subtracted from parameters — the learning rate does that."
+        }
+      ]
+    },
+    {
+      "id": "q2",
+      "type": "mcq-single",
+      "prompt": "What is the primary risk of using a very high learning rate in gradient descent?",
+      "sub_concept": "Learning Rate",
+      "max_points": 1,
+      "topic_deep_dive": "The learning rate governs the step size taken during each parameter update. A high learning rate means the optimizer takes large steps, which can cause it to jump past the minimum of the loss function — a phenomenon known as overshooting. This can lead to oscillation around the minimum or even divergence, where the loss increases rather than decreases. Conversely, a low learning rate results in very small steps, making convergence extremely slow. Adaptive optimizers such as Adam and RMSProp were developed in part to mitigate the sensitivity to learning rate selection.",
+      "options": [
+        {
+          "id": "q2a",
+          "text": "Overshooting the minimum",
+          "is_correct": true,
+          "explanation": "The teaching content explicitly states that a high learning rate can cause the optimizer to overshoot the minimum, meaning the parameter update steps are too large and skip past the optimal point."
+        },
+        {
+          "id": "q2b",
+          "text": "Slow convergence",
+          "is_correct": false,
+          "explanation": "Slow convergence is the risk associated with a low learning rate, not a high one. A low learning rate causes the optimizer to take very small steps, requiring many more iterations to reach the minimum."
+        },
+        {
+          "id": "q2c",
+          "text": "Increased regularization penalty",
+          "is_correct": false,
+          "explanation": "Regularization penalties (L1 and L2) are related to weight magnitudes and are independent of the learning rate setting. A high learning rate does not directly increase regularization penalties."
+        },
+        {
+          "id": "q2d",
+          "text": "Gradient magnitude approaching zero too quickly",
+          "is_correct": false,
+          "explanation": "Gradient magnitude approaching zero is the condition for convergence, not a risk of a high learning rate. A high learning rate is more likely to prevent stable convergence rather than cause premature gradient decay."
+        }
+      ]
+    },
+    {
+      "id": "q3",
+      "type": "mcq-single",
+      "prompt": "How does Stochastic Gradient Descent (SGD) differ from mini-batch gradient descent?",
+      "sub_concept": "SGD and Mini-Batch Gradient Descent",
+      "max_points": 1,
+      "topic_deep_dive": "Gradient descent has several variants that differ in how many training examples are used to compute the gradient at each update step. Stochastic Gradient Descent (SGD) uses a single training example per update, making it fast but noisy. Mini-batch gradient descent uses a small subset of the training data, balancing computational efficiency with gradient stability. Full-batch gradient descent uses the entire dataset, which is more accurate but computationally expensive. The choice among these variants affects both the speed of training and the quality of convergence.",
+      "options": [
+        {
+          "id": "q3a",
+          "text": "SGD uses a single training example per update, while mini-batch uses a small subset",
+          "is_correct": true,
+          "explanation": "The content directly states that SGD uses a single training example per update, whereas mini-batch gradient descent uses a small subset of the training data per update."
+        },
+        {
+          "id": "q3b",
+          "text": "SGD uses the entire dataset per update, while mini-batch uses a single example",
+          "is_correct": false,
+          "explanation": "This reverses the definitions. SGD uses a single example per update, not the entire dataset. Using the entire dataset per update describes full-batch gradient descent, which is not what SGD refers to."
+        },
+        {
+          "id": "q3c",
+          "text": "SGD adapts the learning rate, while mini-batch uses a fixed learning rate",
+          "is_correct": false,
+          "explanation": "Adaptive learning rates are a feature of optimizers like Adam, RMSProp, and Adagrad — not a defining characteristic of SGD versus mini-batch gradient descent. Both SGD and mini-batch can use fixed or adaptive learning rates."
+        },
+        {
+          "id": "q3d",
+          "text": "SGD uses momentum, while mini-batch does not",
+          "is_correct": false,
+          "explanation": "Momentum is a technique that can be applied to SGD to accelerate it, but it is not what distinguishes SGD from mini-batch gradient descent. The key distinction is the number of training examples used per update."
+        }
+      ]
+    },
+    {
+      "id": "q4",
+      "type": "mcq-single",
+      "prompt": "According to the teaching content, what condition signals that gradient descent has reached convergence?",
+      "sub_concept": "Convergence",
+      "max_points": 1,
+      "topic_deep_dive": "Convergence in gradient descent refers to the point at which the optimization algorithm has effectively found a minimum of the loss function and further updates produce negligible change. The teaching content defines convergence as the state when the gradient magnitude approaches zero, meaning the loss landscape is nearly flat at the current parameter values. At this point, the parameter updates become very small, indicating that the optimizer has settled near a minimum. Understanding convergence is important because it helps practitioners decide when to stop training and how to interpret the behavior of the loss curve.",
+      "options": [
+        {
+          "id": "q4a",
+          "text": "The gradient magnitude approaches zero",
+          "is_correct": true,
+          "explanation": "The content explicitly states that convergence is reached when the gradient magnitude approaches zero, indicating the optimizer has found a region where the loss function is nearly flat."
+        },
+        {
+          "id": "q4b",
+          "text": "The loss function value reaches exactly zero",
+          "is_correct": false,
+          "explanation": "The loss function reaching exactly zero is not the stated condition for convergence. In practice, the loss rarely reaches zero, and convergence is defined by the gradient magnitude approaching zero, not the loss value itself."
+        },
+        {
+          "id": "q4c",
+          "text": "The learning rate becomes very small",
+          "is_correct": false,
+          "explanation": "While some learning rate schedules reduce the learning rate over time, a small learning rate is not the definition of convergence. Convergence is specifically defined in the content as the gradient magnitude approaching zero."
+        },
+        {
+          "id": "q4d",
+          "text": "The model encounters a saddle point",
+          "is_correct": false,
+          "explanation": "Saddle points are features of the loss landscape where the gradient is zero but the point is neither a local minimum nor maximum. The content mentions saddle points as challenges to be aware of, not as indicators of successful convergence."
+        }
+      ]
+    },
+    {
+      "id": "q5",
+      "type": "mcq-single",
+      "prompt": "What role does momentum play in Stochastic Gradient Descent?",
+      "sub_concept": "Momentum",
+      "max_points": 1,
+      "topic_deep_dive": "Momentum is a technique used to improve the efficiency of SGD by incorporating information from past gradient updates. Instead of updating parameters based solely on the current gradient, momentum accumulates a velocity vector in directions of persistent descent, effectively smoothing out the update trajectory. This helps the optimizer move faster through flat regions of the loss landscape and reduces oscillation in directions where the gradient frequently changes sign. Momentum is particularly useful when the loss landscape has narrow valleys or when gradients are noisy, as is common in SGD.",
+      "options": [
+        {
+          "id": "q5a",
+          "text": "It accelerates SGD by accumulating gradients in directions of persistent descent",
+          "is_correct": true,
+          "explanation": "The content directly states that momentum helps accelerate SGD by accumulating gradients in directions of persistent descent, allowing the optimizer to move more efficiently toward the minimum."
+        },
+        {
+          "id": "q5b",
+          "text": "It penalizes large weights to prevent overfitting",
+          "is_correct": false,
+          "explanation": "Penalizing large weights to prevent overfitting is the role of regularization techniques such as L1 and L2, not momentum. Momentum is concerned with accelerating gradient-based updates, not weight penalization."
+        },
+        {
+          "id": "q5c",
+          "text": "It adapts the learning rate based on past gradients",
+          "is_correct": false,
+          "explanation": "Adapting the learning rate based on past gradients is a feature of adaptive optimizers like Adam, RMSProp, and Adagrad. Momentum accumulates gradient directions to accelerate descent but does not directly modify the learning rate."
+        },
+        {
+          "id": "q5d",
+          "text": "It reduces the number of training examples used per update",
+          "is_correct": false,
+          "explanation": "The number of training examples used per update is determined by the variant of gradient descent (SGD, mini-batch, or full-batch), not by momentum. Momentum affects how gradients are accumulated across iterations, not the batch size."
+        }
+      ]
+    },
+    {
+      "id": "q6",
+      "type": "mcq-multi",
+      "prompt": "Which of the following are described in the teaching content as variants of gradient descent that adapt the learning rate during training? (Select all that apply)",
+      "sub_concept": "Adaptive Optimizers",
+      "max_points": 2,
+      "topic_deep_dive": "Standard gradient descent uses a fixed learning rate throughout training, which can be suboptimal because the ideal step size may vary across different parameters and training stages. Adaptive optimizers address this by automatically adjusting the learning rate for each parameter based on historical gradient information. The teaching content identifies Adam, RMSProp, and Adagrad as common adaptive variants. These methods generally converge faster and require less manual tuning of the learning rate compared to standard SGD. Understanding which optimizers adapt the learning rate helps practitioners select the right tool for their specific optimization problem.",
+      "options": [
+        {
+          "id": "q6a",
+          "text": "Adam",
+          "is_correct": true,
+          "explanation": "The content explicitly lists Adam as a common variant that adapts the learning rate during training."
+        },
+        {
+          "id": "q6b",
+          "text": "RMSProp",
+          "is_correct": true,
+          "explanation": "The content explicitly lists RMSProp as a common variant that adapts the learning rate during training."
+        },
+        {
+          "id": "q6c",
+          "text": "Adagrad",
+          "is_correct": true,
+          "explanation": "The content explicitly lists Adagrad as a common variant that adapts the learning rate during training."
+        },
+        {
+          "id": "q6d",
+          "text": "Stochastic Gradient Descent (SGD)",
+          "is_correct": false,
+          "explanation": "SGD is described in the content as a variant that uses a single training example per update. It is not listed among the optimizers that adapt the learning rate — that distinction belongs to Adam, RMSProp, and Adagrad."
+        },
+        {
+          "id": "q6e",
+          "text": "Mini-batch gradient descent",
+          "is_correct": false,
+          "explanation": "Mini-batch gradient descent is described as a variant that uses a small subset of training data per update. The content does not describe it as an optimizer that adapts the learning rate during training."
+        }
+      ]
+    },
+    {
+      "id": "q7",
+      "type": "mcq-multi",
+      "prompt": "Which of the following statements about regularization in the context of gradient descent optimization are correct according to the teaching content? (Select all that apply)",
+      "sub_concept": "Regularization",
+      "max_points": 2,
+      "topic_deep_dive": "Regularization is a technique applied during optimization to prevent overfitting, which occurs when a model learns the training data too well and fails to generalize to new data. The teaching content describes L1 and L2 regularization as methods that penalize large weights during the optimization process. By adding a penalty term to the loss function, these techniques discourage the model from assigning excessively large values to its parameters. L1 regularization tends to produce sparse weight vectors, while L2 regularization encourages smaller but non-zero weights. Both are applied during training as part of the optimization objective.",
+      "options": [
+        {
+          "id": "q7a",
+          "text": "L1 and L2 regularization penalize large weights",
+          "is_correct": true,
+          "explanation": "The content explicitly states that regularization techniques such as L1 and L2 penalize large weights, which is their core mechanism for preventing overfitting."
+        },
+        {
+          "id": "q7b",
+          "text": "Regularization is used to prevent overfitting during optimization",
+          "is_correct": true,
+          "explanation": "The content directly states that L1 and L2 regularization techniques are used to prevent overfitting during optimization, confirming this as a correct statement."
+        },
+        {
+          "id": "q7c",
+          "text": "Regularization adapts the learning rate during training",
+          "is_correct": false,
+          "explanation": "Adapting the learning rate is the role of adaptive optimizers like Adam, RMSProp, and Adagrad. Regularization penalizes large weights to prevent overfitting and does not modify the learning rate."
+        },
+        {
+          "id": "q7d",
+          "text": "Regularization helps accelerate SGD by accumulating gradients",
+          "is_correct": false,
+          "explanation": "Accumulating gradients to accelerate SGD is the role of momentum, not regularization. Regularization's purpose is to penalize large weights and reduce overfitting, not to speed up gradient updates."
+        },
+        {
+          "id": "q7e",
+          "text": "Regularization is applied during the optimization process",
+          "is_correct": true,
+          "explanation": "The content states that regularization techniques penalize large weights to prevent overfitting 'during optimization,' confirming that regularization is applied as part of the training and optimization process."
+        }
+      ]
+    },
+    {
+      "id": "q8",
+      "type": "mcq-multi",
+      "prompt": "Which of the following features of the loss landscape are mentioned in the teaching content as important for effective optimizer choice? (Select all that apply)",
+      "sub_concept": "Loss Landscape",
+      "max_points": 2,
+      "topic_deep_dive": "The loss landscape refers to the surface defined by the loss function over the space of all possible parameter values. Understanding its geometry is critical for choosing and configuring an optimizer effectively. The teaching content highlights saddle points and local minima as key features of the loss landscape. Saddle points are locations where the gradient is zero but the point is not a true minimum, which can slow or mislead optimizers. Local minima are points that are lower than their immediate surroundings but may not be the global minimum. Awareness of these features helps practitioners anticipate where optimizers might struggle and select algorithms robust to such challenges.",
+      "options": [
+        {
+          "id": "q8a",
+          "text": "Saddle points",
+          "is_correct": true,
+          "explanation": "The content explicitly mentions saddle points as a feature of the loss landscape that is critical to understand for effective optimizer choice."
+        },
+        {
+          "id": "q8b",
+          "text": "Local minima",
+          "is_correct": true,
+          "explanation": "The content explicitly mentions local minima as a feature of the loss landscape that is critical to understand for effective optimizer choice."
+        },
+        {
+          "id": "q8c",
+          "text": "Global maximum",
+          "is_correct": false,
+          "explanation": "The content does not mention global maxima as a relevant feature of the loss landscape for optimizer choice. The focus is on saddle points and local minima, which are the challenging regions for gradient-based optimizers."
+        },
+        {
+          "id": "q8d",
+          "text": "Batch size distribution",
+          "is_correct": false,
+          "explanation": "Batch size distribution is not mentioned in the content as a feature of the loss landscape. It relates to how training data is sampled (as in SGD vs. mini-batch), not to the geometric properties of the loss surface."
+        },
+        {
+          "id": "q8e",
+          "text": "Steepest descent direction",
+          "is_correct": false,
+          "explanation": "While the steepest descent direction is fundamental to how gradient descent works (moving in the direction of the negative gradient), the content does not list it as a feature of the loss landscape relevant to optimizer choice. The landscape features highlighted are saddle points and local minima."
+        }
+      ]
+    },
+    {
+      "id": "q9",
+      "type": "descriptive",
+      "prompt": "Explain the role of the learning rate in gradient descent optimization. In your answer, describe what happens when the learning rate is too high or too low, and how adaptive optimizers address this challenge.",
+      "sub_concept": "Learning Rate",
+      "max_points": 5,
+      "rubric": [
+        "The learning rate determines the fraction of the gradient subtracted from the parameters at each iteration, controlling the step size of each update.",
+        "A high learning rate can cause the optimizer to overshoot the minimum of the loss function, potentially leading to failure to converge or oscillation.",
+        "A low learning rate leads to slow convergence, requiring many more iterations to reach the minimum.",
+        "Adaptive optimizers such as Adam, RMSProp, and Adagrad adjust the learning rate automatically during training, reducing the need for manual tuning.",
+        "The balance between convergence speed and stability makes learning rate selection one of the most important decisions in gradient descent optimization.",
+        "Convergence is ultimately reached when the gradient magnitude approaches zero, regardless of the learning rate strategy used."
+      ]
+    },
+    {
+      "id": "q10",
+      "type": "descriptive",
+      "prompt": "Compare and contrast Stochastic Gradient Descent (SGD) and mini-batch gradient descent. In your answer, include the role of momentum in improving SGD performance.",
+      "sub_concept": "SGD and Mini-Batch Gradient Descent",
+      "max_points": 5,
+      "rubric": [
+        "SGD uses a single training example per parameter update, making each update fast but potentially noisy.",
+        "Mini-batch gradient descent uses a small subset of the training data per update, balancing computational efficiency with gradient stability.",
+        "Both SGD and mini-batch are variants of gradient descent that differ in the amount of data used to estimate the gradient at each step.",
+        "Momentum helps accelerate SGD by accumulating gradients in directions of persistent descent, allowing the optimizer to move more efficiently toward the minimum.",
+        "Without momentum, SGD may oscillate or converge slowly due to the noise introduced by using only a single training example per update.",
+        "The choice between SGD and mini-batch affects both the speed of training and the quality and stability of convergence."
+      ]
+    },
+    {
+      "id": "q11",
+      "type": "descriptive",
+      "prompt": "Describe the purpose of regularization techniques such as L1 and L2 in the context of gradient descent optimization, and explain how they interact with the optimization process.",
+      "sub_concept": "Regularization",
+      "max_points": 5,
+      "rubric": [
+        "L1 and L2 regularization are techniques that penalize large weights in the model during the optimization process.",
+        "Their primary purpose is to prevent overfitting, which occurs when a model fits the training data too closely and fails to generalize.",
+        "Regularization is applied during optimization by adding a penalty term to the loss function, which the optimizer then seeks to minimize alongside the prediction error.",
+        "By discouraging large weight values, regularization constrains the model's complexity and promotes simpler, more generalizable solutions.",
+        "L1 and L2 differ in the form of their penalty: L1 penalizes the absolute value of weights (promoting sparsity), while L2 penalizes the squared value of weights (encouraging small but non-zero weights).",
+        "Regularization interacts directly with gradient descent because the penalty term contributes to the gradient computation, influencing the direction and magnitude of each parameter update."
+      ]
+    },
+    {
+      "id": "q12",
+      "type": "descriptive",
+      "prompt": "Why is understanding the loss landscape — including saddle points and local minima — important for choosing an optimizer in gradient descent? Discuss how these features can affect the optimization process.",
+      "sub_concept": "Loss Landscape",
+      "max_points": 5,
+      "rubric": [
+        "The loss landscape is the surface defined by the loss function over all possible parameter values, and its geometry directly affects how gradient descent behaves.",
+        "Local minima are points lower than their immediate surroundings but not the global minimum; an optimizer may get trapped in a local minimum and stop improving.",
+        "Saddle points are locations where the gradient is zero but the point is neither a local minimum nor maximum; optimizers can slow down or stall near saddle points.",
+        "Convergence is defined as the gradient magnitude approaching zero, which can occur at both true minima and saddle points, making it important to distinguish between them.",
+        "Different optimizers have different robustness to saddle points and local minima; for example, adaptive optimizers and momentum-based methods may navigate these features more effectively.",
+        "Understanding the loss landscape helps practitioners select appropriate optimizers and hyperparameters, and interpret whether the model has truly converged to a good solution."
+      ]
+    }
+  ]
+}
+2026-06-13 14:42:38,156 [INFO] quiz_agent — [STEP 5] Parsed 12 questions from LLM response
+2026-06-13 14:42:38,157 [INFO] quiz_agent — [STEP 5] Question set validation PASSED (12 questions)
+2026-06-13 14:42:38,157 [INFO] quiz_agent — [STEP 6] Assembling Quiz schema object
+2026-06-13 14:42:38,157 [INFO] quiz_agent — [STEP 6] Quiz assembled — quiz_id=061031de-11db-49d0-84fc-a41df51f6dd7 total_questions=12 max_score=31
+2026-06-13 14:42:38,157 [DEBUG] quiz_agent — [STEP 6] QuizAgentOutput schema:
+{
+  "status": "generated",
+  "quiz": {
+    "quiz_id": "061031de-11db-49d0-84fc-a41df51f6dd7",
+    "topic": "Gradient Descent Optimization",
+    "questions": [
+      {
+        "id": "q1",
+        "type": "mcq-single",
+        "prompt": "What determines the fraction of the gradient subtracted from the parameters at each iteration of gradient descent?",
+        "sub_concept": "Learning Rate",
+        "max_points": 1,
+        "options": [
+          {
+            "id": "q1a",
+            "text": "The learning rate",
+            "is_correct": true,
+            "explanation": "The learning rate is explicitly described in the content as the fraction that determines how much of the gradient is subtracted from the parameters at each update step."
+          },
+          {
+            "id": "q1b",
+            "text": "The momentum coefficient",
+            "is_correct": false,
+            "explanation": "Momentum accumulates gradients to accelerate descent in persistent directions, but it does not determine the fraction of the gradient subtracted at each iteration — that role belongs to the learning rate."
+          },
+          {
+            "id": "q1c",
+            "text": "The loss function value",
+            "is_correct": false,
+            "explanation": "The loss function measures prediction error and guides the direction of optimization, but it does not directly determine the fraction of the gradient used in the parameter update."
+          },
+          {
+            "id": "q1d",
+            "text": "The gradient magnitude",
+            "is_correct": false,
+            "explanation": "The gradient magnitude indicates how steep the loss landscape is and signals convergence when it approaches zero, but it is not the factor that determines the fraction subtracted from parameters — the learning rate does that."
+          }
+        ],
+        "topic_deep_dive": "The learning rate is a hyperparameter that controls how large a step the optimizer takes in the direction of the negative gradient at each iteration. If the learning rate is too high, the optimizer may overshoot the minimum and fail to converge. If it is too low, convergence becomes very slow, requiring many more iterations to reach the minimum. Choosing an appropriate learning rate is therefore critical to effective optimization. Many advanced optimizers like Adam and RMSProp adapt the learning rate automatically during training to address this challenge.",
+        "rubric": []
+      },
+      {
+        "id": "q2",
+        "type": "mcq-single",
+        "prompt": "What is the primary risk of using a very high learning rate in gradient descent?",
+        "sub_concept": "Learning Rate",
+        "max_points": 1,
+        "options": [
+          {
+            "id": "q2a",
+            "text": "Overshooting the minimum",
+            "is_correct": true,
+            "explanation": "The teaching content explicitly states that a high learning rate can cause the optimizer to overshoot the minimum, meaning the parameter update steps are too large and skip past the optimal point."
+          },
+          {
+            "id": "q2b",
+            "text": "Slow convergence",
+            "is_correct": false,
+            "explanation": "Slow convergence is the risk associated with a low learning rate, not a high one. A low learning rate causes the optimizer to take very small steps, requiring many more iterations to reach the minimum."
+          },
+          {
+            "id": "q2c",
+            "text": "Increased regularization penalty",
+            "is_correct": false,
+            "explanation": "Regularization penalties (L1 and L2) are related to weight magnitudes and are independent of the learning rate setting. A high learning rate does not directly increase regularization penalties."
+          },
+          {
+            "id": "q2d",
+            "text": "Gradient magnitude approaching zero too quickly",
+            "is_correct": false,
+            "explanation": "Gradient magnitude approaching zero is the condition for convergence, not a risk of a high learning rate. A high learning rate is more likely to prevent stable convergence rather than cause premature gradient decay."
+          }
+        ],
+        "topic_deep_dive": "The learning rate governs the step size taken during each parameter update. A high learning rate means the optimizer takes large steps, which can cause it to jump past the minimum of the loss function — a phenomenon known as overshooting. This can lead to oscillation around the minimum or even divergence, where the loss increases rather than decreases. Conversely, a low learning rate results in very small steps, making convergence extremely slow. Adaptive optimizers such as Adam and RMSProp were developed in part to mitigate the sensitivity to learning rate selection.",
+        "rubric": []
+      },
+      {
+        "id": "q3",
+        "type": "mcq-single",
+        "prompt": "How does Stochastic Gradient Descent (SGD) differ from mini-batch gradient descent?",
+        "sub_concept": "SGD and Mini-Batch Gradient Descent",
+        "max_points": 1,
+        "options": [
+          {
+            "id": "q3a",
+            "text": "SGD uses a single training example per update, while mini-batch uses a small subset",
+            "is_correct": true,
+            "explanation": "The content directly states that SGD uses a single training example per update, whereas mini-batch gradient descent uses a small subset of the training data per update."
+          },
+          {
+            "id": "q3b",
+            "text": "SGD uses the entire dataset per update, while mini-batch uses a single example",
+            "is_correct": false,
+            "explanation": "This reverses the definitions. SGD uses a single example per update, not the entire dataset. Using the entire dataset per update describes full-batch gradient descent, which is not what SGD refers to."
+          },
+          {
+            "id": "q3c",
+            "text": "SGD adapts the learning rate, while mini-batch uses a fixed learning rate",
+            "is_correct": false,
+            "explanation": "Adaptive learning rates are a feature of optimizers like Adam, RMSProp, and Adagrad — not a defining characteristic of SGD versus mini-batch gradient descent. Both SGD and mini-batch can use fixed or adaptive learning rates."
+          },
+          {
+            "id": "q3d",
+            "text": "SGD uses momentum, while mini-batch does not",
+            "is_correct": false,
+            "explanation": "Momentum is a technique that can be applied to SGD to accelerate it, but it is not what distinguishes SGD from mini-batch gradient descent. The key distinction is the number of training examples used per update."
+          }
+        ],
+        "topic_deep_dive": "Gradient descent has several variants that differ in how many training examples are used to compute the gradient at each update step. Stochastic Gradient Descent (SGD) uses a single training example per update, making it fast but noisy. Mini-batch gradient descent uses a small subset of the training data, balancing computational efficiency with gradient stability. Full-batch gradient descent uses the entire dataset, which is more accurate but computationally expensive. The choice among these variants affects both the speed of training and the quality of convergence.",
+        "rubric": []
+      },
+      {
+        "id": "q4",
+        "type": "mcq-single",
+        "prompt": "According to the teaching content, what condition signals that gradient descent has reached convergence?",
+        "sub_concept": "Convergence",
+        "max_points": 1,
+        "options": [
+          {
+            "id": "q4a",
+            "text": "The gradient magnitude approaches zero",
+            "is_correct": true,
+            "explanation": "The content explicitly states that convergence is reached when the gradient magnitude approaches zero, indicating the optimizer has found a region where the loss function is nearly flat."
+          },
+          {
+            "id": "q4b",
+            "text": "The loss function value reaches exactly zero",
+            "is_correct": false,
+            "explanation": "The loss function reaching exactly zero is not the stated condition for convergence. In practice, the loss rarely reaches zero, and convergence is defined by the gradient magnitude approaching zero, not the loss value itself."
+          },
+          {
+            "id": "q4c",
+            "text": "The learning rate becomes very small",
+            "is_correct": false,
+            "explanation": "While some learning rate schedules reduce the learning rate over time, a small learning rate is not the definition of convergence. Convergence is specifically defined in the content as the gradient magnitude approaching zero."
+          },
+          {
+            "id": "q4d",
+            "text": "The model encounters a saddle point",
+            "is_correct": false,
+            "explanation": "Saddle points are features of the loss landscape where the gradient is zero but the point is neither a local minimum nor maximum. The content mentions saddle points as challenges to be aware of, not as indicators of successful convergence."
+          }
+        ],
+        "topic_deep_dive": "Convergence in gradient descent refers to the point at which the optimization algorithm has effectively found a minimum of the loss function and further updates produce negligible change. The teaching content defines convergence as the state when the gradient magnitude approaches zero, meaning the loss landscape is nearly flat at the current parameter values. At this point, the parameter updates become very small, indicating that the optimizer has settled near a minimum. Understanding convergence is important because it helps practitioners decide when to stop training and how to interpret the behavior of the loss curve.",
+        "rubric": []
+      },
+      {
+        "id": "q5",
+        "type": "mcq-single",
+        "prompt": "What role does momentum play in Stochastic Gradient Descent?",
+        "sub_concept": "Momentum",
+        "max_points": 1,
+        "options": [
+          {
+            "id": "q5a",
+            "text": "It accelerates SGD by accumulating gradients in directions of persistent descent",
+            "is_correct": true,
+            "explanation": "The content directly states that momentum helps accelerate SGD by accumulating gradients in directions of persistent descent, allowing the optimizer to move more efficiently toward the minimum."
+          },
+          {
+            "id": "q5b",
+            "text": "It penalizes large weights to prevent overfitting",
+            "is_correct": false,
+            "explanation": "Penalizing large weights to prevent overfitting is the role of regularization techniques such as L1 and L2, not momentum. Momentum is concerned with accelerating gradient-based updates, not weight penalization."
+          },
+          {
+            "id": "q5c",
+            "text": "It adapts the learning rate based on past gradients",
+            "is_correct": false,
+            "explanation": "Adapting the learning rate based on past gradients is a feature of adaptive optimizers like Adam, RMSProp, and Adagrad. Momentum accumulates gradient directions to accelerate descent but does not directly modify the learning rate."
+          },
+          {
+            "id": "q5d",
+            "text": "It reduces the number of training examples used per update",
+            "is_correct": false,
+            "explanation": "The number of training examples used per update is determined by the variant of gradient descent (SGD, mini-batch, or full-batch), not by momentum. Momentum affects how gradients are accumulated across iterations, not the batch size."
+          }
+        ],
+        "topic_deep_dive": "Momentum is a technique used to improve the efficiency of SGD by incorporating information from past gradient updates. Instead of updating parameters based solely on the current gradient, momentum accumulates a velocity vector in directions of persistent descent, effectively smoothing out the update trajectory. This helps the optimizer move faster through flat regions of the loss landscape and reduces oscillation in directions where the gradient frequently changes sign. Momentum is particularly useful when the loss landscape has narrow valleys or when gradients are noisy, as is common in SGD.",
+        "rubric": []
+      },
+      {
+        "id": "q6",
+        "type": "mcq-multi",
+        "prompt": "Which of the following are described in the teaching content as variants of gradient descent that adapt the learning rate during training? (Select all that apply)",
+        "sub_concept": "Adaptive Optimizers",
+        "max_points": 2,
+        "options": [
+          {
+            "id": "q6a",
+            "text": "Adam",
+            "is_correct": true,
+            "explanation": "The content explicitly lists Adam as a common variant that adapts the learning rate during training."
+          },
+          {
+            "id": "q6b",
+            "text": "RMSProp",
+            "is_correct": true,
+            "explanation": "The content explicitly lists RMSProp as a common variant that adapts the learning rate during training."
+          },
+          {
+            "id": "q6c",
+            "text": "Adagrad",
+            "is_correct": true,
+            "explanation": "The content explicitly lists Adagrad as a common variant that adapts the learning rate during training."
+          },
+          {
+            "id": "q6d",
+            "text": "Stochastic Gradient Descent (SGD)",
+            "is_correct": false,
+            "explanation": "SGD is described in the content as a variant that uses a single training example per update. It is not listed among the optimizers that adapt the learning rate — that distinction belongs to Adam, RMSProp, and Adagrad."
+          },
+          {
+            "id": "q6e",
+            "text": "Mini-batch gradient descent",
+            "is_correct": false,
+            "explanation": "Mini-batch gradient descent is described as a variant that uses a small subset of training data per update. The content does not describe it as an optimizer that adapts the learning rate during training."
+          }
+        ],
+        "topic_deep_dive": "Standard gradient descent uses a fixed learning rate throughout training, which can be suboptimal because the ideal step size may vary across different parameters and training stages. Adaptive optimizers address this by automatically adjusting the learning rate for each parameter based on historical gradient information. The teaching content identifies Adam, RMSProp, and Adagrad as common adaptive variants. These methods generally converge faster and require less manual tuning of the learning rate compared to standard SGD. Understanding which optimizers adapt the learning rate helps practitioners select the right tool for their specific optimization problem.",
+        "rubric": []
+      },
+      {
+        "id": "q7",
+        "type": "mcq-multi",
+        "prompt": "Which of the following statements about regularization in the context of gradient descent optimization are correct according to the teaching content? (Select all that apply)",
+        "sub_concept": "Regularization",
+        "max_points": 2,
+        "options": [
+          {
+            "id": "q7a",
+            "text": "L1 and L2 regularization penalize large weights",
+            "is_correct": true,
+            "explanation": "The content explicitly states that regularization techniques such as L1 and L2 penalize large weights, which is their core mechanism for preventing overfitting."
+          },
+          {
+            "id": "q7b",
+            "text": "Regularization is used to prevent overfitting during optimization",
+            "is_correct": true,
+            "explanation": "The content directly states that L1 and L2 regularization techniques are used to prevent overfitting during optimization, confirming this as a correct statement."
+          },
+          {
+            "id": "q7c",
+            "text": "Regularization adapts the learning rate during training",
+            "is_correct": false,
+            "explanation": "Adapting the learning rate is the role of adaptive optimizers like Adam, RMSProp, and Adagrad. Regularization penalizes large weights to prevent overfitting and does not modify the learning rate."
+          },
+          {
+            "id": "q7d",
+            "text": "Regularization helps accelerate SGD by accumulating gradients",
+            "is_correct": false,
+            "explanation": "Accumulating gradients to accelerate SGD is the role of momentum, not regularization. Regularization's purpose is to penalize large weights and reduce overfitting, not to speed up gradient updates."
+          },
+          {
+            "id": "q7e",
+            "text": "Regularization is applied during the optimization process",
+            "is_correct": true,
+            "explanation": "The content states that regularization techniques penalize large weights to prevent overfitting 'during optimization,' confirming that regularization is applied as part of the training and optimization process."
+          }
+        ],
+        "topic_deep_dive": "Regularization is a technique applied during optimization to prevent overfitting, which occurs when a model learns the training data too well and fails to generalize to new data. The teaching content describes L1 and L2 regularization as methods that penalize large weights during the optimization process. By adding a penalty term to the loss function, these techniques discourage the model from assigning excessively large values to its parameters. L1 regularization tends to produce sparse weight vectors, while L2 regularization encourages smaller but non-zero weights. Both are applied during training as part of the optimization objective.",
+        "rubric": []
+      },
+      {
+        "id": "q8",
+        "type": "mcq-multi",
+        "prompt": "Which of the following features of the loss landscape are mentioned in the teaching content as important for effective optimizer choice? (Select all that apply)",
+        "sub_concept": "Loss Landscape",
+        "max_points": 2,
+        "options": [
+          {
+            "id": "q8a",
+            "text": "Saddle points",
+            "is_correct": true,
+            "explanation": "The content explicitly mentions saddle points as a feature of the loss landscape that is critical to understand for effective optimizer choice."
+          },
+          {
+            "id": "q8b",
+            "text": "Local minima",
+            "is_correct": true,
+            "explanation": "The content explicitly mentions local minima as a feature of the loss landscape that is critical to understand for effective optimizer choice."
+          },
+          {
+            "id": "q8c",
+            "text": "Global maximum",
+            "is_correct": false,
+            "explanation": "The content does not mention global maxima as a relevant feature of the loss landscape for optimizer choice. The focus is on saddle points and local minima, which are the challenging regions for gradient-based optimizers."
+          },
+          {
+            "id": "q8d",
+            "text": "Batch size distribution",
+            "is_correct": false,
+            "explanation": "Batch size distribution is not mentioned in the content as a feature of the loss landscape. It relates to how training data is sampled (as in SGD vs. mini-batch), not to the geometric properties of the loss surface."
+          },
+          {
+            "id": "q8e",
+            "text": "Steepest descent direction",
+            "is_correct": false,
+            "explanation": "While the steepest descent direction is fundamental to how gradient descent works (moving in the direction of the negative gradient), the content does not list it as a feature of the loss landscape relevant to optimizer choice. The landscape features highlighted are saddle points and local minima."
+          }
+        ],
+        "topic_deep_dive": "The loss landscape refers to the surface defined by the loss function over the space of all possible parameter values. Understanding its geometry is critical for choosing and configuring an optimizer effectively. The teaching content highlights saddle points and local minima as key features of the loss landscape. Saddle points are locations where the gradient is zero but the point is not a true minimum, which can slow or mislead optimizers. Local minima are points that are lower than their immediate surroundings but may not be the global minimum. Awareness of these features helps practitioners anticipate where optimizers might struggle and select algorithms robust to such challenges.",
+        "rubric": []
+      },
+      {
+        "id": "q9",
+        "type": "descriptive",
+        "prompt": "Explain the role of the learning rate in gradient descent optimization. In your answer, describe what happens when the learning rate is too high or too low, and how adaptive optimizers address this challenge.",
+        "sub_concept": "Learning Rate",
+        "max_points": 5,
+        "options": [],
+        "topic_deep_dive": null,
+        "rubric": [
+          "The learning rate determines the fraction of the gradient subtracted from the parameters at each iteration, controlling the step size of each update.",
+          "A high learning rate can cause the optimizer to overshoot the minimum of the loss function, potentially leading to failure to converge or oscillation.",
+          "A low learning rate leads to slow convergence, requiring many more iterations to reach the minimum.",
+          "Adaptive optimizers such as Adam, RMSProp, and Adagrad adjust the learning rate automatically during training, reducing the need for manual tuning.",
+          "The balance between convergence speed and stability makes learning rate selection one of the most important decisions in gradient descent optimization.",
+          "Convergence is ultimately reached when the gradient magnitude approaches zero, regardless of the learning rate strategy used."
+        ]
+      },
+      {
+        "id": "q10",
+        "type": "descriptive",
+        "prompt": "Compare and contrast Stochastic Gradient Descent (SGD) and mini-batch gradient descent. In your answer, include the role of momentum in improving SGD performance.",
+        "sub_concept": "SGD and Mini-Batch Gradient Descent",
+        "max_points": 5,
+        "options": [],
+        "topic_deep_dive": null,
+        "rubric": [
+          "SGD uses a single training example per parameter update, making each update fast but potentially noisy.",
+          "Mini-batch gradient descent uses a small subset of the training data per update, balancing computational efficiency with gradient stability.",
+          "Both SGD and mini-batch are variants of gradient descent that differ in the amount of data used to estimate the gradient at each step.",
+          "Momentum helps accelerate SGD by accumulating gradients in directions of persistent descent, allowing the optimizer to move more efficiently toward the minimum.",
+          "Without momentum, SGD may oscillate or converge slowly due to the noise introduced by using only a single training example per update.",
+          "The choice between SGD and mini-batch affects both the speed of training and the quality and stability of convergence."
+        ]
+      },
+      {
+        "id": "q11",
+        "type": "descriptive",
+        "prompt": "Describe the purpose of regularization techniques such as L1 and L2 in the context of gradient descent optimization, and explain how they interact with the optimization process.",
+        "sub_concept": "Regularization",
+        "max_points": 5,
+        "options": [],
+        "topic_deep_dive": null,
+        "rubric": [
+          "L1 and L2 regularization are techniques that penalize large weights in the model during the optimization process.",
+          "Their primary purpose is to prevent overfitting, which occurs when a model fits the training data too closely and fails to generalize.",
+          "Regularization is applied during optimization by adding a penalty term to the loss function, which the optimizer then seeks to minimize alongside the prediction error.",
+          "By discouraging large weight values, regularization constrains the model's complexity and promotes simpler, more generalizable solutions.",
+          "L1 and L2 differ in the form of their penalty: L1 penalizes the absolute value of weights (promoting sparsity), while L2 penalizes the squared value of weights (encouraging small but non-zero weights).",
+          "Regularization interacts directly with gradient descent because the penalty term contributes to the gradient computation, influencing the direction and magnitude of each parameter update."
+        ]
+      },
+      {
+        "id": "q12",
+        "type": "descriptive",
+        "prompt": "Why is understanding the loss landscape — including saddle points and local minima — important for choosing an optimizer in gradient descent? Discuss how these features can affect the optimization process.",
+        "sub_concept": "Loss Landscape",
+        "max_points": 5,
+        "options": [],
+        "topic_deep_dive": null,
+        "rubric": [
+          "The loss landscape is the surface defined by the loss function over all possible parameter values, and its geometry directly affects how gradient descent behaves.",
+          "Local minima are points lower than their immediate surroundings but not the global minimum; an optimizer may get trapped in a local minimum and stop improving.",
+          "Saddle points are locations where the gradient is zero but the point is neither a local minimum nor maximum; optimizers can slow down or stall near saddle points.",
+          "Convergence is defined as the gradient magnitude approaching zero, which can occur at both true minima and saddle points, making it important to distinguish between them.",
+          "Different optimizers have different robustness to saddle points and local minima; for example, adaptive optimizers and momentum-based methods may navigate these features more effectively.",
+          "Understanding the loss landscape helps practitioners select appropriate optimizers and hyperparameters, and interpret whether the model has truly converged to a good solution."
+        ]
+      }
+    ],
+    "metadata": {
+      "question_type_counts": {
+        "mcq-single": 5,
+        "mcq-multi": 3,
+        "descriptive": 4
+      },
+      "total_questions": 12,
+      "max_score": 31,
+      "mcq_max_score": 11,
+      "descriptive_max_score": 20,
+      "ui_hints": {
+        "mcq_single_input": "radio",
+        "mcq_multi_input": "checkbox",
+        "mcq_multi_hint_text": "Select all that apply",
+        "descriptive_target_words": 150,
+        "descriptive_soft_warning_below": 80
+      }
+    }
+  },
+  "result": null,
+  "metadata": {
+    "topic": "Gradient Descent Optimization",
+    "tokens_used": 5825,
+    "model": "anthropic/claude-sonnet-4-6"
+  },
+  "errors": []
+}
+2026-06-13 14:42:38,157 [INFO] quiz_agent — ================================================================
+2026-06-13 14:42:38,157 [INFO] quiz_agent — PHASE 1 — generate() DONE  status=generated  tokens_used=5825
+2026-06-13 14:42:38,157 [INFO] quiz_agent — ================================================================
+2026-06-13 14:42:38,186 [INFO] quiz_agent — ================================================================
+2026-06-13 14:42:38,186 [INFO] quiz_agent — PHASE 2 — evaluate() START
+2026-06-13 14:42:38,186 [INFO] quiz_agent — ================================================================
+2026-06-13 14:42:38,186 [INFO] quiz_agent — [STEP 1] Normalising Quiz and SubmittedAnswer inputs
+2026-06-13 14:42:38,186 [INFO] quiz_agent — [STEP 1] Inputs OK — quiz_id=061031de-11db-49d0-84fc-a41df51f6dd7 topic='Gradient Descent Optimization' questions=12 answers=12
+2026-06-13 14:42:38,186 [DEBUG] quiz_agent — [STEP 1] Submitted answers:
+[
+  {
+    "question_id": "q1",
+    "selected_option_ids": [
+      "q1a"
+    ],
+    "free_text": ""
+  },
+  {
+    "question_id": "q2",
+    "selected_option_ids": [
+      "q2a"
+    ],
+    "free_text": ""
+  },
+  {
+    "question_id": "q3",
+    "selected_option_ids": [
+      "q3a"
+    ],
+    "free_text": ""
+  },
+  {
+    "question_id": "q4",
+    "selected_option_ids": [
+      "q4a"
+    ],
+    "free_text": ""
+  },
+  {
+    "question_id": "q5",
+    "selected_option_ids": [
+      "q5a"
+    ],
+    "free_text": ""
+  },
+  {
+    "question_id": "q6",
+    "selected_option_ids": [
+      "q6a"
+    ],
+    "free_text": ""
+  },
+  {
+    "question_id": "q7",
+    "selected_option_ids": [
+      "q7a"
+    ],
+    "free_text": ""
+  },
+  {
+    "question_id": "q8",
+    "selected_option_ids": [
+      "q8a"
+    ],
+    "free_text": ""
+  },
+  {
+    "question_id": "q9",
+    "selected_option_ids": [],
+    "free_text": "The learning rate controls the step size during gradient descent. A high learning rate can overshoot the minimum while a low one converges slowly. Adaptive methods like Adam adjust the learning rate per parameter automatically."
+  },
+  {
+    "question_id": "q10",
+    "selected_option_ids": [],
+    "free_text": "The learning rate controls the step size during gradient descent. A high learning rate can overshoot the minimum while a low one converges slowly. Adaptive methods like Adam adjust the learning rate per parameter automatically."
+  },
+  {
+    "question_id": "q11",
+    "selected_option_ids": [],
+    "free_text": "The learning rate controls the step size during gradient descent. A high learning rate can overshoot the minimum while a low one converges slowly. Adaptive methods like Adam adjust the learning rate per parameter automatically."
+  },
+  {
+    "question_id": "q12",
+    "selected_option_ids": [],
+    "free_text": "The learning rate controls the step size during gradient descent. A high learning rate can overshoot the minimum while a low one converges slowly. Adaptive methods like Adam adjust the learning rate per parameter automatically."
+  }
+]
+2026-06-13 14:42:38,186 [INFO] quiz_agent — [STEP 2] Grading MCQ questions locally
+2026-06-13 14:42:38,186 [INFO] quiz_agent — [STEP 2] MCQ grading done — mcq_subtotal=7.33 (4 descriptive deferred)
+2026-06-13 14:42:38,186 [DEBUG] quiz_agent — [STEP 2] MCQ result — question_id=q1 score=1.00/1 is_correct=True
+2026-06-13 14:42:38,187 [DEBUG] quiz_agent — [STEP 2] MCQ result — question_id=q2 score=1.00/1 is_correct=True
+2026-06-13 14:42:38,187 [DEBUG] quiz_agent — [STEP 2] MCQ result — question_id=q3 score=1.00/1 is_correct=True
+2026-06-13 14:42:38,187 [DEBUG] quiz_agent — [STEP 2] MCQ result — question_id=q4 score=1.00/1 is_correct=True
+2026-06-13 14:42:38,187 [DEBUG] quiz_agent — [STEP 2] MCQ result — question_id=q5 score=1.00/1 is_correct=True
+2026-06-13 14:42:38,187 [DEBUG] quiz_agent — [STEP 2] MCQ result — question_id=q6 score=0.67/2 is_correct=None
+2026-06-13 14:42:38,187 [DEBUG] quiz_agent — [STEP 2] MCQ result — question_id=q7 score=0.67/2 is_correct=None
+2026-06-13 14:42:38,187 [DEBUG] quiz_agent — [STEP 2] MCQ result — question_id=q8 score=1.00/2 is_correct=None
+2026-06-13 14:42:38,187 [INFO] quiz_agent — [STEP 3] Loading LLM grading config
+2026-06-13 14:42:38,187 [INFO] quiz_agent — [STEP 3] Config — model='anthropic/claude-sonnet-4-6' temperature=0.10 max_tokens=4000
+2026-06-13 14:42:38,187 [INFO] quiz_agent — [STEP 3] Grading 4 descriptive question(s) via LLM
+2026-06-13 14:42:38,187 [INFO] quiz_agent — [STEP 3] Grading prompt assembled — prompt_chars=6323
+2026-06-13 14:42:38,187 [DEBUG] quiz_agent — [STEP 3] Full grading prompt:
+You are an expert educational assessor for an AI Tutor application.
+
+Your task: Grade the learner's descriptive answers against the provided rubrics.
+
+TOPIC: Gradient Descent Optimization
+
+ANSWERS TO GRADE:
+Question ID: q9
+Prompt: Explain the role of the learning rate in gradient descent optimization. In your answer, describe what happens when the learning rate is too high or too low, and how adaptive optimizers address this challenge.
+Max Score: 5
+Rubric key points:
+  - The learning rate determines the fraction of the gradient subtracted from the parameters at each iteration, controlling the step size of each update.
+  - A high learning rate can cause the optimizer to overshoot the minimum of the loss function, potentially leading to failure to converge or oscillation.
+  - A low learning rate leads to slow convergence, requiring many more iterations to reach the minimum.
+  - Adaptive optimizers such as Adam, RMSProp, and Adagrad adjust the learning rate automatically during training, reducing the need for manual tuning.
+  - The balance between convergence speed and stability makes learning rate selection one of the most important decisions in gradient descent optimization.
+  - Convergence is ultimately reached when the gradient magnitude approaches zero, regardless of the learning rate strategy used.
+Learner Answer:
+The learning rate controls the step size during gradient descent. A high learning rate can overshoot the minimum while a low one converges slowly. Adaptive methods like Adam adjust the learning rate per parameter automatically.
+
+---
+Question ID: q10
+Prompt: Compare and contrast Stochastic Gradient Descent (SGD) and mini-batch gradient descent. In your answer, include the role of momentum in improving SGD performance.
+Max Score: 5
+Rubric key points:
+  - SGD uses a single training example per parameter update, making each update fast but potentially noisy.
+  - Mini-batch gradient descent uses a small subset of the training data per update, balancing computational efficiency with gradient stability.
+  - Both SGD and mini-batch are variants of gradient descent that differ in the amount of data used to estimate the gradient at each step.
+  - Momentum helps accelerate SGD by accumulating gradients in directions of persistent descent, allowing the optimizer to move more efficiently toward the minimum.
+  - Without momentum, SGD may oscillate or converge slowly due to the noise introduced by using only a single training example per update.
+  - The choice between SGD and mini-batch affects both the speed of training and the quality and stability of convergence.
+Learner Answer:
+The learning rate controls the step size during gradient descent. A high learning rate can overshoot the minimum while a low one converges slowly. Adaptive methods like Adam adjust the learning rate per parameter automatically.
+
+---
+Question ID: q11
+Prompt: Describe the purpose of regularization techniques such as L1 and L2 in the context of gradient descent optimization, and explain how they interact with the optimization process.
+Max Score: 5
+Rubric key points:
+  - L1 and L2 regularization are techniques that penalize large weights in the model during the optimization process.
+  - Their primary purpose is to prevent overfitting, which occurs when a model fits the training data too closely and fails to generalize.
+  - Regularization is applied during optimization by adding a penalty term to the loss function, which the optimizer then seeks to minimize alongside the prediction error.
+  - By discouraging large weight values, regularization constrains the model's complexity and promotes simpler, more generalizable solutions.
+  - L1 and L2 differ in the form of their penalty: L1 penalizes the absolute value of weights (promoting sparsity), while L2 penalizes the squared value of weights (encouraging small but non-zero weights).
+  - Regularization interacts directly with gradient descent because the penalty term contributes to the gradient computation, influencing the direction and magnitude of each parameter update.
+Learner Answer:
+The learning rate controls the step size during gradient descent. A high learning rate can overshoot the minimum while a low one converges slowly. Adaptive methods like Adam adjust the learning rate per parameter automatically.
+
+---
+Question ID: q12
+Prompt: Why is understanding the loss landscape — including saddle points and local minima — important for choosing an optimizer in gradient descent? Discuss how these features can affect the optimization process.
+Max Score: 5
+Rubric key points:
+  - The loss landscape is the surface defined by the loss function over all possible parameter values, and its geometry directly affects how gradient descent behaves.
+  - Local minima are points lower than their immediate surroundings but not the global minimum; an optimizer may get trapped in a local minimum and stop improving.
+  - Saddle points are locations where the gradient is zero but the point is neither a local minimum nor maximum; optimizers can slow down or stall near saddle points.
+  - Convergence is defined as the gradient magnitude approaching zero, which can occur at both true minima and saddle points, making it important to distinguish between them.
+  - Different optimizers have different robustness to saddle points and local minima; for example, adaptive optimizers and momentum-based methods may navigate these features more effectively.
+  - Understanding the loss landscape helps practitioners select appropriate optimizers and hyperparameters, and interpret whether the model has truly converged to a good solution.
+Learner Answer:
+The learning rate controls the step size during gradient descent. A high learning rate can overshoot the minimum while a low one converges slowly. Adaptive methods like Adam adjust the learning rate per parameter automatically.
+
+
+For each answer:
+- Score it against its rubric (0 to max_score)
+- Provide a model_answer: the ideal complete response
+- Provide feedback: brief qualitative comment referencing what the learner covered and what they missed
+
+RESPONSE FORMAT — return ONLY valid JSON, no markdown fences:
+{
+  "grades": [
+    {
+      "question_id": "...",
+      "score": <integer>,
+      "max_score": <integer>,
+      "model_answer": "...",
+      "feedback": "..."
+    }
+  ]
+}
+
+2026-06-13 14:43:05,867 [INFO] quiz_agent — [STEP 3] Grading LLM response received — tokens_used=1660 response_chars=8015
+2026-06-13 14:43:05,868 [DEBUG] quiz_agent — [STEP 3] Raw grading LLM response:
+{
+  "grades": [
+    {
+      "question_id": "q9",
+      "score": 3,
+      "max_score": 5,
+      "model_answer": "The learning rate is a hyperparameter that determines the fraction of the gradient subtracted from the model's parameters at each iteration, effectively controlling the step size of each update. If the learning rate is too high, the optimizer can overshoot the minimum of the loss function, causing oscillation around the minimum or even divergence, preventing convergence altogether. Conversely, a learning rate that is too low results in very small parameter updates, leading to slow convergence and requiring many more iterations to reach the minimum. The balance between convergence speed and stability makes learning rate selection one of the most critical decisions in gradient descent. Adaptive optimizers such as Adam, RMSProp, and Adagrad address this challenge by automatically adjusting the learning rate on a per-parameter basis during training, scaling updates based on historical gradient information. This reduces the need for manual tuning and allows the optimizer to converge more reliably. Ultimately, convergence is reached when the gradient magnitude approaches zero, regardless of the learning rate strategy employed.",
+      "feedback": "The learner correctly identified the three core concepts: the learning rate controls step size, a high learning rate causes overshooting, and a low learning rate causes slow convergence. They also correctly named Adam as an adaptive optimizer that adjusts the learning rate per parameter. However, the answer is quite brief and lacks depth. Missing points include: mention of other adaptive optimizers (RMSProp, Adagrad), the explicit discussion of the convergence-speed vs. stability trade-off, and the note that convergence is defined by the gradient magnitude approaching zero. A more complete answer would elaborate on each point with greater detail."
+    },
+    {
+      "question_id": "q10",
+      "score": 0,
+      "max_score": 5,
+      "model_answer": "Stochastic Gradient Descent (SGD) updates model parameters using a single training example at a time, making each update computationally fast but introducing significant noise into the gradient estimate. This noise can cause the optimization path to oscillate, potentially slowing convergence. Mini-batch gradient descent strikes a balance by using a small subset of the training data per update, providing a more stable gradient estimate than SGD while remaining more computationally efficient than full-batch gradient descent. Both are variants of gradient descent that differ in how much data is used to estimate the gradient at each step, and the choice between them affects both training speed and convergence stability. Momentum is a technique that improves SGD performance by accumulating a velocity vector in directions of persistent gradient descent. Rather than updating parameters solely based on the current gradient, momentum incorporates a fraction of the previous update, allowing the optimizer to build speed in consistent directions and dampen oscillations. Without momentum, SGD may oscillate or converge slowly due to the noise from single-example updates. With momentum, the optimizer moves more efficiently toward the minimum, especially in loss landscapes with ravines or noisy gradients.",
+      "feedback": "The learner's answer does not address the question at all. The response is identical to the answer given for q9 (about learning rate) and contains no information about SGD, mini-batch gradient descent, or momentum. None of the rubric points were addressed, resulting in a score of 0. To improve, the learner should explain the difference between SGD and mini-batch in terms of data used per update, discuss the trade-offs in noise and computational efficiency, and describe how momentum accumulates gradients to accelerate convergence and reduce oscillation."
+    },
+    {
+      "question_id": "q11",
+      "score": 0,
+      "max_score": 5,
+      "model_answer": "Regularization techniques such as L1 and L2 are used during gradient descent optimization to prevent overfitting, which occurs when a model learns the training data too closely and fails to generalize to unseen data. Both techniques work by adding a penalty term to the loss function that discourages large weight values, thereby constraining the model's complexity and promoting simpler, more generalizable solutions. This penalty term is minimized alongside the prediction error during optimization. L1 regularization penalizes the absolute value of the weights, which tends to produce sparse solutions where many weights are driven to exactly zero, effectively performing feature selection. L2 regularization penalizes the squared value of the weights, encouraging weights to be small but non-zero, which distributes the model's reliance more evenly across features. Regularization interacts directly with gradient descent because the penalty term contributes to the gradient computation. The gradient of the regularized loss includes a term derived from the penalty, which influences the direction and magnitude of each parameter update, effectively pulling weights toward zero at every step of optimization.",
+      "feedback": "The learner's answer does not address the question at all. The response is identical to the answer given for q9 (about learning rate) and contains no information about regularization, L1, L2, or their interaction with gradient descent. None of the rubric points were addressed, resulting in a score of 0. To improve, the learner should explain the purpose of regularization (preventing overfitting), describe how the penalty term is added to the loss function, distinguish between L1 (sparsity) and L2 (small weights), and explain how the penalty term affects gradient computation and parameter updates."
+    },
+    {
+      "question_id": "q12",
+      "score": 0,
+      "max_score": 5,
+      "model_answer": "The loss landscape is the surface defined by the loss function over all possible parameter values, and its geometry has a direct impact on how gradient descent behaves during optimization. Local minima are points that are lower than their immediate surroundings but are not the global minimum; an optimizer may become trapped in a local minimum and stop improving even though a better solution exists elsewhere. Saddle points are locations where the gradient is zero but the point is neither a local minimum nor a local maximum — the surface curves upward in some directions and downward in others. Optimizers can slow down or stall near saddle points because the gradient magnitude is small, making it difficult to determine the correct direction of descent. Convergence is typically defined as the gradient magnitude approaching zero, which can occur at both true minima and saddle points, making it important to distinguish between them when evaluating whether a model has truly converged to a good solution. Different optimizers have varying robustness to these features: momentum-based methods and adaptive optimizers like Adam can navigate saddle points and shallow local minima more effectively than vanilla gradient descent. Understanding the loss landscape therefore helps practitioners select appropriate optimizers and hyperparameters, and interpret the quality of the solution found during training.",
+      "feedback": "The learner's answer does not address the question at all. The response is identical to the answer given for q9 (about learning rate) and contains no information about the loss landscape, saddle points, local minima, or their implications for optimizer selection. None of the rubric points were addressed, resulting in a score of 0. To improve, the learner should define the loss landscape, explain what local minima and saddle points are, describe how they can trap or stall optimizers, and discuss how different optimizers (e.g., Adam, momentum-based methods) handle these challenges differently."
+    }
+  ]
+}
+2026-06-13 14:43:05,868 [INFO] quiz_agent — [STEP 3] Grading response parsed — 4 grades received
+2026-06-13 14:43:05,868 [DEBUG] quiz_agent — [STEP 3] Descriptive result — question_id=q9 score=3.0/5
+2026-06-13 14:43:05,868 [DEBUG] quiz_agent — [STEP 3] Descriptive result — question_id=q10 score=0.0/5
+2026-06-13 14:43:05,868 [DEBUG] quiz_agent — [STEP 3] Descriptive result — question_id=q11 score=0.0/5
+2026-06-13 14:43:05,868 [DEBUG] quiz_agent — [STEP 3] Descriptive result — question_id=q12 score=0.0/5
+2026-06-13 14:43:05,868 [INFO] quiz_agent — [STEP 3] Descriptive grading done — descriptive_subtotal=3.00
+2026-06-13 14:43:05,868 [INFO] quiz_agent — [STEP 4] Assembling QuizResult
+2026-06-13 14:43:05,868 [INFO] quiz_agent — [STEP 4] QuizResult — overall=10.3/31 (33.3%) mcq=7.33 descriptive=3.00
+2026-06-13 14:43:05,868 [INFO] quiz_agent — [STEP 4] weak_sub_concepts: ['Adaptive Optimizers', 'Regularization', 'SGD and Mini-Batch Gradient Descent', 'Loss Landscape']
+2026-06-13 14:43:05,868 [INFO] quiz_agent — [STEP 4] recommended_action: re-teach
+2026-06-13 14:43:05,868 [DEBUG] quiz_agent — [STEP 4] Full QuizAgentOutput schema:
+{
+  "status": "evaluated",
+  "quiz": {
+    "quiz_id": "061031de-11db-49d0-84fc-a41df51f6dd7",
+    "topic": "Gradient Descent Optimization",
+    "questions": [
+      {
+        "id": "q1",
+        "type": "mcq-single",
+        "prompt": "What determines the fraction of the gradient subtracted from the parameters at each iteration of gradient descent?",
+        "sub_concept": "Learning Rate",
+        "max_points": 1,
+        "options": [
+          {
+            "id": "q1a",
+            "text": "The learning rate",
+            "is_correct": true,
+            "explanation": "The learning rate is explicitly described in the content as the fraction that determines how much of the gradient is subtracted from the parameters at each update step."
+          },
+          {
+            "id": "q1b",
+            "text": "The momentum coefficient",
+            "is_correct": false,
+            "explanation": "Momentum accumulates gradients to accelerate descent in persistent directions, but it does not determine the fraction of the gradient subtracted at each iteration — that role belongs to the learning rate."
+          },
+          {
+            "id": "q1c",
+            "text": "The loss function value",
+            "is_correct": false,
+            "explanation": "The loss function measures prediction error and guides the direction of optimization, but it does not directly determine the fraction of the gradient used in the parameter update."
+          },
+          {
+            "id": "q1d",
+            "text": "The gradient magnitude",
+            "is_correct": false,
+            "explanation": "The gradient magnitude indicates how steep the loss landscape is and signals convergence when it approaches zero, but it is not the factor that determines the fraction subtracted from parameters — the learning rate does that."
+          }
+        ],
+        "topic_deep_dive": "The learning rate is a hyperparameter that controls how large a step the optimizer takes in the direction of the negative gradient at each iteration. If the learning rate is too high, the optimizer may overshoot the minimum and fail to converge. If it is too low, convergence becomes very slow, requiring many more iterations to reach the minimum. Choosing an appropriate learning rate is therefore critical to effective optimization. Many advanced optimizers like Adam and RMSProp adapt the learning rate automatically during training to address this challenge.",
+        "rubric": []
+      },
+      {
+        "id": "q2",
+        "type": "mcq-single",
+        "prompt": "What is the primary risk of using a very high learning rate in gradient descent?",
+        "sub_concept": "Learning Rate",
+        "max_points": 1,
+        "options": [
+          {
+            "id": "q2a",
+            "text": "Overshooting the minimum",
+            "is_correct": true,
+            "explanation": "The teaching content explicitly states that a high learning rate can cause the optimizer to overshoot the minimum, meaning the parameter update steps are too large and skip past the optimal point."
+          },
+          {
+            "id": "q2b",
+            "text": "Slow convergence",
+            "is_correct": false,
+            "explanation": "Slow convergence is the risk associated with a low learning rate, not a high one. A low learning rate causes the optimizer to take very small steps, requiring many more iterations to reach the minimum."
+          },
+          {
+            "id": "q2c",
+            "text": "Increased regularization penalty",
+            "is_correct": false,
+            "explanation": "Regularization penalties (L1 and L2) are related to weight magnitudes and are independent of the learning rate setting. A high learning rate does not directly increase regularization penalties."
+          },
+          {
+            "id": "q2d",
+            "text": "Gradient magnitude approaching zero too quickly",
+            "is_correct": false,
+            "explanation": "Gradient magnitude approaching zero is the condition for convergence, not a risk of a high learning rate. A high learning rate is more likely to prevent stable convergence rather than cause premature gradient decay."
+          }
+        ],
+        "topic_deep_dive": "The learning rate governs the step size taken during each parameter update. A high learning rate means the optimizer takes large steps, which can cause it to jump past the minimum of the loss function — a phenomenon known as overshooting. This can lead to oscillation around the minimum or even divergence, where the loss increases rather than decreases. Conversely, a low learning rate results in very small steps, making convergence extremely slow. Adaptive optimizers such as Adam and RMSProp were developed in part to mitigate the sensitivity to learning rate selection.",
+        "rubric": []
+      },
+      {
+        "id": "q3",
+        "type": "mcq-single",
+        "prompt": "How does Stochastic Gradient Descent (SGD) differ from mini-batch gradient descent?",
+        "sub_concept": "SGD and Mini-Batch Gradient Descent",
+        "max_points": 1,
+        "options": [
+          {
+            "id": "q3a",
+            "text": "SGD uses a single training example per update, while mini-batch uses a small subset",
+            "is_correct": true,
+            "explanation": "The content directly states that SGD uses a single training example per update, whereas mini-batch gradient descent uses a small subset of the training data per update."
+          },
+          {
+            "id": "q3b",
+            "text": "SGD uses the entire dataset per update, while mini-batch uses a single example",
+            "is_correct": false,
+            "explanation": "This reverses the definitions. SGD uses a single example per update, not the entire dataset. Using the entire dataset per update describes full-batch gradient descent, which is not what SGD refers to."
+          },
+          {
+            "id": "q3c",
+            "text": "SGD adapts the learning rate, while mini-batch uses a fixed learning rate",
+            "is_correct": false,
+            "explanation": "Adaptive learning rates are a feature of optimizers like Adam, RMSProp, and Adagrad — not a defining characteristic of SGD versus mini-batch gradient descent. Both SGD and mini-batch can use fixed or adaptive learning rates."
+          },
+          {
+            "id": "q3d",
+            "text": "SGD uses momentum, while mini-batch does not",
+            "is_correct": false,
+            "explanation": "Momentum is a technique that can be applied to SGD to accelerate it, but it is not what distinguishes SGD from mini-batch gradient descent. The key distinction is the number of training examples used per update."
+          }
+        ],
+        "topic_deep_dive": "Gradient descent has several variants that differ in how many training examples are used to compute the gradient at each update step. Stochastic Gradient Descent (SGD) uses a single training example per update, making it fast but noisy. Mini-batch gradient descent uses a small subset of the training data, balancing computational efficiency with gradient stability. Full-batch gradient descent uses the entire dataset, which is more accurate but computationally expensive. The choice among these variants affects both the speed of training and the quality of convergence.",
+        "rubric": []
+      },
+      {
+        "id": "q4",
+        "type": "mcq-single",
+        "prompt": "According to the teaching content, what condition signals that gradient descent has reached convergence?",
+        "sub_concept": "Convergence",
+        "max_points": 1,
+        "options": [
+          {
+            "id": "q4a",
+            "text": "The gradient magnitude approaches zero",
+            "is_correct": true,
+            "explanation": "The content explicitly states that convergence is reached when the gradient magnitude approaches zero, indicating the optimizer has found a region where the loss function is nearly flat."
+          },
+          {
+            "id": "q4b",
+            "text": "The loss function value reaches exactly zero",
+            "is_correct": false,
+            "explanation": "The loss function reaching exactly zero is not the stated condition for convergence. In practice, the loss rarely reaches zero, and convergence is defined by the gradient magnitude approaching zero, not the loss value itself."
+          },
+          {
+            "id": "q4c",
+            "text": "The learning rate becomes very small",
+            "is_correct": false,
+            "explanation": "While some learning rate schedules reduce the learning rate over time, a small learning rate is not the definition of convergence. Convergence is specifically defined in the content as the gradient magnitude approaching zero."
+          },
+          {
+            "id": "q4d",
+            "text": "The model encounters a saddle point",
+            "is_correct": false,
+            "explanation": "Saddle points are features of the loss landscape where the gradient is zero but the point is neither a local minimum nor maximum. The content mentions saddle points as challenges to be aware of, not as indicators of successful convergence."
+          }
+        ],
+        "topic_deep_dive": "Convergence in gradient descent refers to the point at which the optimization algorithm has effectively found a minimum of the loss function and further updates produce negligible change. The teaching content defines convergence as the state when the gradient magnitude approaches zero, meaning the loss landscape is nearly flat at the current parameter values. At this point, the parameter updates become very small, indicating that the optimizer has settled near a minimum. Understanding convergence is important because it helps practitioners decide when to stop training and how to interpret the behavior of the loss curve.",
+        "rubric": []
+      },
+      {
+        "id": "q5",
+        "type": "mcq-single",
+        "prompt": "What role does momentum play in Stochastic Gradient Descent?",
+        "sub_concept": "Momentum",
+        "max_points": 1,
+        "options": [
+          {
+            "id": "q5a",
+            "text": "It accelerates SGD by accumulating gradients in directions of persistent descent",
+            "is_correct": true,
+            "explanation": "The content directly states that momentum helps accelerate SGD by accumulating gradients in directions of persistent descent, allowing the optimizer to move more efficiently toward the minimum."
+          },
+          {
+            "id": "q5b",
+            "text": "It penalizes large weights to prevent overfitting",
+            "is_correct": false,
+            "explanation": "Penalizing large weights to prevent overfitting is the role of regularization techniques such as L1 and L2, not momentum. Momentum is concerned with accelerating gradient-based updates, not weight penalization."
+          },
+          {
+            "id": "q5c",
+            "text": "It adapts the learning rate based on past gradients",
+            "is_correct": false,
+            "explanation": "Adapting the learning rate based on past gradients is a feature of adaptive optimizers like Adam, RMSProp, and Adagrad. Momentum accumulates gradient directions to accelerate descent but does not directly modify the learning rate."
+          },
+          {
+            "id": "q5d",
+            "text": "It reduces the number of training examples used per update",
+            "is_correct": false,
+            "explanation": "The number of training examples used per update is determined by the variant of gradient descent (SGD, mini-batch, or full-batch), not by momentum. Momentum affects how gradients are accumulated across iterations, not the batch size."
+          }
+        ],
+        "topic_deep_dive": "Momentum is a technique used to improve the efficiency of SGD by incorporating information from past gradient updates. Instead of updating parameters based solely on the current gradient, momentum accumulates a velocity vector in directions of persistent descent, effectively smoothing out the update trajectory. This helps the optimizer move faster through flat regions of the loss landscape and reduces oscillation in directions where the gradient frequently changes sign. Momentum is particularly useful when the loss landscape has narrow valleys or when gradients are noisy, as is common in SGD.",
+        "rubric": []
+      },
+      {
+        "id": "q6",
+        "type": "mcq-multi",
+        "prompt": "Which of the following are described in the teaching content as variants of gradient descent that adapt the learning rate during training? (Select all that apply)",
+        "sub_concept": "Adaptive Optimizers",
+        "max_points": 2,
+        "options": [
+          {
+            "id": "q6a",
+            "text": "Adam",
+            "is_correct": true,
+            "explanation": "The content explicitly lists Adam as a common variant that adapts the learning rate during training."
+          },
+          {
+            "id": "q6b",
+            "text": "RMSProp",
+            "is_correct": true,
+            "explanation": "The content explicitly lists RMSProp as a common variant that adapts the learning rate during training."
+          },
+          {
+            "id": "q6c",
+            "text": "Adagrad",
+            "is_correct": true,
+            "explanation": "The content explicitly lists Adagrad as a common variant that adapts the learning rate during training."
+          },
+          {
+            "id": "q6d",
+            "text": "Stochastic Gradient Descent (SGD)",
+            "is_correct": false,
+            "explanation": "SGD is described in the content as a variant that uses a single training example per update. It is not listed among the optimizers that adapt the learning rate — that distinction belongs to Adam, RMSProp, and Adagrad."
+          },
+          {
+            "id": "q6e",
+            "text": "Mini-batch gradient descent",
+            "is_correct": false,
+            "explanation": "Mini-batch gradient descent is described as a variant that uses a small subset of training data per update. The content does not describe it as an optimizer that adapts the learning rate during training."
+          }
+        ],
+        "topic_deep_dive": "Standard gradient descent uses a fixed learning rate throughout training, which can be suboptimal because the ideal step size may vary across different parameters and training stages. Adaptive optimizers address this by automatically adjusting the learning rate for each parameter based on historical gradient information. The teaching content identifies Adam, RMSProp, and Adagrad as common adaptive variants. These methods generally converge faster and require less manual tuning of the learning rate compared to standard SGD. Understanding which optimizers adapt the learning rate helps practitioners select the right tool for their specific optimization problem.",
+        "rubric": []
+      },
+      {
+        "id": "q7",
+        "type": "mcq-multi",
+        "prompt": "Which of the following statements about regularization in the context of gradient descent optimization are correct according to the teaching content? (Select all that apply)",
+        "sub_concept": "Regularization",
+        "max_points": 2,
+        "options": [
+          {
+            "id": "q7a",
+            "text": "L1 and L2 regularization penalize large weights",
+            "is_correct": true,
+            "explanation": "The content explicitly states that regularization techniques such as L1 and L2 penalize large weights, which is their core mechanism for preventing overfitting."
+          },
+          {
+            "id": "q7b",
+            "text": "Regularization is used to prevent overfitting during optimization",
+            "is_correct": true,
+            "explanation": "The content directly states that L1 and L2 regularization techniques are used to prevent overfitting during optimization, confirming this as a correct statement."
+          },
+          {
+            "id": "q7c",
+            "text": "Regularization adapts the learning rate during training",
+            "is_correct": false,
+            "explanation": "Adapting the learning rate is the role of adaptive optimizers like Adam, RMSProp, and Adagrad. Regularization penalizes large weights to prevent overfitting and does not modify the learning rate."
+          },
+          {
+            "id": "q7d",
+            "text": "Regularization helps accelerate SGD by accumulating gradients",
+            "is_correct": false,
+            "explanation": "Accumulating gradients to accelerate SGD is the role of momentum, not regularization. Regularization's purpose is to penalize large weights and reduce overfitting, not to speed up gradient updates."
+          },
+          {
+            "id": "q7e",
+            "text": "Regularization is applied during the optimization process",
+            "is_correct": true,
+            "explanation": "The content states that regularization techniques penalize large weights to prevent overfitting 'during optimization,' confirming that regularization is applied as part of the training and optimization process."
+          }
+        ],
+        "topic_deep_dive": "Regularization is a technique applied during optimization to prevent overfitting, which occurs when a model learns the training data too well and fails to generalize to new data. The teaching content describes L1 and L2 regularization as methods that penalize large weights during the optimization process. By adding a penalty term to the loss function, these techniques discourage the model from assigning excessively large values to its parameters. L1 regularization tends to produce sparse weight vectors, while L2 regularization encourages smaller but non-zero weights. Both are applied during training as part of the optimization objective.",
+        "rubric": []
+      },
+      {
+        "id": "q8",
+        "type": "mcq-multi",
+        "prompt": "Which of the following features of the loss landscape are mentioned in the teaching content as important for effective optimizer choice? (Select all that apply)",
+        "sub_concept": "Loss Landscape",
+        "max_points": 2,
+        "options": [
+          {
+            "id": "q8a",
+            "text": "Saddle points",
+            "is_correct": true,
+            "explanation": "The content explicitly mentions saddle points as a feature of the loss landscape that is critical to understand for effective optimizer choice."
+          },
+          {
+            "id": "q8b",
+            "text": "Local minima",
+            "is_correct": true,
+            "explanation": "The content explicitly mentions local minima as a feature of the loss landscape that is critical to understand for effective optimizer choice."
+          },
+          {
+            "id": "q8c",
+            "text": "Global maximum",
+            "is_correct": false,
+            "explanation": "The content does not mention global maxima as a relevant feature of the loss landscape for optimizer choice. The focus is on saddle points and local minima, which are the challenging regions for gradient-based optimizers."
+          },
+          {
+            "id": "q8d",
+            "text": "Batch size distribution",
+            "is_correct": false,
+            "explanation": "Batch size distribution is not mentioned in the content as a feature of the loss landscape. It relates to how training data is sampled (as in SGD vs. mini-batch), not to the geometric properties of the loss surface."
+          },
+          {
+            "id": "q8e",
+            "text": "Steepest descent direction",
+            "is_correct": false,
+            "explanation": "While the steepest descent direction is fundamental to how gradient descent works (moving in the direction of the negative gradient), the content does not list it as a feature of the loss landscape relevant to optimizer choice. The landscape features highlighted are saddle points and local minima."
+          }
+        ],
+        "topic_deep_dive": "The loss landscape refers to the surface defined by the loss function over the space of all possible parameter values. Understanding its geometry is critical for choosing and configuring an optimizer effectively. The teaching content highlights saddle points and local minima as key features of the loss landscape. Saddle points are locations where the gradient is zero but the point is not a true minimum, which can slow or mislead optimizers. Local minima are points that are lower than their immediate surroundings but may not be the global minimum. Awareness of these features helps practitioners anticipate where optimizers might struggle and select algorithms robust to such challenges.",
+        "rubric": []
+      },
+      {
+        "id": "q9",
+        "type": "descriptive",
+        "prompt": "Explain the role of the learning rate in gradient descent optimization. In your answer, describe what happens when the learning rate is too high or too low, and how adaptive optimizers address this challenge.",
+        "sub_concept": "Learning Rate",
+        "max_points": 5,
+        "options": [],
+        "topic_deep_dive": null,
+        "rubric": [
+          "The learning rate determines the fraction of the gradient subtracted from the parameters at each iteration, controlling the step size of each update.",
+          "A high learning rate can cause the optimizer to overshoot the minimum of the loss function, potentially leading to failure to converge or oscillation.",
+          "A low learning rate leads to slow convergence, requiring many more iterations to reach the minimum.",
+          "Adaptive optimizers such as Adam, RMSProp, and Adagrad adjust the learning rate automatically during training, reducing the need for manual tuning.",
+          "The balance between convergence speed and stability makes learning rate selection one of the most important decisions in gradient descent optimization.",
+          "Convergence is ultimately reached when the gradient magnitude approaches zero, regardless of the learning rate strategy used."
+        ]
+      },
+      {
+        "id": "q10",
+        "type": "descriptive",
+        "prompt": "Compare and contrast Stochastic Gradient Descent (SGD) and mini-batch gradient descent. In your answer, include the role of momentum in improving SGD performance.",
+        "sub_concept": "SGD and Mini-Batch Gradient Descent",
+        "max_points": 5,
+        "options": [],
+        "topic_deep_dive": null,
+        "rubric": [
+          "SGD uses a single training example per parameter update, making each update fast but potentially noisy.",
+          "Mini-batch gradient descent uses a small subset of the training data per update, balancing computational efficiency with gradient stability.",
+          "Both SGD and mini-batch are variants of gradient descent that differ in the amount of data used to estimate the gradient at each step.",
+          "Momentum helps accelerate SGD by accumulating gradients in directions of persistent descent, allowing the optimizer to move more efficiently toward the minimum.",
+          "Without momentum, SGD may oscillate or converge slowly due to the noise introduced by using only a single training example per update.",
+          "The choice between SGD and mini-batch affects both the speed of training and the quality and stability of convergence."
+        ]
+      },
+      {
+        "id": "q11",
+        "type": "descriptive",
+        "prompt": "Describe the purpose of regularization techniques such as L1 and L2 in the context of gradient descent optimization, and explain how they interact with the optimization process.",
+        "sub_concept": "Regularization",
+        "max_points": 5,
+        "options": [],
+        "topic_deep_dive": null,
+        "rubric": [
+          "L1 and L2 regularization are techniques that penalize large weights in the model during the optimization process.",
+          "Their primary purpose is to prevent overfitting, which occurs when a model fits the training data too closely and fails to generalize.",
+          "Regularization is applied during optimization by adding a penalty term to the loss function, which the optimizer then seeks to minimize alongside the prediction error.",
+          "By discouraging large weight values, regularization constrains the model's complexity and promotes simpler, more generalizable solutions.",
+          "L1 and L2 differ in the form of their penalty: L1 penalizes the absolute value of weights (promoting sparsity), while L2 penalizes the squared value of weights (encouraging small but non-zero weights).",
+          "Regularization interacts directly with gradient descent because the penalty term contributes to the gradient computation, influencing the direction and magnitude of each parameter update."
+        ]
+      },
+      {
+        "id": "q12",
+        "type": "descriptive",
+        "prompt": "Why is understanding the loss landscape — including saddle points and local minima — important for choosing an optimizer in gradient descent? Discuss how these features can affect the optimization process.",
+        "sub_concept": "Loss Landscape",
+        "max_points": 5,
+        "options": [],
+        "topic_deep_dive": null,
+        "rubric": [
+          "The loss landscape is the surface defined by the loss function over all possible parameter values, and its geometry directly affects how gradient descent behaves.",
+          "Local minima are points lower than their immediate surroundings but not the global minimum; an optimizer may get trapped in a local minimum and stop improving.",
+          "Saddle points are locations where the gradient is zero but the point is neither a local minimum nor maximum; optimizers can slow down or stall near saddle points.",
+          "Convergence is defined as the gradient magnitude approaching zero, which can occur at both true minima and saddle points, making it important to distinguish between them.",
+          "Different optimizers have different robustness to saddle points and local minima; for example, adaptive optimizers and momentum-based methods may navigate these features more effectively.",
+          "Understanding the loss landscape helps practitioners select appropriate optimizers and hyperparameters, and interpret whether the model has truly converged to a good solution."
+        ]
+      }
+    ],
+    "metadata": {
+      "question_type_counts": {
+        "mcq-single": 5,
+        "mcq-multi": 3,
+        "descriptive": 4
+      },
+      "total_questions": 12,
+      "max_score": 31,
+      "mcq_max_score": 11,
+      "descriptive_max_score": 20,
+      "ui_hints": {
+        "mcq_single_input": "radio",
+        "mcq_multi_input": "checkbox",
+        "mcq_multi_hint_text": "Select all that apply",
+        "descriptive_target_words": 150,
+        "descriptive_soft_warning_below": 80
+      }
+    }
+  },
+  "result": {
+    "overall_score": 10.333333333333334,
+    "max_score": 31,
+    "overall_percentage": 33.3,
+    "mcq_subtotal": 7.333333333333334,
+    "descriptive_subtotal": 3.0,
+    "question_results": [
+      {
+        "question_id": "q1",
+        "score": 1.0,
+        "max_score": 1,
+        "is_correct": true,
+        "wrong_answer_explanation": null,
+        "topic_deep_dive": null,
+        "per_option_explanations": [],
+        "model_answer": null,
+        "feedback": null
+      },
+      {
+        "question_id": "q2",
+        "score": 1.0,
+        "max_score": 1,
+        "is_correct": true,
+        "wrong_answer_explanation": null,
+        "topic_deep_dive": null,
+        "per_option_explanations": [],
+        "model_answer": null,
+        "feedback": null
+      },
+      {
+        "question_id": "q3",
+        "score": 1.0,
+        "max_score": 1,
+        "is_correct": true,
+        "wrong_answer_explanation": null,
+        "topic_deep_dive": null,
+        "per_option_explanations": [],
+        "model_answer": null,
+        "feedback": null
+      },
+      {
+        "question_id": "q4",
+        "score": 1.0,
+        "max_score": 1,
+        "is_correct": true,
+        "wrong_answer_explanation": null,
+        "topic_deep_dive": null,
+        "per_option_explanations": [],
+        "model_answer": null,
+        "feedback": null
+      },
+      {
+        "question_id": "q5",
+        "score": 1.0,
+        "max_score": 1,
+        "is_correct": true,
+        "wrong_answer_explanation": null,
+        "topic_deep_dive": null,
+        "per_option_explanations": [],
+        "model_answer": null,
+        "feedback": null
+      },
+      {
+        "question_id": "q6",
+        "score": 0.6666666666666666,
+        "max_score": 2,
+        "is_correct": null,
+        "wrong_answer_explanation": null,
+        "topic_deep_dive": "Standard gradient descent uses a fixed learning rate throughout training, which can be suboptimal because the ideal step size may vary across different parameters and training stages. Adaptive optimizers address this by automatically adjusting the learning rate for each parameter based on historical gradient information. The teaching content identifies Adam, RMSProp, and Adagrad as common adaptive variants. These methods generally converge faster and require less manual tuning of the learning rate compared to standard SGD. Understanding which optimizers adapt the learning rate helps practitioners select the right tool for their specific optimization problem.",
+        "per_option_explanations": [
+          {
+            "option_id": "q6b",
+            "explanation_type": "missed-correct",
+            "explanation": "The content explicitly lists RMSProp as a common variant that adapts the learning rate during training."
+          },
+          {
+            "option_id": "q6c",
+            "explanation_type": "missed-correct",
+            "explanation": "The content explicitly lists Adagrad as a common variant that adapts the learning rate during training."
+          }
+        ],
+        "model_answer": null,
+        "feedback": null
+      },
+      {
+        "question_id": "q7",
+        "score": 0.6666666666666666,
+        "max_score": 2,
+        "is_correct": null,
+        "wrong_answer_explanation": null,
+        "topic_deep_dive": "Regularization is a technique applied during optimization to prevent overfitting, which occurs when a model learns the training data too well and fails to generalize to new data. The teaching content describes L1 and L2 regularization as methods that penalize large weights during the optimization process. By adding a penalty term to the loss function, these techniques discourage the model from assigning excessively large values to its parameters. L1 regularization tends to produce sparse weight vectors, while L2 regularization encourages smaller but non-zero weights. Both are applied during training as part of the optimization objective.",
+        "per_option_explanations": [
+          {
+            "option_id": "q7b",
+            "explanation_type": "missed-correct",
+            "explanation": "The content directly states that L1 and L2 regularization techniques are used to prevent overfitting during optimization, confirming this as a correct statement."
+          },
+          {
+            "option_id": "q7e",
+            "explanation_type": "missed-correct",
+            "explanation": "The content states that regularization techniques penalize large weights to prevent overfitting 'during optimization,' confirming that regularization is applied as part of the training and optimization process."
+          }
+        ],
+        "model_answer": null,
+        "feedback": null
+      },
+      {
+        "question_id": "q8",
+        "score": 1.0,
+        "max_score": 2,
+        "is_correct": null,
+        "wrong_answer_explanation": null,
+        "topic_deep_dive": "The loss landscape refers to the surface defined by the loss function over the space of all possible parameter values. Understanding its geometry is critical for choosing and configuring an optimizer effectively. The teaching content highlights saddle points and local minima as key features of the loss landscape. Saddle points are locations where the gradient is zero but the point is not a true minimum, which can slow or mislead optimizers. Local minima are points that are lower than their immediate surroundings but may not be the global minimum. Awareness of these features helps practitioners anticipate where optimizers might struggle and select algorithms robust to such challenges.",
+        "per_option_explanations": [
+          {
+            "option_id": "q8b",
+            "explanation_type": "missed-correct",
+            "explanation": "The content explicitly mentions local minima as a feature of the loss landscape that is critical to understand for effective optimizer choice."
+          }
+        ],
+        "model_answer": null,
+        "feedback": null
+      },
+      {
+        "question_id": "q9",
+        "score": 3.0,
+        "max_score": 5,
+        "is_correct": null,
+        "wrong_answer_explanation": null,
+        "topic_deep_dive": null,
+        "per_option_explanations": [],
+        "model_answer": "The learning rate is a hyperparameter that determines the fraction of the gradient subtracted from the model's parameters at each iteration, effectively controlling the step size of each update. If the learning rate is too high, the optimizer can overshoot the minimum of the loss function, causing oscillation around the minimum or even divergence, preventing convergence altogether. Conversely, a learning rate that is too low results in very small parameter updates, leading to slow convergence and requiring many more iterations to reach the minimum. The balance between convergence speed and stability makes learning rate selection one of the most critical decisions in gradient descent. Adaptive optimizers such as Adam, RMSProp, and Adagrad address this challenge by automatically adjusting the learning rate on a per-parameter basis during training, scaling updates based on historical gradient information. This reduces the need for manual tuning and allows the optimizer to converge more reliably. Ultimately, convergence is reached when the gradient magnitude approaches zero, regardless of the learning rate strategy employed.",
+        "feedback": "The learner correctly identified the three core concepts: the learning rate controls step size, a high learning rate causes overshooting, and a low learning rate causes slow convergence. They also correctly named Adam as an adaptive optimizer that adjusts the learning rate per parameter. However, the answer is quite brief and lacks depth. Missing points include: mention of other adaptive optimizers (RMSProp, Adagrad), the explicit discussion of the convergence-speed vs. stability trade-off, and the note that convergence is defined by the gradient magnitude approaching zero. A more complete answer would elaborate on each point with greater detail."
+      },
+      {
+        "question_id": "q10",
+        "score": 0.0,
+        "max_score": 5,
+        "is_correct": null,
+        "wrong_answer_explanation": null,
+        "topic_deep_dive": null,
+        "per_option_explanations": [],
+        "model_answer": "Stochastic Gradient Descent (SGD) updates model parameters using a single training example at a time, making each update computationally fast but introducing significant noise into the gradient estimate. This noise can cause the optimization path to oscillate, potentially slowing convergence. Mini-batch gradient descent strikes a balance by using a small subset of the training data per update, providing a more stable gradient estimate than SGD while remaining more computationally efficient than full-batch gradient descent. Both are variants of gradient descent that differ in how much data is used to estimate the gradient at each step, and the choice between them affects both training speed and convergence stability. Momentum is a technique that improves SGD performance by accumulating a velocity vector in directions of persistent gradient descent. Rather than updating parameters solely based on the current gradient, momentum incorporates a fraction of the previous update, allowing the optimizer to build speed in consistent directions and dampen oscillations. Without momentum, SGD may oscillate or converge slowly due to the noise from single-example updates. With momentum, the optimizer moves more efficiently toward the minimum, especially in loss landscapes with ravines or noisy gradients.",
+        "feedback": "The learner's answer does not address the question at all. The response is identical to the answer given for q9 (about learning rate) and contains no information about SGD, mini-batch gradient descent, or momentum. None of the rubric points were addressed, resulting in a score of 0. To improve, the learner should explain the difference between SGD and mini-batch in terms of data used per update, discuss the trade-offs in noise and computational efficiency, and describe how momentum accumulates gradients to accelerate convergence and reduce oscillation."
+      },
+      {
+        "question_id": "q11",
+        "score": 0.0,
+        "max_score": 5,
+        "is_correct": null,
+        "wrong_answer_explanation": null,
+        "topic_deep_dive": null,
+        "per_option_explanations": [],
+        "model_answer": "Regularization techniques such as L1 and L2 are used during gradient descent optimization to prevent overfitting, which occurs when a model learns the training data too closely and fails to generalize to unseen data. Both techniques work by adding a penalty term to the loss function that discourages large weight values, thereby constraining the model's complexity and promoting simpler, more generalizable solutions. This penalty term is minimized alongside the prediction error during optimization. L1 regularization penalizes the absolute value of the weights, which tends to produce sparse solutions where many weights are driven to exactly zero, effectively performing feature selection. L2 regularization penalizes the squared value of the weights, encouraging weights to be small but non-zero, which distributes the model's reliance more evenly across features. Regularization interacts directly with gradient descent because the penalty term contributes to the gradient computation. The gradient of the regularized loss includes a term derived from the penalty, which influences the direction and magnitude of each parameter update, effectively pulling weights toward zero at every step of optimization.",
+        "feedback": "The learner's answer does not address the question at all. The response is identical to the answer given for q9 (about learning rate) and contains no information about regularization, L1, L2, or their interaction with gradient descent. None of the rubric points were addressed, resulting in a score of 0. To improve, the learner should explain the purpose of regularization (preventing overfitting), describe how the penalty term is added to the loss function, distinguish between L1 (sparsity) and L2 (small weights), and explain how the penalty term affects gradient computation and parameter updates."
+      },
+      {
+        "question_id": "q12",
+        "score": 0.0,
+        "max_score": 5,
+        "is_correct": null,
+        "wrong_answer_explanation": null,
+        "topic_deep_dive": null,
+        "per_option_explanations": [],
+        "model_answer": "The loss landscape is the surface defined by the loss function over all possible parameter values, and its geometry has a direct impact on how gradient descent behaves during optimization. Local minima are points that are lower than their immediate surroundings but are not the global minimum; an optimizer may become trapped in a local minimum and stop improving even though a better solution exists elsewhere. Saddle points are locations where the gradient is zero but the point is neither a local minimum nor a local maximum — the surface curves upward in some directions and downward in others. Optimizers can slow down or stall near saddle points because the gradient magnitude is small, making it difficult to determine the correct direction of descent. Convergence is typically defined as the gradient magnitude approaching zero, which can occur at both true minima and saddle points, making it important to distinguish between them when evaluating whether a model has truly converged to a good solution. Different optimizers have varying robustness to these features: momentum-based methods and adaptive optimizers like Adam can navigate saddle points and shallow local minima more effectively than vanilla gradient descent. Understanding the loss landscape therefore helps practitioners select appropriate optimizers and hyperparameters, and interpret the quality of the solution found during training.",
+        "feedback": "The learner's answer does not address the question at all. The response is identical to the answer given for q9 (about learning rate) and contains no information about the loss landscape, saddle points, local minima, or their implications for optimizer selection. None of the rubric points were addressed, resulting in a score of 0. To improve, the learner should define the loss landscape, explain what local minima and saddle points are, describe how they can trap or stall optimizers, and discuss how different optimizers (e.g., Adam, momentum-based methods) handle these challenges differently."
+      }
+    ],
+    "weak_sub_concepts": [
+      "Adaptive Optimizers",
+      "Regularization",
+      "SGD and Mini-Batch Gradient Descent",
+      "Loss Landscape"
+    ],
+    "recommended_action": "re-teach"
+  },
+  "metadata": {
+    "topic": "Gradient Descent Optimization",
+    "tokens_used": 1660,
+    "model": "anthropic/claude-sonnet-4-6"
+  },
+  "errors": []
+}
+2026-06-13 14:43:05,869 [INFO] quiz_agent — ================================================================
+2026-06-13 14:43:05,869 [INFO] quiz_agent — PHASE 2 — evaluate() DONE  status=evaluated  score=10.3/31 (33.3%)
+2026-06-13 14:43:05,869 [INFO] quiz_agent — ================================================================
