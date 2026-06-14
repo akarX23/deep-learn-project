@@ -2,11 +2,6 @@ from __future__ import annotations
 
 import logging
 
-import rag_agent.agent
-import rag_agent.handlers
-import rag_agent.kafka
-import rag_agent.worker
-
 
 def test_agent_module_logger_uses_dunder_name() -> None:
     module_logger = logging.getLogger("rag_agent.agent")
@@ -33,7 +28,6 @@ def test_worker_logs_startup_warning_for_missing_topics(caplog) -> None:
     import time
     from dataclasses import dataclass
 
-    from rag_agent.utils.helpers import KafkaRuntimeConfig
     from rag_agent.worker import RAGWorker
 
     @dataclass
@@ -68,10 +62,17 @@ def test_worker_logs_startup_warning_for_missing_topics(caplog) -> None:
         def close(self):
             pass
 
-    config = KafkaRuntimeConfig(
-        bootstrap_servers="localhost:9092",
-        poll_timeout_ms=5,
-    )
+    config = {
+        "bootstrap_servers": "localhost:9092",
+        "client_id": "rag-service",
+        "consumer_group_id": "rag-service-consumer",
+        "poll_timeout_ms": 5,
+        "security_protocol": None,
+        "sasl_mechanism": None,
+        "sasl_username": None,
+        "sasl_password": None,
+        "ssl_cafile": None,
+    }
     # Only rag is present; rag-complete is missing
     fake_consumer = _FakeConsumer(topics={"rag"})
 
@@ -80,9 +81,12 @@ def test_worker_logs_startup_warning_for_missing_topics(caplog) -> None:
             config=config,
             producer_factory=lambda _c: _FakeProducer(),
             consumer_factory=lambda _c: fake_consumer,
-            handler_factory=lambda: type("H", (), {"process_request": lambda s, p, r=None: None})(),
+            request_processor=lambda _payload, _producer: None,
         )
         worker.start()
         worker.stop()
 
-    assert any("missing" in record.message.lower() or "startup_topic_check" in record.message for record in caplog.records)
+    assert any(
+        "missing" in record.message.lower() or "startup_topic_check" in record.message
+        for record in caplog.records
+    )

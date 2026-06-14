@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from contextlib import asynccontextmanager
 from collections.abc import Callable
@@ -10,9 +11,12 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from backend_service.app.api.chat_request import router as chat_request_router
+from backend_service.app.api.test_events import router as test_events_router
 from backend_service.app.api.topics import router as topics_router
 from backend_service.app.config import KafkaSettings
 from backend_service.app.kafka_admin import KafkaAdminService
+from backend_service.app.socket import connection_manager, socket_asgi_app
 from project.topics import get_all_topic_names
 
 logger = logging.getLogger(__name__)
@@ -23,6 +27,8 @@ def create_app(
     settings: KafkaSettings | None = None,
     admin_factory: Callable[[KafkaSettings], KafkaAdminService] = KafkaAdminService,
 ) -> FastAPI:
+    test_event_routes_enabled = _should_enable_test_event_routes(settings)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         resolved_settings = settings or KafkaSettings.from_env()
@@ -62,7 +68,14 @@ def create_app(
             app.state.kafka_admin.close()
 
     app = FastAPI(title="Kafka Backend Service", version="0.1.0", lifespan=lifespan)
+    app.state.connection_manager = connection_manager
     app.include_router(topics_router)
+    app.include_router(chat_request_router)
+    if test_event_routes_enabled:
+        app.include_router(test_events_router)
+
+    # Mount the Socket.IO ASGI app so the frontend can connect over WebSockets.
+    app.mount("/socket.io", socket_asgi_app)
 
     @app.exception_handler(RequestValidationError)
     async def handle_validation_error(
@@ -97,6 +110,15 @@ def create_app(
         )
 
     return app
+
+
+def _should_enable_test_event_routes(settings: KafkaSettings | None) -> bool:
+    if settings is not None:
+        return settings.test_event_routes_enabled()
+    raw_app_env = os.getenv("APP_ENV", "dev")
+    raw_enable = os.getenv("BACKEND_ENABLE_TEST_EVENT_APIS")
+
+    return raw_enable == "true" or (raw_enable is None and raw_app_env == "dev")
 
 
 app = create_app()

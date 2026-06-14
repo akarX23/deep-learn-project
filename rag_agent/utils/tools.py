@@ -8,7 +8,10 @@ import io
 from pathlib import Path
 from typing import Any
 
-from rag_agent.utils.helpers import EmbeddingConfig, LLMConfig, cosine_similarity, serialize_table_to_markdown
+from rag_agent.utils.content_helpers import (
+    cosine_similarity,
+    serialize_table_to_markdown,
+)
 from rag_agent.utils.llm_client import call_embedding, call_llm
 from rag_agent.utils.prompts import IMAGE_DESCRIPTION_PROMPT
 
@@ -88,7 +91,7 @@ def extract_images_from_page(pdf_source: Any, page_number: int) -> list[bytes]:
 def describe_images_with_vlm(
     image_bytes_list: list[bytes],
     user_prompt: str,
-    llm_config: LLMConfig,
+    llm_config: dict[str, object],
     batch_size: int,
 ) -> list[str]:
     """Describe images using page-scoped VLM batch calls."""
@@ -124,17 +127,27 @@ def describe_images_with_vlm(
     return descriptions
 
 
-def describe_image_with_vlm(image_bytes: bytes, user_prompt: str, llm_config: LLMConfig) -> str:
+def describe_image_with_vlm(
+    image_bytes: bytes,
+    user_prompt: str,
+    llm_config: dict[str, object],
+) -> str:
     """Backward-compatible single-image wrapper around batched image descriptions."""
 
     if not image_bytes:
         return ""
 
-    descriptions = describe_images_with_vlm([image_bytes], user_prompt, llm_config, batch_size=1)
+    descriptions = describe_images_with_vlm(
+        [image_bytes], user_prompt, llm_config, batch_size=1
+    )
     return descriptions[0] if descriptions else ""
 
 
-def score_page_relevance(page_content: str, user_prompt: str, embedding_config: EmbeddingConfig) -> float:
+def score_page_relevance(
+    page_content: str,
+    user_prompt: str,
+    embedding_config: dict[str, object],
+) -> float:
     """Score semantic relevance between page content and user prompt via remote embedding API."""
 
     if not page_content.strip() or not user_prompt.strip():
@@ -148,5 +161,6 @@ def score_page_relevance(page_content: str, user_prompt: str, embedding_config: 
     except Exception as exc:
         # Log error and return neutral score (non-fatal)
         import warnings
+
         warnings.warn(f"Embedding API call failed: {exc}. Returning neutral score.")
-        return 0.5
+        return 0.6

@@ -200,6 +200,11 @@ class WorkerRuntimeState(BaseModel):
     startup_topic_check_warnings: List[str] = Field(default_factory=list)
 
 
+# ---------------------------------------------------------------------------
+# Backend Service schemas
+# ---------------------------------------------------------------------------
+
+
 class StartupTopicBootstrapResult(BaseModel):
     """Outcome of Kafka topic bootstrap during service startup."""
 
@@ -215,6 +220,32 @@ class StartupTopicBootstrapResult(BaseModel):
         default_factory=list,
         description="List of (topic_name, error_message) tuples for non-fatal errors",
     )
+
+
+class UserRequest(BaseModel):
+    """Inbound user request routed from Frontend to backend services."""
+
+    user_prompt: str
+    user_level: List[str]
+    sid: str
+
+
+# ---------------------------------------------------------------------------
+# Planner Agent schemas
+# ---------------------------------------------------------------------------
+
+
+class PlannerRequestEvent(BaseModel):
+    """Kafka event published to the planner topic for a user-initiated request.
+
+    Carries absolute file paths so the planner can locate uploaded documents.
+    No per-file metadata is included in this iteration.
+    """
+
+    user_prompt: str
+    user_level: List[str] = Field(default_factory=list)
+    sid: str
+    file_paths: List[str] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

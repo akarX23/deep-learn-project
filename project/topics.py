@@ -9,6 +9,7 @@ class PlannerTopics(str, Enum):
     """Topics published by the planner or consumed by downstream agents."""
 
     RAG = "rag"
+    INIT_PLANNER = "init-planner"
     TEACHING = "teaching"
 
 

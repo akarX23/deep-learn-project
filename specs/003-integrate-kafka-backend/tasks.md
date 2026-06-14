@@ -1,138 +1,126 @@
-# Tasks: Backend Kafka Startup Topic Bootstrap
+# Tasks: Backend Kafka Startup Bootstrap + RAG Test-Event API + WebSocket Channel + User-Request API
 
-**Input**: Design documents from `/specs/003-integrate-kafka-backend/`  
-**Prerequisites**: plan.md ✓, spec.md ✓, research.md ✓, data-model.md ✓, contracts/ ✓
+**Input**: Design documents from `/specs/003-integrate-kafka-backend/`
+**Prerequisites**: `plan.md` (required), `spec.md` (required for user stories), `research.md`, `data-model.md`, `contracts/`, `quickstart.md`
 
-**Tests**: Included — unit tests required per Constitution II. Test-driven approach: write tests that fail before implementation.
+**Tests**: Include test tasks by default (constitution requires testing evidence).
 
-**Organization**: Single user story (P1) — all implementation tasks flow from one coherent feature.
-
-## Format: `[ID] [P?] [Story] Description`
-
-- **[P]**: Can run in parallel (different files, no blocking dependencies)
-- **[Story]**: Which user story this task belongs to (US1 for this feature)
-- Paths shown below are relative to repository root
-
----
+**Organization**: Tasks are grouped by user story so each story can be implemented and validated independently.
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-**Purpose**: Verify existing project structure and add type model for bootstrap results
+**Purpose**: Ensure shared dependencies and contracts are present for all stories.
 
-- [x] T001 Confirm `project/topics.py` module exists and contains `PlannerTopics` and `RAGTopics` enums
-- [x] T002 [P] Add `StartupTopicBootstrapResult` dataclass to `project/schemas.py` with `created`, `already_existed`, and `errors` fields per data-model.md
+- [x] T001 [P] Add/verify Socket.IO and multipart dependencies in `requirements.txt`
+- [x] T002 [P] Add/verify shared WebSocket contracts in `project/events.py`
+- [x] T003 [P] Add/verify `UserRequest` and `PlannerRequestEvent` schemas in `project/schemas.py`
+- [x] T004 [P] Add/verify Kafka topic registry entries in `project/topics.py`
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-**Purpose**: Add aggregator function to topic registry
+**Purpose**: Core wiring that must be complete before implementing user stories.
 
-**⚠️ CRITICAL**: US1 implementation depends on this phase
+**Critical**: No user story work starts before this phase is complete.
 
-- [x] T003 Add `get_all_topic_names() -> list[str]` aggregator function to `project/topics.py` that returns union of `PlannerTopics.RAG` and `RAGTopics.RAG_COMPLETE`
+- [x] T005 [P] Add/verify test-event route policy config in `backend_service/app/config.py`
+- [x] T006 [P] Add/verify startup bootstrap and shared producer support in `backend_service/app/kafka_admin.py`
+- [x] T007 Add/verify app startup route wiring and lifecycle setup in `backend_service/app/main.py`
+- [x] T008 [P] Add/verify reusable defaults factory in `backend_service/app/utils.py`
+- [x] T009 [P] Add/verify baseline backend fixtures in `backend_service/tests/conftest.py`
 
-**Checkpoint**: Topic registry aggregator ready; US1 implementation can now proceed
+**Checkpoint**: Foundational runtime is ready; user stories can be developed independently.
 
 ---
 
 ## Phase 3: User Story 1 - Bootstrap Kafka Topics from Project Registry on Startup (Priority: P1) 🎯 MVP
 
-**Goal**: Backend service automatically creates all required Kafka topics on startup by reading from the shared registry, eliminating external provisioning steps.
+**Goal**: Create all topics from `project/topics` during startup with idempotent behavior.
 
-**Independent Test**: Start backend service against connected Kafka cluster and verify all topics from `project/topics` are present in cluster after startup completes.
+**Independent Test**: Start backend against Kafka and verify all registry topics exist after startup; repeat with existing topics and verify no failure.
 
-### Tests for User Story 1 (REQUIRED — write tests FIRST, ensure they FAIL before implementation)
+### Tests for User Story 1
 
-- [x] T004 [P] [US1] Add unit test `test_bootstrap_topics_creates_new_topics()` in `backend_service/tests/test_startup.py` covering scenario where all topics are created (use mock Kafka admin)
-- [x] T005 [P] [US1] Add unit test `test_bootstrap_topics_idempotent_with_existing()` in `backend_service/tests/test_startup.py` covering scenario where all topics already exist (returns "already_exists")
-- [x] T006 [P] [US1] Add unit test `test_bootstrap_topics_mixed_new_and_existing()` in `backend_service/tests/test_startup.py` covering mixed scenario with some topics new, some existing
-- [x] T007 [P] [US1] Add unit test `test_bootstrap_topics_empty_registry()` in `backend_service/tests/test_startup.py` covering scenario where registry returns empty topic list
-- [x] T008 [P] [US1] Add unit test `test_bootstrap_topics_transient_error_continues()` in `backend_service/tests/test_startup.py` covering non-fatal KafkaError on one topic — verifies remaining topics are still created and error is logged
+- [x] T010 [P] [US1] Add startup bootstrap success/idempotency tests in `backend_service/tests/test_startup.py`
+- [x] T011 [P] [US1] Add startup Kafka retry/failure tests in `backend_service/tests/test_startup.py`
+- [x] T012 [P] [US1] Add topic bootstrap API contract tests in `backend_service/tests/test_topics_api.py`
 
 ### Implementation for User Story 1
 
-- [x] T009 [US1] Add `bootstrap_topics(self, topic_names: list[str]) -> StartupTopicBootstrapResult` method to `KafkaAdminService` class in `backend_service/app/kafka_admin.py`
-  - Loop through each topic name
-  - Call existing `create_topic(topic_name, num_partitions=1, replication_factor=1)`
-  - Append "created" results to `result.created` list
-  - Append "already_exists" results to `result.already_existed` list
-  - Catch `RuntimeError` for transient broker errors, log WARNING, append to `result.errors` list, continue
-  - Return `StartupTopicBootstrapResult` with all three lists populated
-- [x] T010 [US1] Import `get_all_topic_names()` from `project.topics` in `backend_service/app/main.py`
-- [x] T011 [US1] Extend FastAPI lifespan startup sequence in `backend_service/app/main.py`:
-  - After `app.state.kafka_admin.connect()` succeeds
-  - Call `topic_names = get_all_topic_names()`
-  - Log INFO: `"Bootstrapping Kafka topics: %s"` with topic list
-  - Call `result = app.state.kafka_admin.bootstrap_topics(topic_names)`
-  - Log INFO: `"Topic bootstrap complete: %d created, %d already existed, %d errors"` with result counts
-- [x] T012 [US1] Add structured logging within `bootstrap_topics()` method:
-  - Log DEBUG for each topic created: `"Topic created: %s"`
-  - Log DEBUG for each topic already existed: `"Topic already exists: %s"`
-  - Log WARNING for each error: `"Failed to bootstrap topic '%s': %s"` with topic name and error message
-- [x] T013 [US1] Add inline TODO comments in `bootstrap_topics()` method documenting deferred validation/health-check concerns per FR-006
+- [x] T013 [US1] Implement/verify topic bootstrap orchestration in `backend_service/app/main.py`
+- [x] T014 [US1] Implement/verify per-topic create/idempotent handling in `backend_service/app/kafka_admin.py`
+- [x] T015 [US1] Add/verify startup bootstrap summary logging and TODO markers in `backend_service/app/main.py`
 
-**Checkpoint**: User Story 1 is fully functional and independently testable
+**Checkpoint**: User Story 1 is complete and independently testable.
 
 ---
 
-## Phase 4: Integration & Contract Validation
+## Phase 4: User Story 2 - Real-Time WebSocket Channel for Frontend Session Routing (Priority: P2)
 
-**Purpose**: Verify integration with existing startup flow and validate startup contract
+**Goal**: Provide Socket.IO channel and per-session event routing via `sid`.
 
-- [x] T014 [P] Verify existing startup tests in `backend_service/tests/test_startup.py` (e.g., `test_startup_retry_then_success`, `test_shutdown_lifecycle_invokes_admin_close`) still pass without modification — regression gate
-- [x] T015 [US1] Add integration test `test_lifespan_includes_topic_bootstrap()` in `backend_service/tests/test_startup.py` that:
-  - Creates a test FastAPI app with mocked Kafka admin
-  - Verifies lifespan calls `bootstrap_topics()` after `connect()`
-  - Verifies startup completes and service is ready
-- [x] T016 [US1] Validate startup contract from `backend-topic-bootstrap-contract.md`:
-  - Startup logs include "Bootstrapping Kafka topics:" at INFO level
-  - Startup logs include "Topic bootstrap complete:" at INFO level
-  - All guaranteed behaviors (idempotency, error continuation, etc.) are honored
-  - Record contract validation evidence in `specs/003-integrate-kafka-backend/quickstart.md`
+**Independent Test**: Connect Socket.IO client, capture `sid`, emit event to that `sid`, verify only that session receives it.
 
-**Checkpoint**: US1 integration with existing startup flow is validated
+### Tests for User Story 2
+
+- [x] T016 [P] [US2] Add connection manager get/set mapping tests in `backend_service/tests/test_connection_manager.py`
+- [x] T017 [P] [US2] Add Socket.IO emit routing tests in `backend_service/tests/test_socket.py`
+- [x] T018 [P] [US2] Add stream-tokens schema contract tests in `backend_service/tests/test_socket.py`
+- [x] T019 [P] [US2] Add `UserRequest` schema regression tests in `backend_service/tests/test_utils.py`
+
+### Implementation for User Story 2
+
+- [x] T020 [P] [US2] Implement/verify minimal `ConnectionManager` in `backend_service/app/connection_manager.py`
+- [x] T021 [P] [US2] Implement/verify Socket.IO listeners and `emit_event` in `backend_service/app/socket.py`
+- [x] T022 [US2] Implement/verify Socket.IO mounting and session wiring in `backend_service/app/main.py`
+- [x] T023 [US2] Add TODO markers for deferred disconnect/missing-session handling in `backend_service/app/socket.py`
+- [x] T024 [US2] Implement/verify rag test-event publish endpoint in `backend_service/app/api/test_events.py`
+
+**Checkpoint**: User Story 2 is complete and independently testable.
 
 ---
 
-## Phase 5: Polish & Cross-Cutting Concerns
+## Phase 5: User Story 3 - Ingest User Requests with File Uploads and Route to Planner (Priority: P3)
 
-**Purpose**: Code quality, performance validation, documentation finalization
+**Goal**: Accept parsed `UserRequest` form fields and files, save files, publish `PlannerRequestEvent` to `init-planner`.
 
-- [x] T017 [P] Run quality checks and record results:
-  - `.venv/bin/ruff check project backend_service` — must pass ✓
-  - `.venv/bin/ruff format --check project backend_service` — applied ✓
-  - `.venv/bin/python -m compileall project backend_service` — must pass ✓
-  - Record output in `specs/003-integrate-kafka-backend/quickstart.md`
-- [x] T018 [P] Run full test suite:
-  - `.venv/bin/python -m pytest backend_service/tests/ -q` — 19 tests pass ✓
-  - All tests must pass including new T004-T008 tests and regression tests
-  - Record test evidence in `specs/003-integrate-kafka-backend/quickstart.md`
-- [ ] T019 [US1] Measure and validate performance against SC-003:
-  - Add timing measurement in unit test for `bootstrap_topics()` with mock admin (measure O(n) loop overhead)
-  - Measure wall-clock startup time with 2-topic bootstrap against local Kafka cluster
-  - Confirm ≤5 seconds per SC-003
-  - Record benchmark result in `specs/003-integrate-kafka-backend/quickstart.md`
-- [ ] T020 [US1] Test manual end-to-end startup flow:
-  - Start local Kafka via docker compose: `docker compose up -d kafka kafka-ui`
-  - Run backend service: `python -m backend_service.app.main`
-  - Verify startup logs show successful bootstrap
-  - Restart service and verify topics already-exist scenario
-  - Verify Kafka UI shows topics created
-  - Record E2E validation results in `specs/003-integrate-kafka-backend/quickstart.md`
-- [x] T021 [P] Add code comments documenting non-obvious decisions from research.md:
-  - Idempotency via `TopicAlreadyExistsError` catch in existing `create_topic()`
-  - Non-fatal error handling (log-and-continue) per edge case in spec
-  - Why `get_all_topic_names()` is an aggregator (avoids caller coupling to enums)
-- [ ] T022 Finalize `specs/003-integrate-kafka-backend/quickstart.md` with:
-  - Expected startup output examples (both first run and idempotent run)
-  - Performance timing measurements from T019
-  - End-to-end validation evidence from T020
-  - Quality check results from T017
-  - Test results from T018
-- [ ] T023 Update `CLAUDE.md` if backend service documentation needs to reference new startup behavior (optional based on team preferences)
+**Independent Test**: Call `POST /api/chat/request` with form fields (`user_prompt`, `user_level`, `sid`) and 1-3 files, verify file persistence, Kafka publish payload, and success/error responses.
 
-**Checkpoint**: Feature is production-ready with full evidence trail
+### Tests for User Story 3
+
+- [x] T025 [P] [US3] Add parsed form-field request validation tests for `/api/chat/request` in `backend_service/tests/test_chat_request_api.py`
+- [x] T026 [P] [US3] Add file upload/save path tests (absolute path assertions) in `backend_service/tests/test_chat_request_api.py`
+- [x] T027 [P] [US3] Add publish success/failure tests for `init-planner` in `backend_service/tests/test_chat_request_api.py`
+- [x] T028 [P] [US3] Add max-files warning/non-rejection tests in `backend_service/tests/test_chat_request_api.py`
+- [x] T029 [P] [US3] Add 400/500 error envelope tests (`{error: ...}`) in `backend_service/tests/test_chat_request_api.py`
+
+### Implementation for User Story 3
+
+- [x] T030 [US3] Add/verify `UPLOAD_DIR` configuration with default `./uploads` in `backend_service/app/config.py`
+- [x] T031 [US3] Add/verify uploads ignore rules in `.gitignore`
+- [x] T032 [US3] Implement/verify `/api/chat/request` endpoint with parsed form-model fields in `backend_service/app/api/chat_request.py`
+- [x] T033 [US3] Implement/verify repeated multipart `files` upload parsing in `backend_service/app/api/chat_request.py`
+- [x] T034 [US3] Implement/verify file persistence and absolute path collection in `backend_service/app/api/chat_request.py`
+- [x] T035 [US3] Implement/verify max-3 file warning behavior (no reject) in `backend_service/app/api/chat_request.py`
+- [x] T036 [US3] Implement/verify `PlannerRequestEvent` publish to `init-planner` in `backend_service/app/api/chat_request.py`
+- [x] T037 [US3] Implement/verify success response message and error envelopes in `backend_service/app/api/chat_request.py`
+- [x] T038 [P] [US3] Add TODO markers for deferred file validation/cleanup/retry handling in `backend_service/app/api/chat_request.py`
+
+**Checkpoint**: User Story 3 is complete and independently testable.
+
+---
+
+## Phase 6: Polish & Cross-Cutting Concerns
+
+**Purpose**: Validate quality gates and finalize docs/contracts.
+
+- [x] T039 [P] Run backend test suite and confirm story coverage in `backend_service/tests/`
+- [x] T040 [P] Run lint/format checks (`ruff check`, `ruff format --check`) for `project/` and `backend_service/`
+- [x] T041 [P] Run bytecode compile validation in `project/` and `backend_service/`
+- [x] T042 [P] Verify quickstart request examples for parsed form-fields in `specs/003-integrate-kafka-backend/quickstart.md`
+- [x] T043 [P] Verify user-request API contract examples in `specs/003-integrate-kafka-backend/contracts/backend-user-request-api-contract.md`
+- [x] T044 [P] Verify cross-artifact consistency across `spec.md`, `plan.md`, `research.md`, and `data-model.md`
 
 ---
 
@@ -140,78 +128,82 @@
 
 ### Phase Dependencies
 
-- **Phase 1 (Setup)**: No dependencies — start immediately
-- **Phase 2 (Foundational)**: Depends on Phase 1 completion — BLOCKS US1
-- **Phase 3 (US1 Implementation)**: Depends on Phase 2 completion
-- **Phase 4 (Integration)**: Depends on Phase 3 completion
-- **Phase 5 (Polish)**: Depends on Phases 3 & 4 completion
+- **Phase 1 (Setup)**: No dependencies.
+- **Phase 2 (Foundational)**: Depends on Phase 1; blocks all user stories.
+- **Phase 3+ (User Stories)**: Depend on Phase 2 completion.
+- **Phase 6 (Polish)**: Depends on completion of all targeted stories.
 
-### Within Phase 3
+### User Story Dependencies
 
-1. **Write tests FIRST** (T004-T008): Ensure they fail before implementation
-2. **Implement method** (T009): Add `bootstrap_topics()` to `KafkaAdminService`
-3. **Integrate with lifespan** (T010-T011): Import and call in startup
-4. **Add logging** (T012): Structured logs at each step
-5. **Mark TODOs** (T013): Document deferred concerns per FR-006
+- **US1 (P1)**: Starts after Phase 2; no dependency on US2/US3.
+- **US2 (P2)**: Starts after Phase 2; no hard dependency on US1/US3.
+- **US3 (P3)**: Starts after Phase 2; no hard dependency on US1/US2.
 
-### Parallel Opportunities
+### Within Each User Story
 
-- **Phase 1**: T001 and T002 can run in parallel
-- **Phase 3 Tests**: T004, T005, T006, T007, T008 can all be written in parallel before implementation starts
-- **Phase 5 Quality**: T017 and T018 can run together; T019 and T020 can run in parallel
+- Tests first, then implementation.
+- Schemas/contracts before runtime wiring.
+- Endpoint behavior before polish/documentation checks.
 
 ---
 
-## Parallel Example: Phase 3 Test Writing
+## Parallel Opportunities
 
-```
-Task: "Add unit test test_bootstrap_topics_creates_new_topics() in backend_service/tests/test_startup.py"
-Task: "Add unit test test_bootstrap_topics_idempotent_with_existing() in backend_service/tests/test_startup.py"
-Task: "Add unit test test_bootstrap_topics_mixed_new_and_existing() in backend_service/tests/test_startup.py"
-Task: "Add unit test test_bootstrap_topics_empty_registry() in backend_service/tests/test_startup.py"
-Task: "Add unit test test_bootstrap_topics_transient_error_continues() in backend_service/tests/test_startup.py"
+- Setup tasks T001-T004 can run in parallel.
+- Foundational tasks T005, T006, T008, T009 can run in parallel.
+- US1 tests T010-T012 can run in parallel.
+- US2 tests T016-T019 can run in parallel.
+- US2 implementation tasks T020 and T021 can run in parallel.
+- US3 tests T025-T029 can run in parallel.
+- US3 implementation tasks T032 and T033 can run in parallel; T034-T037 follow.
+- Polish tasks T039-T044 can run in parallel where file overlap is avoided.
 
-→ All can be written in parallel; all should FAIL before T009 implementation
+---
+
+## Parallel Example: User Story 3
+
+```bash
+# Write/execute US3 tests together
+Task: "Add parsed form-field request validation tests for /api/chat/request in backend_service/tests/test_chat_request_api.py"
+Task: "Add file upload/save path tests (absolute path assertions) in backend_service/tests/test_chat_request_api.py"
+Task: "Add publish success/failure tests for init-planner in backend_service/tests/test_chat_request_api.py"
+
+# Implement non-conflicting US3 tasks together
+Task: "Add/verify UPLOAD_DIR configuration with default ./uploads in backend_service/app/config.py"
+Task: "Add/verify uploads ignore rules in .gitignore"
 ```
 
 ---
 
 ## Implementation Strategy
 
-### MVP Only (Recommended)
+### MVP First (User Story 1)
 
-1. Complete Phase 1: Setup
-2. Complete Phase 2: Foundational — Critical gate
-3. Complete Phase 3: US1 Implementation (write tests first, then code)
-4. **STOP and VALIDATE** at Phase 4 checkpoint: Verify US1 is independently functional
-5. Deploy to staging
+1. Complete Phase 1 and Phase 2.
+2. Deliver US1 (startup bootstrap).
+3. Validate startup behavior independently before adding other stories.
 
-### With Full Polish (if time permits)
+### Incremental Delivery
 
-1. Phases 1-4 above
-2. Phase 5: Polish, testing, performance validation, documentation
+1. Deliver US1 (Kafka bootstrap).
+2. Deliver US2 (WebSocket routing).
+3. Deliver US3 (chat request ingestion with parsed form fields + uploads).
+4. Run Phase 6 quality/documentation gates.
 
-### Expected Timeline
+### Parallel Team Strategy
 
-- Phase 1: ~15 min (verify existing structure)
-- Phase 2: ~30 min (add aggregator function)
-- Phase 3 Tests: ~1 hour (5 test scenarios, mock Kafka admin)
-- Phase 3 Implementation: ~1 hour (bootstrap method, lifespan integration, logging)
-- Phase 4: ~45 min (integration tests, contract validation)
-- Phase 5: ~1.5 hours (quality checks, perf measurement, E2E test, finalization)
-
-**Total MVP scope (Phases 1-4)**: ~3 hours  
-**Total with Polish (Phases 1-5)**: ~4.5 hours
+1. Team completes Setup + Foundational together.
+2. Then parallelize by story:
+   - Dev A: US1
+   - Dev B: US2
+   - Dev C: US3
+3. Converge for polish and release checks.
 
 ---
 
 ## Notes
 
-- All T00X tasks are sequential within their phase for clarity; [P] markers indicate which can run in parallel
-- [US1] label applies to all US1-specific work; general infrastructure (T001-T003) has no story label
-- Test-driven approach: all tests (T004-T008) must be written and FAIL before implementation (T009-T013)
-- Regression gate (T014): existing startup tests must continue to pass
-- Performance validation (T019) uses mock Kafka for repeatability; E2E test (T020) validates against real local cluster
-- Avoid: merging T009-T013 without passing T004-T008; skipping T019 performance measurement; incomplete T022 quickstart
-- Stop at Phase 4 checkpoint to demonstrate independent US1 functionality before Polish phase
-- Record all evidence (test results, timings, E2E output) in quickstart.md per constitution Principle V (observability)
+- `[P]` tasks target different files and no unmet dependencies.
+- User story labels map directly to spec priorities (`US1`, `US2`, `US3`).
+- Keep implementation minimal and preserve TODO markers where spec defers edge-case handling.
+- Parsed form-model requirement for `/api/chat/request` must remain consistent across code, tests, and contracts.

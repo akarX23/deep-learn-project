@@ -1,35 +1,39 @@
 # Implementation Plan: RAG Kafka Worker Simplification
 
-**Branch**: `001-build-rag-retrieval-agent` | **Date**: 2026-06-12 | **Spec**: [spec.md](spec.md)  
-**Input**: Feature specification from `specs/001-rag-retrieval-agent/spec.md`
+**Branch**: `001-build-rag-retrieval-agent` | **Date**: 2026-06-13 | **Spec**: `specs/001-rag-retrieval-agent/spec.md`
+**Input**: Feature specification from `/specs/001-rag-retrieval-agent/spec.md`
+
+**Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
 
 ## Summary
 
-Simplify the `rag_agent/` module by: removing `service.py` and the dedicated `StructuredLogger` class, migrating all files to standard `logging.getLogger(__name__)`, adding a `utils/` directory containing helper-oriented modules (`helpers.py`, `llm_client.py`, `prompts.py`, `tools.py`), consolidating LLM + config responsibilities into `helpers.py`, reducing `agent.py` and the request handler to basic exception handling only with TODOs marking deferred behaviour, and confirming the standalone worker process runtime introduced in the prior iteration.
+Simplify the RAG runtime to a direct worker-driven Kafka flow: `worker.py` initializes Kafka and starts the threaded consumer loop, verifies required topics exist (warn-and-continue if missing), consumes request events, calls `agent.py` directly, and publishes completion events through `kafka.py`. Remove handler and factory abstractions from active flow. Keep `agent.py` Kafka-agnostic and keep `helpers.py` limited to environment-value extraction functions. Advanced validation, edge-case hardening, and deeper exception taxonomy are deferred as TODO tasks.
 
 ## Technical Context
 
-**Language/Version**: Python 3.11  
-**Primary Dependencies**: kafka-python 2.0+, LiteLLM, PyMuPDF (fitz), sentence-transformers, pydantic v2  
-**Storage**: N/A  
-**Testing**: pytest  
-**Target Platform**: Linux (local dev + server)  
-**Project Type**: Background worker / CLI  
-**Performance Goals**: SC-005 — p95 poll-to-completion within agreed budget; SC-003 — ≥99% terminal attempts emit `rag-complete`  
-**Constraints**: No HTTP runtime dependency; simplicity over abstraction; deferred concerns must be marked with inline TODOs; no `Any` type in public interfaces where avoidable  
-**Scale/Scope**: Single-worker, single-cluster; processes one event at a time per poll batch
+**Language/Version**: Python 3.11+
+**Primary Dependencies**: kafka-python, pydantic v2, litellm, sentence-transformers, pymupdf
+**Storage**: N/A (Kafka is external transport)
+**Testing**: pytest
+**Target Platform**: Linux worker runtime
+**Project Type**: Background worker service
+**Performance Goals**: Keep current poll-to-completion behavior within existing SC-005 budget; no regression from abstraction removal
+**Constraints**: No FastAPI runtime; no topic creation at startup; no handler/factory indirection; no classes/validators in `helpers.py`; defer advanced validation/error hardening with TODOs
+**Scale/Scope**: Single-worker process consuming `rag` and producing `rag-complete`; no planner-side logic changes
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **Code Quality Gate**: All changed files must pass `ruff check` and `ruff format --check`. No dead code, no commented-out blocks. `service.py` and `logging.py` must be deleted or emptied and removed from all imports.
-- **Testing Gate**: All existing passing tests must remain green after refactor. Tests that depend on `StructuredLogger` or `logging.py` must be updated. New handler simplification should include a regression test confirming basic dispatch still works.
-- **UX Consistency Gate**: N/A — background worker; no user-facing UI. Log output follows standard Python `logging` format; no emoji, no custom formatting class.
-- **Performance Gate**: No new I/O paths introduced. Removal of `StructuredLogger` JSON serialization reduces per-event overhead — no regression expected. SC-005 p95 budget inherited from existing behaviour.
-- **Maintainability Gate**: All deferred concerns must have explicit `# TODO:` comments. `helpers.py` docstring must note consolidated responsibilities. Non-obvious decisions (why `llm_client`/`config` merged, why `logging.py` removed) documented in `research.md`.
+- Code Quality Gate: Run `ruff check project rag_agent`, `ruff format --check project rag_agent`, and `python -m compileall project rag_agent`.
+- Testing Gate: Run targeted and full `rag_agent/tests` suites for worker loop, Kafka integration, and request/completion flow.
+- UX Consistency Gate: Preserve current event contracts and message semantics (request-in, completion-out) for downstream consumers.
+- Performance Gate: Maintain current poll loop behavior and avoid additional blocking abstractions in consume/process/publish stages.
+- Maintainability Gate: Keep runtime ownership explicit (`worker.py` orchestration, `kafka.py` transport, `agent.py` processing, `helpers.py` env extraction).
 
-**Post-design re-check**: All gates pass. No added complexity. Simplification reduces surface area.
+Post-Design Re-check (Phase 1): PASS
+- Design adheres to simplicity and observability principles.
+- Deferred validations and exception hardening are explicitly tracked as TODO scope.
 
 ## Project Structure
 
@@ -37,55 +41,54 @@ Simplify the `rag_agent/` module by: removing `service.py` and the dedicated `St
 
 ```text
 specs/001-rag-retrieval-agent/
-├── plan.md              # This file
-├── research.md          # Phase 0 output
-├── data-model.md        # Phase 1 output
-├── quickstart.md        # Phase 1 output
+├── plan.md
+├── research.md
+├── data-model.md
+├── quickstart.md
 ├── contracts/
 │   └── rag-agent-contract.md
-└── tasks.md             # Phase 2 output (/speckit.tasks)
+└── tasks.md
 ```
 
-### Source Code (touched files)
+### Source Code (repository root)
 
 ```text
 rag_agent/
-├── __init__.py
-├── agent.py                    # Simplified — basic exception handling only, TODOs for rest
-├── handlers.py                 # Simplified — basic dispatch, no StructuredLogger dependency
-├── kafka.py                    # Unchanged (topic-check logic lives here)
-├── worker.py                   # Simplified — remove StructuredLogger usage
-├── logging.py                  # DELETE (replaced by standard logging module)
-├── service.py                  # DELETE (was already a compatibility shim)
-├── utils/
-│   ├── __init__.py             # NEW
-│   ├── helpers.py              # MOVED + MERGED (helpers + llm_client + config functions)
-│   ├── llm_client.py           # MOVED from root — simplified to basic LLM/embedding calls
-│   ├── prompts.py              # MOVED from root — unchanged
-│   └── tools.py                # MOVED from root — unchanged
-└── tests/
-    ├── test_rag_agent.py
-    ├── test_worker_runtime.py
-    ├── test_request_event.py
-    ├── test_completion_event.py
-    ├── test_kafka_integration.py
-    └── test_logging.py         # UPDATE — remove StructuredLogger tests; add basicConfig test
+├── agent.py
+├── kafka.py
+├── worker.py
+└── utils/
+    └── helpers.py         # env extraction helpers only
+
+project/
+├── schemas.py
+└── topics.py
 ```
 
-**Structure Decision**: Flat module layout with `utils/` subdirectory. No service layer, no custom logging class. `helpers.py` in `utils/` is the consolidated home for pure helper functions, LLM call wrappers, and config loading. All other `utils/` files are existing modules moved without structural changes.
+**Structure Decision**: Keep runtime flow explicit and linear: `worker.py` owns consumer thread and processing pipeline orchestration; `kafka.py` owns Kafka client lifecycle and produce/consume helper functions; `agent.py` performs retrieval logic only and returns output objects.
 
-## Data Flow
+## Complexity Tracking
 
-```
-[Kafka topic: rag]
-  → KafkaConsumer.poll()           # worker.py consumer loop thread
-  → process_consumer_batch()       # worker.py
-      → RAGRequestEventHandler.__call__(payload, producer)  # handlers.py
-          → parse_event(payload)   → RAGRequestEvent
-          → RAGAgent.run(input)    # agent.py (basic exception handling)
-              → utils/tools.py     # PDF extraction, scoring
-              → utils/helpers.py   # call_llm(), call_embedding(), assemble_page_content()
-          → build_completion_event()
-          → publish_rag_complete(producer, event)
-  → [Kafka topic: rag-complete]
-```
+| Violation | Why Needed | Simpler Alternative Rejected Because |
+|-----------|------------|--------------------------------------|
+| None | N/A | N/A |
+
+## Phase 0: Research Findings
+
+All open ambiguities from current scope are resolved in the clarification sessions. No additional NEEDS CLARIFICATION items remain.
+
+Research outcomes are documented in `specs/001-rag-retrieval-agent/research.md` with explicit decisions for:
+- direct worker startup and topic-presence check
+- `kafka.py`-owned env config and producer/consumer functions
+- direct consumer-loop call into `agent.py`
+- Kafka publication from consumer loop only
+- simplified `helpers.py` (env extraction only)
+
+## Phase 1: Design Artifacts
+
+Design outputs updated:
+- `specs/001-rag-retrieval-agent/data-model.md`
+- `specs/001-rag-retrieval-agent/contracts/rag-agent-contract.md`
+- `specs/001-rag-retrieval-agent/quickstart.md`
+
+No additional external API contracts are required beyond Kafka message and runtime module contracts.

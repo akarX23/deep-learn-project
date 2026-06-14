@@ -37,6 +37,34 @@ def test_settings_missing_bootstrap_servers_fails(
         KafkaSettings.from_env(dotenv_path=str(Path("/tmp/does-not-exist.env")))
 
 
+def test_test_event_route_enablement_defaults_and_override(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env_file = tmp_path / ".env.local"
+    env_file.write_text(
+        "BACKEND_KAFKA_BOOTSTRAP_SERVERS=file-kafka:9092\nAPP_ENV=dev\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.delenv("APP_ENV", raising=False)
+    monkeypatch.delenv("BACKEND_ENABLE_TEST_EVENT_APIS", raising=False)
+    settings = KafkaSettings.from_env(dotenv_path=str(env_file))
+    assert settings.test_event_routes_enabled() is True
+
+    env_file.write_text(
+        "BACKEND_KAFKA_BOOTSTRAP_SERVERS=file-kafka:9092\nAPP_ENV=prod\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("APP_ENV", raising=False)
+    monkeypatch.delenv("BACKEND_ENABLE_TEST_EVENT_APIS", raising=False)
+    settings = KafkaSettings.from_env(dotenv_path=str(env_file))
+    assert settings.test_event_routes_enabled() is False
+
+    monkeypatch.setenv("BACKEND_ENABLE_TEST_EVENT_APIS", "true")
+    settings = KafkaSettings.from_env(dotenv_path=str(env_file))
+    assert settings.test_event_routes_enabled() is True
+
+
 def test_startup_retry_then_success(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeAdmin:
         attempts = 0
@@ -225,7 +253,11 @@ def test_lifespan_includes_topic_bootstrap() -> None:
     assert tracking_admin.connect_called is True
     assert tracking_admin.bootstrap_topics_called is True
     # Verify bootstrap received all topics from project/topics
-    assert tracking_admin.bootstrap_topics_topics == ["rag", "rag-complete"]
+    assert tracking_admin.bootstrap_topics_topics == [
+        "rag",
+        "init-planner",
+        "rag-complete",
+    ]
 
 
 # Bootstrap Topics Tests (T004-T008)

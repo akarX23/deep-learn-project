@@ -3,9 +3,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 
-from rag_agent.utils.helpers import KafkaRuntimeConfig
 from rag_agent.worker import RAGWorker, process_consumer_batch
-
 
 
 @dataclass
@@ -15,7 +13,9 @@ class _FakeRecord:
 
 
 class _FakeConsumer:
-    def __init__(self, *, topics: set[str], responses: list[dict[object, list[_FakeRecord]]]) -> None:
+    def __init__(
+        self, *, topics: set[str], responses: list[dict[object, list[_FakeRecord]]]
+    ) -> None:
         self._topics = topics
         self._responses = responses
         self.poll_calls = 0
@@ -59,20 +59,27 @@ class _Handler:
         self.should_raise = should_raise
         self.calls = 0
 
-    def process_request(self, _payload: dict[str, object], _producer: _FakeProducer | None = None):
+    def process_request(
+        self, _payload: dict[str, object], _producer: _FakeProducer | None = None
+    ):
         self.calls += 1
         if self.should_raise and self.calls == 1:
             raise RuntimeError("synthetic handler failure")
         return None
 
 
-def _make_config() -> KafkaRuntimeConfig:
-    return KafkaRuntimeConfig(
-        bootstrap_servers="localhost:9092",
-        client_id="rag-test",
-        consumer_group_id="rag-test-consumer",
-        poll_timeout_ms=5,
-    )
+def _make_config() -> dict[str, object]:
+    return {
+        "bootstrap_servers": "localhost:9092",
+        "client_id": "rag-test",
+        "consumer_group_id": "rag-test-consumer",
+        "poll_timeout_ms": 5,
+        "security_protocol": None,
+        "sasl_mechanism": None,
+        "sasl_username": None,
+        "sasl_password": None,
+        "ssl_cafile": None,
+    }
 
 
 def test_worker_startup_and_shutdown_lifecycle() -> None:
@@ -83,7 +90,9 @@ def test_worker_startup_and_shutdown_lifecycle() -> None:
         config=_make_config(),
         producer_factory=lambda _config: fake_producer,
         consumer_factory=lambda _config: fake_consumer,
-        handler_factory=lambda: _Handler(),
+        request_processor=lambda payload, producer: _Handler().process_request(
+            payload, producer
+        ),
     )
 
     worker.start()
@@ -100,14 +109,18 @@ def test_worker_startup_and_shutdown_lifecycle() -> None:
 
 
 def test_worker_loop_continues_when_idle() -> None:
-    fake_consumer = _FakeConsumer(topics={"rag", "rag-complete"}, responses=[{}, {}, {}])
+    fake_consumer = _FakeConsumer(
+        topics={"rag", "rag-complete"}, responses=[{}, {}, {}]
+    )
     fake_producer = _FakeProducer()
 
     worker = RAGWorker(
         config=_make_config(),
         producer_factory=lambda _config: fake_producer,
         consumer_factory=lambda _config: fake_consumer,
-        handler_factory=lambda: _Handler(),
+        request_processor=lambda payload, producer: _Handler().process_request(
+            payload, producer
+        ),
     )
 
     worker.start()
@@ -135,7 +148,7 @@ def test_process_batch_continues_after_single_event_failure() -> None:
     processed = process_consumer_batch(
         fake_consumer,
         fake_producer,
-        handler.process_request,
+        lambda payload, producer: handler.process_request(payload, producer),
         poll_timeout_ms=1,
     )
 
@@ -151,7 +164,9 @@ def test_startup_topic_check_passes_when_topics_exist() -> None:
         config=_make_config(),
         producer_factory=lambda _config: fake_producer,
         consumer_factory=lambda _config: fake_consumer,
-        handler_factory=lambda: _Handler(),
+        request_processor=lambda payload, producer: _Handler().process_request(
+            payload, producer
+        ),
     )
 
     worker.start()
@@ -170,7 +185,9 @@ def test_missing_topics_warn_and_worker_continues() -> None:
         config=_make_config(),
         producer_factory=lambda _config: fake_producer,
         consumer_factory=lambda _config: fake_consumer,
-        handler_factory=lambda: _Handler(),
+        request_processor=lambda payload, producer: _Handler().process_request(
+            payload, producer
+        ),
     )
 
     worker.start()
@@ -185,7 +202,7 @@ def test_missing_topics_warn_and_worker_continues() -> None:
 def test_runtime_does_not_require_backend_topic_api_config() -> None:
     config = _make_config()
 
-    assert hasattr(config, "topic_api_url") is False
+    assert "topic_api_url" not in config
 
 
 def measure_poll_to_completion_latency_ms(iterations: int = 50) -> float:
@@ -206,7 +223,7 @@ def measure_poll_to_completion_latency_ms(iterations: int = 50) -> float:
         process_consumer_batch(
             fake_consumer,
             fake_producer,
-            handler.process_request,
+            lambda payload, producer: handler.process_request(payload, producer),
             poll_timeout_ms=1,
         )
     elapsed_ms = (time.perf_counter() - started) * 1000
