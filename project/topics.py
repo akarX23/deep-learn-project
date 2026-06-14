@@ -18,6 +18,22 @@ class RAGTopics(str, Enum):
     RAG_COMPLETE = "rag-complete"
 
 
+class PlannerAgentTopics(str, Enum):
+    """Topics produced by the planner agent to trigger downstream agents."""
+
+    TEACHING_REQUEST = "teaching-request"
+    QUIZ_REQUEST = "quiz-request"
+    CLARIFY_USER_LEVEL = "clarify-user-level"
+    WORKFLOW_COMPLETE = "workflow-complete"
+
+
+class AgentCompletionTopics(str, Enum):
+    """Completion topics consumed by the planner to resume workflows (future phase)."""
+
+    TEACHING_COMPLETE = "teaching-complete"
+    QUIZ_COMPLETE = "quiz-complete"
+
+
 def get_rag_topic_names() -> list[str]:
     """Return the full set of topics required by the RAG Kafka service."""
 
@@ -32,8 +48,11 @@ def get_all_topic_names() -> list[str]:
     bootstrap the Kafka cluster with all required topics.
 
     Returns:
-        list[str]: All topic names from PlannerTopics and RAGTopics enums
+        list[str]: All topic names from every topic enum
     """
-    return [topic.value for topic in PlannerTopics] + [
-        topic.value for topic in RAGTopics
-    ]
+    return (
+        [topic.value for topic in PlannerTopics]
+        + [topic.value for topic in RAGTopics]
+        + [topic.value for topic in PlannerAgentTopics]
+        + [topic.value for topic in AgentCompletionTopics]
+    )

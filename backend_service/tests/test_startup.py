@@ -257,6 +257,12 @@ def test_lifespan_includes_topic_bootstrap() -> None:
         "rag",
         "init-planner",
         "rag-complete",
+        "teaching-request",
+        "quiz-request",
+        "clarify-user-level",
+        "workflow-complete",
+        "teaching-complete",
+        "quiz-complete",
     ]
 
 

@@ -248,6 +248,61 @@ class PlannerRequestEvent(BaseModel):
     file_paths: List[str] = Field(default_factory=list)
 
 
+class UserLevelEnum(str, Enum):
+    """Knowledge level inferred or provided for a learning request."""
+
+    BEGINNER = "beginner"
+    INTERMEDIATE = "intermediate"
+    ADVANCED = "advanced"
+
+
+class LevelInferenceResult(BaseModel):
+    """Structured LLM output classifying user level and quiz intent."""
+
+    level: UserLevelEnum
+    confidence: float
+    quiz_requested: bool = False
+
+
+class TeachingRequestEvent(BaseModel):
+    """Planner -> teaching agent event (one per user level)."""
+
+    request_id: str
+    user_prompt: str
+    user_level: str
+    rag_compiled: str = ""
+    sid: str
+
+
+class QuizRequestEvent(BaseModel):
+    """Planner -> quiz agent event."""
+
+    request_id: str
+    user_prompt: str
+    user_levels: List[str] = Field(default_factory=list)
+    teaching_materials: dict[str, str] = Field(default_factory=dict)
+    sid: str
+
+
+class ClarifyUserLevelEvent(BaseModel):
+    """Planner -> frontend event when user level cannot be confidently inferred."""
+
+    request_id: str
+    user_prompt: str
+    sid: str
+    reason: str = ""
+
+
+class WorkflowCompleteEvent(BaseModel):
+    """Planner -> frontend event emitted when a workflow finishes."""
+
+    request_id: str
+    sid: str
+    rag_compiled: str = ""
+    teaching_materials: dict[str, str] = Field(default_factory=dict)
+    quiz_content: str = ""
+
+
 # ---------------------------------------------------------------------------
 # Teaching Agent schemas
 # ---------------------------------------------------------------------------

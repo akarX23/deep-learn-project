@@ -13,11 +13,11 @@
 
 **Purpose**: New package scaffold, shared schemas, topics, and dependencies — required by all user stories.
 
-- [ ] T001 [P] Add `langgraph>=1.2.0` and `langchain-core>=1.4.0` to `requirements.txt`
-- [ ] T002 [P] Create `planner_agent/` package with `__init__.py`, `agent.py`, `config.py`, `kafka.py`, `prompts.py`, `worker.py`
-- [ ] T003 [P] Create `planner_agent/tests/` with `__init__.py` and `planner_agent/tests/inputs/sample_input.json`
-- [ ] T004 [P] Add `UserLevelEnum`, `LevelInferenceResult`, `TeachingRequestEvent`, `QuizRequestEvent`, `ClarifyUserLevelEvent`, `WorkflowCompleteEvent` to `project/schemas.py`
-- [ ] T005 [P] Add `PlannerAgentTopics` and `AgentCompletionTopics` enums to `project/topics.py` and update `get_all_topic_names()`
+- [x] T001 [P] Add `langgraph>=1.2.0` and `langchain-core>=1.4.0` to `requirements.txt`
+- [x] T002 [P] Create `planner_agent/` package with `__init__.py`, `agent.py`, `config.py`, `kafka.py`, `prompts.py`, `worker.py`
+- [x] T003 [P] Create `planner_agent/tests/` with `__init__.py` and `planner_agent/tests/inputs/sample_input.json`
+- [x] T004 [P] Add `UserLevelEnum`, `LevelInferenceResult`, `TeachingRequestEvent`, `QuizRequestEvent`, `ClarifyUserLevelEvent`, `WorkflowCompleteEvent` to `project/schemas.py`
+- [x] T005 [P] Add `PlannerAgentTopics` and `AgentCompletionTopics` enums to `project/topics.py` and update `get_all_topic_names()`
 
 ---
 
@@ -27,11 +27,11 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T006 [P] Implement `planner_agent/config.py`: `get_llm_config()` reading `PLANNER_TEXT_MODEL`, `PLANNER_TEXT_API_BASE`, `PLANNER_TEXT_API_KEY`, `PLANNER_TEXT_TEMPERATURE`, `PLANNER_TEXT_MAX_TOKENS`, `PLANNER_LEVEL_CONFIDENCE_THRESHOLD`, `PLANNER_KAFKA_BOOTSTRAP_SERVERS` env vars
-- [ ] T007 [P] Implement `planner_agent/kafka.py`: `make_producer()` factory returning a `KafkaProducer` with JSON value serializer
-- [ ] T008 [P] Implement `planner_agent/prompts.py`: `LEVEL_QUIZ_INFERENCE_PROMPT` template string with `{user_prompt}` placeholder
-- [ ] T009 Implement `PlannerState` TypedDict in `planner_agent/agent.py`: fields `request_id`, `user_prompt`, `sid`, `user_levels`, `file_paths`, `quiz_requested`, `rag_compiled`, `teaching_materials`, `quiz_content`, `workflow_status`
-- [ ] T010 [P] Add `test_schemas_and_topics` tests verifying `UserLevelEnum`, `TeachingRequestEvent`, `QuizRequestEvent`, `ClarifyUserLevelEvent`, `WorkflowCompleteEvent` serialization and `get_all_topic_names()` includes all new topics in `planner_agent/tests/test_planner_agent.py`
+- [x] T006 [P] Implement `planner_agent/config.py`: `get_llm_config()` reading `PLANNER_TEXT_MODEL`, `PLANNER_TEXT_API_BASE`, `PLANNER_TEXT_API_KEY`, `PLANNER_TEXT_TEMPERATURE`, `PLANNER_TEXT_MAX_TOKENS`, `PLANNER_LEVEL_CONFIDENCE_THRESHOLD`, `PLANNER_KAFKA_BOOTSTRAP_SERVERS` env vars
+- [x] T007 [P] Implement `planner_agent/kafka.py`: `make_producer()` factory returning a `KafkaProducer` with JSON value serializer
+- [x] T008 [P] Implement `planner_agent/prompts.py`: `LEVEL_QUIZ_INFERENCE_PROMPT` template string with `{user_prompt}` placeholder
+- [x] T009 Implement `PlannerState` TypedDict in `planner_agent/agent.py`: fields `request_id`, `user_prompt`, `sid`, `user_levels`, `file_paths`, `quiz_requested`, `rag_compiled`, `teaching_materials`, `quiz_content`, `workflow_status`
+- [x] T010 [P] Add `test_schemas_and_topics` tests verifying `UserLevelEnum`, `TeachingRequestEvent`, `QuizRequestEvent`, `ClarifyUserLevelEvent`, `WorkflowCompleteEvent` serialization and `get_all_topic_names()` includes all new topics in `planner_agent/tests/test_planner_agent.py`
 
 **Checkpoint**: Foundation ready — user stories can now be developed independently.
 
@@ -45,14 +45,14 @@
 
 ### Tests for User Story 1
 
-- [ ] T011 [P] [US1] Add test: `PlannerAgent.run()` with valid event assigns unique `request_id` (UUID hex, non-empty) in `planner_agent/tests/test_planner_agent.py`
-- [ ] T012 [P] [US1] Add test: two `PlannerAgent.run()` calls receive distinct `request_id` values in `planner_agent/tests/test_planner_agent.py`
-- [ ] T013 [P] [US1] Add test: worker skips malformed message (invalid JSON / missing fields) without crashing in `planner_agent/tests/test_worker_runtime.py`
+- [x] T011 [P] [US1] Add test: `PlannerAgent.run()` with valid event assigns unique `request_id` (UUID hex, non-empty) in `planner_agent/tests/test_planner_agent.py`
+- [x] T012 [P] [US1] Add test: two `PlannerAgent.run()` calls receive distinct `request_id` values in `planner_agent/tests/test_planner_agent.py`
+- [x] T013 [P] [US1] Add test: worker skips malformed message (invalid JSON / missing fields) without crashing in `planner_agent/tests/test_worker_runtime.py`
 
 ### Implementation for User Story 1
 
-- [ ] T014 [US1] Implement `PlannerAgent` class in `planner_agent/agent.py`: constructor builds `StateGraph` with `MemorySaver`, `run(event_dict)` method generates `request_id = uuid.uuid4().hex`, initializes `PlannerState`, and invokes graph
-- [ ] T015 [US1] Implement worker consumer loop in `planner_agent/worker.py`: `KafkaConsumer` polling `init-planner`, deserializing JSON, calling `PlannerAgent.run()`, logging errors per message (basic try/except)
+- [x] T014 [US1] Implement `PlannerAgent` class in `planner_agent/agent.py`: constructor builds `StateGraph` with `MemorySaver`, `run(event_dict)` method generates `request_id = uuid.uuid4().hex`, initializes `PlannerState`, and invokes graph
+- [x] T015 [US1] Implement worker consumer loop in `planner_agent/worker.py`: `KafkaConsumer` polling `init-planner`, deserializing JSON, calling `PlannerAgent.run()`, logging errors per message (basic try/except)
 
 **Checkpoint**: User Story 1 complete — worker can consume and assign request IDs independently.
 
@@ -66,17 +66,17 @@
 
 ### Tests for User Story 2
 
-- [ ] T016 [P] [US2] Add test: `infer_level` with LLM returning `confidence >= threshold` sets `user_levels` and `quiz_requested` in state (monkeypatch `call_llm`) in `planner_agent/tests/test_level_inference.py`
-- [ ] T017 [P] [US2] Add test: `infer_level` with `confidence < threshold` produces `clarify-user-level` Kafka event and sets `workflow_status = "clarifying"` (monkeypatch producer) in `planner_agent/tests/test_level_inference.py`
-- [ ] T018 [P] [US2] Add test: `infer_level` with non-empty `user_levels` in event skips LLM call and uses provided levels in `planner_agent/tests/test_level_inference.py`
-- [ ] T019 [P] [US2] Add test: `infer_level` with LLM failure logs error and produces `clarify-user-level` event (basic exception handling) in `planner_agent/tests/test_level_inference.py`
+- [x] T016 [P] [US2] Add test: `infer_level` with LLM returning `confidence >= threshold` sets `user_levels` and `quiz_requested` in state (monkeypatch `call_llm`) in `planner_agent/tests/test_level_inference.py`
+- [x] T017 [P] [US2] Add test: `infer_level` with `confidence < threshold` produces `clarify-user-level` Kafka event and sets `workflow_status = "clarifying"` (monkeypatch producer) in `planner_agent/tests/test_level_inference.py`
+- [x] T018 [P] [US2] Add test: `infer_level` with non-empty `user_levels` in event skips LLM call and uses provided levels in `planner_agent/tests/test_level_inference.py`
+- [x] T019 [P] [US2] Add test: `infer_level` with LLM failure logs error and produces `clarify-user-level` event (basic exception handling) in `planner_agent/tests/test_level_inference.py`
 
 ### Implementation for User Story 2
 
-- [ ] T020 [US2] Implement `infer_level` node in `planner_agent/agent.py`: check `state["user_levels"]`; if non-empty skip to quiz detection; if empty call `call_llm` with `LEVEL_QUIZ_INFERENCE_PROMPT`, parse JSON response to `LevelInferenceResult`; compare confidence to `PLANNER_LEVEL_CONFIDENCE_THRESHOLD`
-- [ ] T021 [US2] Implement `clarify_and_end` node in `planner_agent/agent.py`: publish `ClarifyUserLevelEvent` to `clarify-user-level` topic via producer, set `workflow_status = "clarifying"`
-- [ ] T022 [US2] Wire `infer_level` conditional edge in `planner_agent/agent.py`: `"clarify"` → `clarify_and_end` → END; `"continue"` → `route_rag`
-- [ ] T023 [P] [US2] Add TODO markers in `planner_agent/agent.py` for: quiz-only LLM call when levels are pre-provided, structured output parsing improvements, retry on LLM failure
+- [x] T020 [US2] Implement `infer_level` node in `planner_agent/agent.py`: check `state["user_levels"]`; if non-empty skip to quiz detection; if empty call `call_llm` with `LEVEL_QUIZ_INFERENCE_PROMPT`, parse JSON response to `LevelInferenceResult`; compare confidence to `PLANNER_LEVEL_CONFIDENCE_THRESHOLD`
+- [x] T021 [US2] Implement `clarify_and_end` node in `planner_agent/agent.py`: publish `ClarifyUserLevelEvent` to `clarify-user-level` topic via producer, set `workflow_status = "clarifying"`
+- [x] T022 [US2] Wire `infer_level` conditional edge in `planner_agent/agent.py`: `"clarify"` → `clarify_and_end` → END; `"continue"` → `route_rag`
+- [x] T023 [P] [US2] Add TODO markers in `planner_agent/agent.py` for: quiz-only LLM call when levels are pre-provided, structured output parsing improvements, retry on LLM failure
 
 **Checkpoint**: User Story 2 complete — level inference and clarification path independently testable.
 
@@ -90,22 +90,22 @@
 
 ### Tests for User Story 3
 
-- [ ] T024 [P] [US3] Add test: `run_rag` node produces `rag-request` event with correct `request_id`, `user_prompt`, `file_paths`, `sid` (monkeypatch producer + interrupt) in `planner_agent/tests/test_planner_agent.py`
-- [ ] T025 [P] [US3] Add test: graph skips `run_rag` when `file_paths` is empty in `planner_agent/tests/test_planner_agent.py`
-- [ ] T026 [P] [US3] Add test: `teach_node` produces `teaching-request` event with correct `user_level` and `rag_compiled` for each level in `planner_agent/tests/test_planner_agent.py`
-- [ ] T027 [P] [US3] Add test: fan-out produces one `teaching-request` event per user level (e.g., 2 levels → 2 events) in `planner_agent/tests/test_planner_agent.py`
-- [ ] T028 [P] [US3] Add test: `run_quiz` node produces `quiz-request` event only when `quiz_requested = True` in `planner_agent/tests/test_planner_agent.py`
-- [ ] T029 [P] [US3] Add test: no `quiz-request` produced when `quiz_requested = False` in `planner_agent/tests/test_planner_agent.py`
+- [x] T024 [P] [US3] Add test: `run_rag` node produces `rag-request` event with correct `request_id`, `user_prompt`, `file_paths`, `sid` (monkeypatch producer + interrupt) in `planner_agent/tests/test_planner_agent.py`
+- [x] T025 [P] [US3] Add test: graph skips `run_rag` when `file_paths` is empty in `planner_agent/tests/test_planner_agent.py`
+- [x] T026 [P] [US3] Add test: `teach_node` produces `teaching-request` event with correct `user_level` and `rag_compiled` for each level in `planner_agent/tests/test_planner_agent.py`
+- [x] T027 [P] [US3] Add test: fan-out produces one `teaching-request` event per user level (e.g., 2 levels → 2 events) in `planner_agent/tests/test_planner_agent.py`
+- [x] T028 [P] [US3] Add test: `run_quiz` node produces `quiz-request` event only when `quiz_requested = True` in `planner_agent/tests/test_planner_agent.py`
+- [x] T029 [P] [US3] Add test: no `quiz-request` produced when `quiz_requested = False` in `planner_agent/tests/test_planner_agent.py`
 
 ### Implementation for User Story 3
 
-- [ ] T030 [US3] Implement `route_rag` conditional function in `planner_agent/agent.py`: returns `"run_rag"` if `state["file_paths"]` non-empty, else `"fan_out_teach"`
-- [ ] T031 [US3] Implement `run_rag` node in `planner_agent/agent.py`: publish `RAGRequestEvent`-compatible dict to `rag-request` topic, call `interrupt()`; add TODO for Command(resume=...) resumption
-- [ ] T032 [US3] Implement `fan_out_teach` router function in `planner_agent/agent.py`: return `[Send("teach_node", {**state, "current_level": lvl}) for lvl in state["user_levels"]]`
-- [ ] T033 [US3] Implement `teach_node` in `planner_agent/agent.py`: publish `TeachingRequestEvent` to `teaching-request` topic with `user_level = state["current_level"]`, call `interrupt()`; add TODO for Command(resume=...) resumption
-- [ ] T034 [US3] Implement `route_quiz` conditional function in `planner_agent/agent.py`: returns `"run_quiz"` if `state["quiz_requested"]` else `"finish"`
-- [ ] T035 [US3] Implement `run_quiz` node in `planner_agent/agent.py`: publish `QuizRequestEvent` to `quiz-request` topic, call `interrupt()`; add TODO for Command(resume=...) resumption
-- [ ] T036 [US3] Wire all US3 nodes and edges in `StateGraph` in `planner_agent/agent.py`: `route_rag` conditional, `fan_out_teach` Send router, `route_quiz` conditional
+- [x] T030 [US3] Implement `route_rag` conditional function in `planner_agent/agent.py`: returns `"run_rag"` if `state["file_paths"]` non-empty, else `"fan_out_teach"`
+- [x] T031 [US3] Implement `run_rag` node in `planner_agent/agent.py`: publish `RAGRequestEvent`-compatible dict to `rag-request` topic, call `interrupt()`; add TODO for Command(resume=...) resumption
+- [x] T032 [US3] Implement `fan_out_teach` router function in `planner_agent/agent.py`: return `[Send("teach_node", {**state, "current_level": lvl}) for lvl in state["user_levels"]]`
+- [x] T033 [US3] Implement `teach_node` in `planner_agent/agent.py`: publish `TeachingRequestEvent` to `teaching-request` topic with `user_level = state["current_level"]`, call `interrupt()`; add TODO for Command(resume=...) resumption
+- [x] T034 [US3] Implement `route_quiz` conditional function in `planner_agent/agent.py`: returns `"run_quiz"` if `state["quiz_requested"]` else `"finish"`
+- [x] T035 [US3] Implement `run_quiz` node in `planner_agent/agent.py`: publish `QuizRequestEvent` to `quiz-request` topic, call `interrupt()`; add TODO for Command(resume=...) resumption
+- [x] T036 [US3] Wire all US3 nodes and edges in `StateGraph` in `planner_agent/agent.py`: `route_rag` conditional, `fan_out_teach` Send router, `route_quiz` conditional
 
 **Checkpoint**: User Story 3 complete — full dispatch workflow independently testable via monkeypatched producer.
 
@@ -119,16 +119,16 @@
 
 ### Tests for User Story 4
 
-- [ ] T037 [P] [US4] Add test: `finish` node publishes `WorkflowCompleteEvent` with `request_id`, `sid`, `rag_compiled`, `teaching_materials`, `quiz_content` to `workflow-complete` topic in `planner_agent/tests/test_planner_agent.py`
-- [ ] T038 [P] [US4] Add test: `finish` sets `workflow_status = "complete"` in state in `planner_agent/tests/test_planner_agent.py`
-- [ ] T039 [P] [US4] Add test: `MemorySaver` checkpoint for a completed graph is accessible by `thread_id = request_id` (verify `graph.get_state(config)` returns expected state snapshot) in `planner_agent/tests/test_planner_agent.py`
-- [ ] T040 [P] [US4] Add TODO test placeholder: `Command(resume=completion_payload)` updates `rag_compiled` / `teaching_materials` / `quiz_content` in state (marked skip — future phase) in `planner_agent/tests/test_planner_agent.py`
+- [x] T037 [P] [US4] Add test: `finish` node publishes `WorkflowCompleteEvent` with `request_id`, `sid`, `rag_compiled`, `teaching_materials`, `quiz_content` to `workflow-complete` topic in `planner_agent/tests/test_planner_agent.py`
+- [x] T038 [P] [US4] Add test: `finish` sets `workflow_status = "complete"` in state in `planner_agent/tests/test_planner_agent.py`
+- [x] T039 [P] [US4] Add test: `MemorySaver` checkpoint for a completed graph is accessible by `thread_id = request_id` (verify `graph.get_state(config)` returns expected state snapshot) in `planner_agent/tests/test_planner_agent.py`
+- [x] T040 [P] [US4] Add TODO test placeholder: `Command(resume=completion_payload)` updates `rag_compiled` / `teaching_materials` / `quiz_content` in state (marked skip — future phase) in `planner_agent/tests/test_planner_agent.py`
 
 ### Implementation for User Story 4
 
-- [ ] T041 [US4] Implement `finish` node in `planner_agent/agent.py`: publish `WorkflowCompleteEvent` to `workflow-complete` topic, set `workflow_status = "complete"`
-- [ ] T042 [US4] Wire `finish` → END in `StateGraph` in `planner_agent/agent.py`
-- [ ] T043 [P] [US4] Add TODO markers in `planner_agent/agent.py` for: `Command(resume=...)` resumption filling `rag_compiled`, `teaching_materials`, `quiz_content`; Kafka consumer integration; timeout/incomplete workflow handling
+- [x] T041 [US4] Implement `finish` node in `planner_agent/agent.py`: publish `WorkflowCompleteEvent` to `workflow-complete` topic, set `workflow_status = "complete"`
+- [x] T042 [US4] Wire `finish` → END in `StateGraph` in `planner_agent/agent.py`
+- [x] T043 [P] [US4] Add TODO markers in `planner_agent/agent.py` for: `Command(resume=...)` resumption filling `rag_compiled`, `teaching_materials`, `quiz_content`; Kafka consumer integration; timeout/incomplete workflow handling
 
 **Checkpoint**: User Story 4 complete — full graph from entry to `workflow-complete` event independently testable.
 
@@ -138,13 +138,13 @@
 
 **Purpose**: Quality gates, documentation validation, and `pytest.ini` registration.
 
-- [ ] T044 [P] Update `pytest.ini` to include `planner_agent/tests` in `testpaths` (or add separate `testpaths` entry)
-- [ ] T045 [P] Run full test suite: `pytest planner_agent/tests -q` — confirm all tests pass
-- [ ] T046 [P] Run `ruff check project planner_agent` and `ruff format --check project planner_agent` — confirm clean
-- [ ] T047 [P] Run `python -m compileall project planner_agent -q` — confirm no syntax errors
-- [ ] T048 [P] Verify `get_all_topic_names()` includes all new planner topics in `project/topics.py` and backend startup bootstrap test passes
-- [ ] T049 [P] Add `PLANNER_TEXT_*` and `PLANNER_KAFKA_BOOTSTRAP_SERVERS` env var examples to `.env.local.example`
-- [ ] T050 [P] Verify `planner_agent/tests/inputs/sample_input.json` covers at least: (a) event with `user_level=[]` and files, (b) event with pre-defined levels and no files
+- [x] T044 [P] Update `pytest.ini` to include `planner_agent/tests` in `testpaths` (or add separate `testpaths` entry)
+- [x] T045 [P] Run full test suite: `pytest planner_agent/tests -q` — confirm all tests pass
+- [x] T046 [P] Run `ruff check project planner_agent` and `ruff format --check project planner_agent` — confirm clean
+- [x] T047 [P] Run `python -m compileall project planner_agent -q` — confirm no syntax errors
+- [x] T048 [P] Verify `get_all_topic_names()` includes all new planner topics in `project/topics.py` and backend startup bootstrap test passes
+- [x] T049 [P] Add `PLANNER_TEXT_*` and `PLANNER_KAFKA_BOOTSTRAP_SERVERS` env var examples to `.env.local.example`
+- [x] T050 [P] Verify `planner_agent/tests/inputs/sample_input.json` covers at least: (a) event with `user_level=[]` and files, (b) event with pre-defined levels and no files
 
 ---
 
