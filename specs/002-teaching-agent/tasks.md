@@ -293,7 +293,7 @@ until ratified.
 
 ### P3-A: Schema & Config (Blocking Prerequisites)
 
-- [ ] T035 Add `ReflectionCritique` to `project/schemas.py` (Teaching Agent section,
+- [x] T035 Add `ReflectionCritique` to `project/schemas.py` (Teaching Agent section,
       internal models):
       fields: `quality_score` (int, ge=1, le=10), `issues` (list of dicts with keys
       `field: str`, `issue: str`, `severity: Literal["low","medium","high"]`),
