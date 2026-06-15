@@ -542,7 +542,7 @@ on the T041 implementation existing.
         revision calls.
       Requires a reachable LLM endpoint (gated like T046).
 
-- [ ] T049 [Gap C] Update `data-model.md` and `contracts/teaching-agent-contract.md` for
+- [x] T049 [Gap C] Update `data-model.md` and `contracts/teaching-agent-contract.md` for
       Phase 3: add the internal `ReflectionCritique` entity (`quality_score`, `issues`,
       `revision_instructions`) and the new `TeachingMetadata.reflection_iterations` field.
       Note both are internal/metadata only — the external `TeachingAgentOutput` /
