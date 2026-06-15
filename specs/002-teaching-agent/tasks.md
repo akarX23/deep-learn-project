@@ -324,7 +324,7 @@ until ratified.
 
 ### P3-B: Prompt Templates
 
-- [ ] T037 [P] Add `REFLECTION_PROMPT_BY_MODE` to `teaching_agent/prompts.py`:
+- [x] T037 [P] Add `REFLECTION_PROMPT_BY_MODE` to `teaching_agent/prompts.py`:
       Three constants (`BEGINNER_REFLECTION_PROMPT`, `INTERMEDIATE_REFLECTION_PROMPT`,
       `ADVANCED_REFLECTION_PROMPT`) + `REFLECTION_PROMPT_BY_MODE` dict.
       Each template:
@@ -338,7 +338,7 @@ until ratified.
         - advanced: formal correctness, edge-case coverage, depth of internals discussion
       - Same JSON-only rules as generation prompts (no markdown fences, escape newlines)
 
-- [ ] T038 [P] Add `REVISION_PROMPT_BY_MODE` to `teaching_agent/prompts.py`:
+- [x] T038 [P] Add `REVISION_PROMPT_BY_MODE` to `teaching_agent/prompts.py`:
       Three constants (`BEGINNER_REVISION_PROMPT`, `INTERMEDIATE_REVISION_PROMPT`,
       `ADVANCED_REVISION_PROMPT`) + `REVISION_PROMPT_BY_MODE` dict.
       Each template:
