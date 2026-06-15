@@ -13,12 +13,12 @@
 - Alternatives considered:
   - Root-level build contexts with custom Dockerfile paths (rejected: less discoverable and easier to misconfigure).
 
-## Decision 3: Enforce restart behavior with compose restart policy and omit healthchecks
-- Decision: Set restart behavior for each in-scope service and explicitly skip healthchecks for this feature.
-- Rationale: Matches user requirement for restartable services and no healthcheck requirement.
+## Decision 3: Enforce restart behavior with targeted healthchecks and dependency gating
+- Decision: Set restart behavior for each in-scope service, add healthchecks to `kafka` and `backend-service`, and configure all agent services to depend on both healthy dependencies.
+- Rationale: Matches clarified requirement to gate agent startup on healthy infrastructure and backend readiness.
 - Alternatives considered:
-  - Add healthchecks for all services (rejected: explicitly out of scope).
-  - Leave restart policy unset (rejected: violates feature requirement).
+  - Add healthchecks to all services (rejected: unnecessary complexity; only kafka/backend are required gates).
+  - Omit healthchecks and rely on startup ordering only (rejected: does not satisfy clarified dependency requirement).
 
 ## Decision 4: Keep shared runtime dependencies in compose and preserve interoperability
 - Decision: Retain existing infrastructure services (Kafka and Kafka UI) and integrate agent/service entries around them.
@@ -31,3 +31,18 @@
 - Rationale: Provides objective evidence for requirements and constitution testing/performance gates.
 - Alternatives considered:
   - Rely only on manual startup observation (rejected: less repeatable and harder to enforce in CI).
+
+## Implementation Notes
+
+- Standard Dockerfile pattern for all in-scope services:
+  - Base image: `python:3.11-slim`
+  - Shared dependency install from repository `requirements.txt`
+  - Service-specific source copy and shared `project/` package copy
+  - Service runtime command via `python -m <service>.worker` (backend uses app module entrypoint)
+- Compose build strategy:
+  - Use repository-root build context (`context: .`) for all in-scope services so Dockerfiles can copy both service code and shared modules.
+  - Keep per-service Dockerfile path explicit in compose (`dockerfile: <service>/Dockerfile`).
+- Runtime consistency:
+  - Apply `restart: unless-stopped` to all in-scope services.
+  - Add explicit `healthcheck` blocks for `kafka` and `backend-service`.
+  - Use compose dependency conditions so agent services depend on both `kafka` and `backend-service` readiness.

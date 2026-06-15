@@ -5,6 +5,12 @@
 **Status**: Draft  
 **Input**: User description: "I want to create docker deployments for each of the agents and services. Create Dockerfiles in each agent and service directory, add them as services and buildable images in the docker compose. No need for any healthchecks, but mke them restartable."
 
+## Clarifications
+
+### Session 2026-06-15
+
+- Q: Should health checks be omitted for all services? → A: Add health checks for `kafka` and `backend-service`, and make all other in-scope services depend on both.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Run all components locally via compose (Priority: P1)
@@ -54,6 +60,7 @@ As a maintainer, I can rely on a consistent containerization pattern for every a
 - A component is intentionally not part of local runtime scope; it should not be auto-added without explicit inclusion criteria.
 - A component repeatedly fails at startup; restart behavior should continue per policy without requiring manual intervention.
 - Service name collisions occur in compose definitions; each component must have a unique service identity.
+- If either `kafka` or `backend-service` health check is failing, dependent services should remain blocked by dependency gating until both become healthy.
 
 ## Requirements *(mandatory)*
 
@@ -64,11 +71,12 @@ As a maintainer, I can rely on a consistent containerization pattern for every a
 - **FR-003**: The system MUST allow each service image to be built from local source definitions as part of compose workflows.
 - **FR-004**: The system MUST allow a developer to build any individual service image independently of other services.
 - **FR-005**: The system MUST configure all in-scope services with automatic restart behavior.
-- **FR-006**: The system MUST NOT require healthcheck definitions for this feature release.
+- **FR-006**: The system MUST define healthcheck configurations for `kafka` and `backend-service` in compose.
 - **FR-007**: The system MUST preserve interoperability with shared local infrastructure dependencies already defined in compose.
 - **FR-008**: The system MUST document or encode service naming consistently so each component is uniquely addressable.
 - **FR-009**: The system MUST define a scope of included components covering agents and backend services in this repository.
 - **FR-010**: The system MUST keep local deployment startup as a single compose-driven operation.
+- **FR-011**: The system MUST configure every in-scope agent service (orchestrator, planner, RAG, teaching, quiz) to depend on both `kafka` and `backend-service`.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -85,7 +93,8 @@ As a maintainer, I can rely on a consistent containerization pattern for every a
 - **SC-003**: Developers can launch the full local deployment stack with one compose start action and no manual per-service startup steps.
 - **SC-004**: Developers can build any single in-scope service image independently in under 3 minutes on a standard local development machine.
 - **SC-005**: For unexpected container exit events during local runs, 100% of in-scope services attempt automatic restart per configured policy.
-- **SC-006**: 0 healthcheck definitions are required to successfully run the feature's local deployment stack.
+- **SC-006**: `kafka` and `backend-service` each expose a passing compose healthcheck in local startup flows.
+- **SC-007**: 100% of in-scope agent services are configured with dependency links to both `kafka` and `backend-service`.
 
 ## Assumptions
 

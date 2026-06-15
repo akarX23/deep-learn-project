@@ -25,6 +25,7 @@
   - build (object): Compose build block including context and dockerfile.
   - image (string): Optional explicit image name for tagging.
   - depends_on (list[string]): Compose startup dependency hints.
+  - healthcheck (object | null): Container health probe definition (required for kafka and backend-service).
   - restart (string): Restart policy for container.
   - environment (map[string,string|number|bool]): Runtime variables.
   - volumes (list[string]): Optional bind mounts/named volumes.
@@ -34,7 +35,9 @@
   - component_name must reference an existing ContainerizedComponent.
   - build context/dockerfile pair must resolve locally.
   - restart must be present for in-scope services.
-  - healthcheck field must be absent for this feature scope.
+  - healthcheck must be present for `kafka` and `backend-service`.
+  - healthcheck may be absent for agent services.
+  - every in-scope agent service depends_on must include both `kafka` and `backend-service`.
 
 ## Entity: DeploymentStack
 - Description: Full local composition of infrastructure and application services.

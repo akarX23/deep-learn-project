@@ -21,8 +21,12 @@ Each in-scope component MUST have exactly one compose service entry with:
 
 Each in-scope component MUST have a corresponding Dockerfile in its own directory.
 
-## Prohibited Contract Elements (feature scope)
-- No `healthcheck` definitions are required or expected for in-scope services in this feature.
+## Healthcheck and Dependency Contract
+
+- `kafka` MUST define a compose `healthcheck`.
+- `backend-service` MUST define a compose `healthcheck`.
+- Every in-scope agent service (`orchestrator-agent`, `planner-agent`, `rag-agent`, `teaching-agent`, `quiz-agent`) MUST depend on both `kafka` and `backend-service`.
+- Dependency gating MUST use health-aware compose conditions so agents start only after both dependencies are healthy.
 
 ## Buildability Contract
 The compose definition MUST support:
@@ -40,10 +44,33 @@ The compose definition MUST support:
 - Service-to-directory mapping MUST be one-to-one for in-scope components.
 - The mapping MUST be discoverable from compose without requiring external scripts.
 
+### Service-to-directory mapping table
+
+| Compose service | Directory | Dockerfile |
+|---|---|---|
+| `backend-service` | `backend_service/` | `backend_service/Dockerfile` |
+| `orchestrator-agent` | `orchestrator_agent/` | `orchestrator_agent/Dockerfile` |
+| `planner-agent` | `planner_agent/` | `planner_agent/Dockerfile` |
+| `rag-agent` | `rag_agent/` | `rag_agent/Dockerfile` |
+| `teaching-agent` | `teaching_agent/` | `teaching_agent/Dockerfile` |
+| `quiz-agent` | `quiz_agent/` | `quiz_agent/Dockerfile` |
+
+All service names above are required for command-level examples and validation steps.
+
 ## Verification Contract
 A feature-complete implementation must satisfy all checks:
 1. Compose configuration validation passes.
 2. Every in-scope service builds successfully.
 3. Full-stack startup launches all in-scope services.
 4. Restart policy exists on all in-scope services.
-5. No healthcheck block exists for newly added in-scope services in this feature.
+5. `kafka` and `backend-service` each have passing healthchecks.
+6. Every in-scope agent service declares dependencies on both `kafka` and `backend-service` with health-aware conditions.
+
+## Independent Build Acceptance Checks
+
+- `docker compose build backend-service` succeeds independently.
+- `docker compose build orchestrator-agent` succeeds independently.
+- `docker compose build planner-agent` succeeds independently.
+- `docker compose build rag-agent` succeeds independently.
+- `docker compose build teaching-agent` succeeds independently.
+- `docker compose build quiz-agent` succeeds independently.

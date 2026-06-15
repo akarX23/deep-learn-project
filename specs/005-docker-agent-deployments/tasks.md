@@ -3,51 +3,52 @@
 **Input**: Design documents from /specs/005-docker-agent-deployments/
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/, quickstart.md
 
-**Tests**: No dedicated automated test-authoring tasks are included because this feature is deployment configuration and the specification does not request TDD. Validation tasks are included for compose config, image builds, and runtime smoke checks.
+**Tests**: No dedicated automated test-authoring tasks are included because this feature is deployment configuration and the specification does not request TDD. Validation tasks are included for compose config, image builds, healthchecks, dependency gating, and runtime smoke checks.
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and validation of each story.
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-**Purpose**: Align feature docs with exact in-scope deployment targets before editing runtime artifacts.
+**Purpose**: Align specification, contract, and quickstart docs with implementation scope and naming.
 
 - [ ] T001 Confirm in-scope component list and service-name mapping in specs/005-docker-agent-deployments/contracts/deployment-contract.md
-- [ ] T002 Align quickstart command section with intended compose service names in specs/005-docker-agent-deployments/quickstart.md
-- [ ] T003 [P] Add implementation notes for containerization conventions in specs/005-docker-agent-deployments/research.md
+- [ ] T002 Confirm healthcheck and dependency-gating acceptance criteria in specs/005-docker-agent-deployments/spec.md
+- [ ] T003 [P] Align quickstart command references with compose service names in specs/005-docker-agent-deployments/quickstart.md
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-**Purpose**: Establish compose-wide application service structure that all user stories depend on.
+**Purpose**: Establish compose-wide baseline used by all user stories.
 
 **CRITICAL**: No user story work begins until this phase is complete.
 
-- [ ] T004 Add application service scaffold section for agent/backend containers in docker-compose.yaml
+- [ ] T004 Add or confirm application service scaffold for backend and agent services in docker-compose.yaml
 - [ ] T005 Define restart policy baseline for all in-scope application services in docker-compose.yaml
-- [ ] T006 Preserve and document Kafka/Kafka-UI interoperability requirements in docker-compose.yaml
+- [ ] T006 Preserve compatibility with Kafka/Kafka-UI infrastructure definitions in docker-compose.yaml
 
-**Checkpoint**: Foundation ready. User story implementation can begin.
+**Checkpoint**: Foundation is ready for user-story implementation.
 
 ---
 
 ## Phase 3: User Story 1 - Run all components locally via compose (Priority: P1) MVP
 
-**Goal**: Enable one-command startup for all in-scope agents and backend services from compose.
+**Goal**: Enable one-command startup with health-aware readiness gating.
 
-**Independent Test**: Run docker compose up for the full stack and verify each in-scope service becomes running/restarting without manual per-service startup.
+**Independent Test**: Run `docker compose up -d` and verify kafka/backend become healthy and agent services launch only after both dependencies are healthy.
 
 ### Implementation for User Story 1
 
-- [ ] T007 [P] [US1] Create backend service container build definition in backend_service/Dockerfile
-- [ ] T008 [P] [US1] Create orchestrator service container build definition in orchestrator_agent/Dockerfile
-- [ ] T009 [P] [US1] Create planner service container build definition in planner_agent/Dockerfile
-- [ ] T010 [P] [US1] Create RAG service container build definition in rag_agent/Dockerfile
-- [ ] T011 [P] [US1] Create teaching service container build definition in teaching_agent/Dockerfile
-- [ ] T012 [P] [US1] Create quiz service container build definition in quiz_agent/Dockerfile
-- [ ] T013 [US1] Add compose services for backend and all agents with build contexts in docker-compose.yaml
-- [ ] T014 [US1] Add restart behavior and startup dependency wiring for in-scope services in docker-compose.yaml
-- [ ] T015 [US1] Update full-stack startup and service verification steps in specs/005-docker-agent-deployments/quickstart.md
+- [ ] T007 [P] [US1] Create backend container build definition in backend_service/Dockerfile
+- [ ] T008 [P] [US1] Create orchestrator container build definition in orchestrator_agent/Dockerfile
+- [ ] T009 [P] [US1] Create planner container build definition in planner_agent/Dockerfile
+- [ ] T010 [P] [US1] Create RAG container build definition in rag_agent/Dockerfile
+- [ ] T011 [P] [US1] Create teaching container build definition in teaching_agent/Dockerfile
+- [ ] T012 [P] [US1] Create quiz container build definition in quiz_agent/Dockerfile
+- [ ] T013 [US1] Add compose entries for backend and all agent services with build contexts in docker-compose.yaml
+- [ ] T014 [US1] Add `healthcheck` for `kafka` and `backend-service` in docker-compose.yaml
+- [ ] T015 [US1] Configure each agent service to depend on both `kafka` and `backend-service` with health-aware conditions in docker-compose.yaml
+- [ ] T016 [US1] Update startup and readiness verification steps in specs/005-docker-agent-deployments/quickstart.md
 
 **Checkpoint**: User Story 1 is independently deployable and verifiable.
 
@@ -55,37 +56,37 @@
 
 ## Phase 4: User Story 2 - Build each component independently (Priority: P2)
 
-**Goal**: Support single-service image builds without rebuilding unrelated services.
+**Goal**: Support targeted single-service builds without rebuilding unrelated components.
 
-**Independent Test**: Build one selected service image through compose and verify only the targeted service build executes successfully.
+**Independent Test**: Build one selected service image and verify only that target is rebuilt successfully.
 
 ### Implementation for User Story 2
 
-- [ ] T016 [US2] Add explicit per-service image names/tags to compose service entries in docker-compose.yaml
-- [ ] T017 [US2] Add per-service build command matrix in specs/005-docker-agent-deployments/quickstart.md
-- [ ] T018 [US2] Encode independent-build acceptance checks in specs/005-docker-agent-deployments/contracts/deployment-contract.md
-- [ ] T019 [US2] Add targeted build examples for all in-scope services in specs/005-docker-agent-deployments/quickstart.md
+- [ ] T017 [US2] Add explicit per-service image tags in docker-compose.yaml
+- [ ] T018 [US2] Add per-service build matrix in specs/005-docker-agent-deployments/quickstart.md
+- [ ] T019 [US2] Encode independent-build acceptance checks in specs/005-docker-agent-deployments/contracts/deployment-contract.md
+- [ ] T020 [US2] Add targeted build command examples for all in-scope services in specs/005-docker-agent-deployments/quickstart.md
 
-**Checkpoint**: User Story 2 builds can be executed and validated independently.
+**Checkpoint**: User Story 2 build workflows are independently executable.
 
 ---
 
 ## Phase 5: User Story 3 - Standardized container setup across components (Priority: P3)
 
-**Goal**: Make containerization patterns consistent and maintainable across all in-scope components.
+**Goal**: Keep deployment definitions consistent and maintainable across all services.
 
-**Independent Test**: Review all component Dockerfiles and compose entries to confirm consistent structure, naming, and restart behavior with no healthcheck blocks.
+**Independent Test**: Verify all Dockerfiles follow common structure and compose definitions consistently apply restart, healthcheck scope, and dependency rules.
 
 ### Implementation for User Story 3
 
-- [ ] T020 [P] [US3] Standardize Dockerfile structure and metadata conventions in backend_service/Dockerfile
-- [ ] T021 [P] [US3] Standardize Dockerfile structure and metadata conventions in orchestrator_agent/Dockerfile
-- [ ] T022 [P] [US3] Standardize Dockerfile structure and metadata conventions in planner_agent/Dockerfile
-- [ ] T023 [P] [US3] Standardize Dockerfile structure and metadata conventions in rag_agent/Dockerfile
-- [ ] T024 [P] [US3] Standardize Dockerfile structure and metadata conventions in teaching_agent/Dockerfile
-- [ ] T025 [P] [US3] Standardize Dockerfile structure and metadata conventions in quiz_agent/Dockerfile
-- [ ] T026 [US3] Add service-to-directory mapping table and naming rules in specs/005-docker-agent-deployments/contracts/deployment-contract.md
-- [ ] T027 [US3] Enforce no-healthcheck rule for in-scope services in docker-compose.yaml
+- [ ] T021 [P] [US3] Standardize backend Dockerfile conventions in backend_service/Dockerfile
+- [ ] T022 [P] [US3] Standardize orchestrator Dockerfile conventions in orchestrator_agent/Dockerfile
+- [ ] T023 [P] [US3] Standardize planner Dockerfile conventions in planner_agent/Dockerfile
+- [ ] T024 [P] [US3] Standardize RAG Dockerfile conventions in rag_agent/Dockerfile
+- [ ] T025 [P] [US3] Standardize teaching Dockerfile conventions in teaching_agent/Dockerfile
+- [ ] T026 [P] [US3] Standardize quiz Dockerfile conventions in quiz_agent/Dockerfile
+- [ ] T027 [US3] Add service-to-directory mapping, healthcheck scope, and dependency rules in specs/005-docker-agent-deployments/contracts/deployment-contract.md
+- [ ] T028 [US3] Verify compose excludes healthchecks for agent services while keeping required checks on kafka/backend in docker-compose.yaml
 
 **Checkpoint**: User Story 3 standardization is complete and auditable.
 
@@ -93,12 +94,13 @@
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-**Purpose**: Final validation and documentation hardening across all stories.
+**Purpose**: Final validation and cross-document consistency.
 
-- [ ] T028 [P] Validate compose schema/rendering and update validation notes in specs/005-docker-agent-deployments/quickstart.md
-- [ ] T029 [P] Validate full and targeted build workflows and capture expected outcomes in specs/005-docker-agent-deployments/quickstart.md
-- [ ] T030 Validate runtime smoke and restart behavior evidence in specs/005-docker-agent-deployments/quickstart.md
-- [ ] T031 Final consistency pass across spec, plan, and tasks in specs/005-docker-agent-deployments/tasks.md
+- [ ] T029 [P] Validate compose rendering and syntax and document results in specs/005-docker-agent-deployments/quickstart.md
+- [ ] T030 [P] Validate full build and targeted build workflows and capture expected outcomes in specs/005-docker-agent-deployments/quickstart.md
+- [ ] T031 Validate healthcheck and dependency-gating runtime behavior and record evidence in specs/005-docker-agent-deployments/quickstart.md
+- [ ] T032 Validate restart behavior smoke flow and record evidence in specs/005-docker-agent-deployments/quickstart.md
+- [ ] T033 Final consistency pass across spec, plan, tasks, contract, and quickstart in specs/005-docker-agent-deployments/tasks.md
 
 ---
 
@@ -106,27 +108,28 @@
 
 ### Phase Dependencies
 
-- Setup (Phase 1): No dependencies.
-- Foundational (Phase 2): Depends on Setup completion and blocks all user stories.
-- User Story phases (Phases 3-5): Depend on Foundational completion.
-- Polish (Phase 6): Depends on completion of the targeted user stories.
+- Setup (Phase 1): no dependencies.
+- Foundational (Phase 2): depends on Setup and blocks all user stories.
+- User Story phases (Phases 3-5): depend on Foundational completion.
+- Polish (Phase 6): depends on completion of all targeted user stories.
 
 ### User Story Dependencies
 
-- US1 (P1): Starts immediately after Phase 2; no dependency on other user stories.
-- US2 (P2): Starts after Phase 2 and after US1 compose service entries exist.
-- US3 (P3): Starts after Phase 2 and may run in parallel with late US2 documentation tasks.
+- User Story 1 (P1): starts after Phase 2; no dependency on other user stories.
+- User Story 2 (P2): starts after Phase 2 and after core compose services exist.
+- User Story 3 (P3): starts after Phase 2 and may overlap with User Story 2 documentation updates.
 
 ### Task Dependency Highlights
 
 - T013 depends on T007-T012.
 - T014 depends on T013.
-- T015 depends on T013-T014.
-- T016 depends on T013.
-- T017 and T019 depend on T016.
-- T026 depends on T020-T025.
-- T027 depends on T013.
-- T028-T030 depend on completion of T013-T027.
+- T015 depends on T013 and T014.
+- T016 depends on T014 and T015.
+- T017 depends on T013.
+- T018 and T020 depend on T017.
+- T027 depends on T021-T026.
+- T028 depends on T014 and T015.
+- T029-T032 depend on T013-T028.
 
 ---
 
@@ -135,17 +138,17 @@
 ### User Story 1
 
 - Parallel group A: T007, T008, T009, T010, T011, T012
-- Then sequential: T013 -> T014 -> T015
+- Then sequential: T013 -> T014 -> T015 -> T016
 
 ### User Story 2
 
-- Sequential core: T016 -> T017
-- Parallel after T016: T018 and T019
+- Sequential core: T017 -> T018
+- Parallel after T017: T019 and T020
 
 ### User Story 3
 
-- Parallel group B: T020, T021, T022, T023, T024, T025
-- Then sequential: T026 -> T027
+- Parallel group B: T021, T022, T023, T024, T025, T026
+- Then sequential: T027 -> T028
 
 ---
 
@@ -154,19 +157,19 @@
 ### MVP First (User Story 1 Only)
 
 1. Complete Phase 1 and Phase 2.
-2. Complete Phase 3 (US1).
-3. Validate independent US1 runtime behavior.
-4. Pause for demo/review.
+2. Complete Phase 3 (User Story 1).
+3. Validate full startup, healthchecks, and dependency gating.
+4. Stop for MVP review/demo.
 
 ### Incremental Delivery
 
-1. Deliver US1 full-stack startup.
-2. Deliver US2 independent build workflows.
-3. Deliver US3 standardization and consistency hardening.
-4. Complete Polish phase validations and final alignment.
+1. Deliver User Story 1 full-stack startup and readiness gating.
+2. Deliver User Story 2 independent build workflows.
+3. Deliver User Story 3 standardization and contract hardening.
+4. Complete polish validations and final consistency pass.
 
-### Team Parallelization
+### Parallel Team Strategy
 
-1. One engineer owns compose foundation (T004-T006).
-2. Multiple engineers split Dockerfile tasks (T007-T012 and T020-T025).
-3. One engineer handles contract/quickstart updates (T015, T017-T019, T026, T028-T030).
+1. One engineer owns compose foundation and health/dependency wiring (T004-T006, T013-T015).
+2. Multiple engineers parallelize Dockerfile work (T007-T012, T021-T026).
+3. One engineer owns documentation/contract validation updates (T016, T018-T020, T027, T029-T033).
