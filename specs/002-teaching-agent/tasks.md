@@ -499,6 +499,75 @@ until ratified.
 
 ---
 
+### P3-F: Plan/Tasks Reconciliation & Added Coverage
+
+These tasks resolve plan.md ↔ tasks.md consistency gaps found in the plan-vs-tasks audit
+and add missing validation coverage. T047/T049/T050/T051/T053 are documentation
+reconciliations (no production code); T048 and T052 add test/validation coverage and depend
+on the T041 implementation existing.
+
+- [ ] T047 [Gap A] Reconcile reflection config design — keep `LLMConfig` generic.
+      `LLMConfig` retains only its existing fields (`model`, `api_base`, `api_key`,
+      `temperature`, `max_tokens`, `effort`). Reflection settings are produced by helper
+      functions, NOT added as `LLMConfig` fields:
+      - `get_reflection_config(output_mode) → LLMConfig` returns a config whose `model` and
+        `max_tokens` ARE the reflection model and reflection ceiling (default 512).
+      - `get_max_reflection_iterations(output_mode) → int` returns the iteration count.
+      Doc fixes: update **T036** to DROP the "add `reflection_model`, `reflection_max_tokens`,
+      `max_reflection_iterations` fields to `LLMConfig`" line; update **plan.md**'s `config.py`
+      Project-Structure entry to DROP "add … reflection_max_tokens field" (the `effort` field
+      already exists from T032). No new `LLMConfig` fields are introduced.
+
+- [ ] T048 [Gap B] Add a performance-budget validation task (FR-018-proposed, SC-007;
+      Constitution Principle IV — budgets MUST be validated). Measure wall-clock per mode
+      (beginner / intermediate / advanced) at N=0 and N=1 against a single pinned model +
+      endpoint (FR-018 requires same-model comparison). Easiest path: extend `run_samples.py`
+      to time each run and execute both passes.
+      - Record results as a documented table (mode × N × seconds), e.g. written to
+        `teaching_agent/tests/outputs/perf_<timestamp>.md` — satisfies plan.md's "measured at
+        both settings … and documented" clause.
+      - Flag budget breaches: N=1 beginner ≤15s / intermediate ≤25s / advanced ≤45s;
+        N=0 ≤5 / 10 / 20s. Treat as regression-vs-Phase-1-baseline, not hard pass/fail on a
+        slow free-tier endpoint.
+      - Confirm no timeout at the advanced 4096-token ceiling on BOTH the generation and
+        revision calls.
+      Requires a reachable LLM endpoint (gated like T046).
+
+- [ ] T049 [Gap C] Update `data-model.md` and `contracts/teaching-agent-contract.md` for
+      Phase 3: add the internal `ReflectionCritique` entity (`quality_score`, `issues`,
+      `revision_instructions`) and the new `TeachingMetadata.reflection_iterations` field.
+      Note both are internal/metadata only — the external `TeachingAgentOutput` /
+      `TeachingCompletionEvent` contract is otherwise unchanged.
+      NOTE: while editing, also reconcile any residual stale Kafka-event shapes in those two
+      docs left over from the planner-alignment schema change (separate pre-existing drift).
+
+- [ ] T050 [Gap D] Reconcile `_reflect()` / `_revise()` signatures between plan.md and
+      tasks.md. T039/T040 pass an explicit `tokens_accumulator: list[int]`; plan.md's
+      "Agent Changes" section omits it. Adopt the explicit `tokens_accumulator` parameter as
+      the canonical signature and update plan.md's "Agent Changes" to match (one consistent
+      choice across both docs).
+
+- [ ] T051 [Gap E] Fix T041's `run()` integration description: the reflection loop runs
+      AFTER diagram resolution (step 5) and BEFORE final assembly (step 6) — not "after
+      step 6". Replace the `initial_content` placeholder with the actual variable name used
+      in `agent.py` (`content`), and align the snippet with the real `run()` structure.
+
+- [ ] T052 [Gap F] Add an SC-014 regression test: with reflection enabled (N≥1), a single
+      consumed `TeachingRequestEvent` results in exactly one `TeachingCompletionEvent`
+      published. Add to `test_kafka_integration.py` (or T042) using the fake producer
+      (assert exactly one `send()` call) with a monkeypatched multi-call `call_llm`. Confirms
+      reflection — which lives inside `run()` — does not change the publish-once contract.
+
+- [ ] T053 [Gap G] Refresh stale global sections of tasks.md now that Phase 3 exists:
+      - Header **Organization** line — add Phase 3 (Reflection layer).
+      - **[Story]** legend — add US6 = Reflection.
+      - **Dependencies & Execution Order → Phase Dependencies** — fix "P2-F (T025–T027)" to
+        "T025–T034" and add a Phase 3 entry.
+      - **Implementation Order** block — extend beyond T027 (or reference the Phase 3
+        Dependencies sub-block).
+
+---
+
 ### Phase 3 Dependencies
 
 ```
