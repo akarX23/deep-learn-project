@@ -489,7 +489,7 @@ until ratified.
 
 ### P3-E: Validation
 
-- [ ] T045 Run full test suite: `pytest teaching_agent/tests/ -q` — all tests must pass
+- [x] T045 Run full test suite: `pytest teaching_agent/tests/ -q` — all tests must pass
       including new reflection tests (T042); existing Phase 1 and Phase 2 tests unaffected
 
 - [ ] T046 Manual quality validation (requires real LLM):
@@ -553,7 +553,7 @@ on the T041 implementation existing.
       step 6". Replace the `initial_content` placeholder with the actual variable name used
       in `agent.py` (`content`), and align the snippet with the real `run()` structure.
 
-- [ ] T052 [Gap F] Add an SC-014 regression test: with reflection enabled (N≥1), a single
+- [x] T052 [Gap F] Add an SC-014 regression test: with reflection enabled (N≥1), a single
       consumed `TeachingRequestEvent` results in exactly one `TeachingCompletionEvent`
       published. Add to `test_kafka_integration.py` (or T042) using the fake producer
       (assert exactly one `send()` call) with a monkeypatched multi-call `call_llm`. Confirms
