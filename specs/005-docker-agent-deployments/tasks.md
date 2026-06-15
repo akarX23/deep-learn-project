@@ -11,9 +11,9 @@
 
 **Purpose**: Align specification, contract, and quickstart docs with implementation scope and naming.
 
-- [ ] T001 Confirm in-scope component list and service-name mapping in specs/005-docker-agent-deployments/contracts/deployment-contract.md
-- [ ] T002 Confirm healthcheck and dependency-gating acceptance criteria in specs/005-docker-agent-deployments/spec.md
-- [ ] T003 [P] Align quickstart command references with compose service names in specs/005-docker-agent-deployments/quickstart.md
+- [X] T001 Confirm in-scope component list and service-name mapping in specs/005-docker-agent-deployments/contracts/deployment-contract.md
+- [X] T002 Confirm healthcheck and dependency-gating acceptance criteria in specs/005-docker-agent-deployments/spec.md
+- [X] T003 [P] Align quickstart command references with compose service names in specs/005-docker-agent-deployments/quickstart.md
 
 ---
 
@@ -23,9 +23,9 @@
 
 **CRITICAL**: No user story work begins until this phase is complete.
 
-- [ ] T004 Add or confirm application service scaffold for backend and agent services in docker-compose.yaml
-- [ ] T005 Define restart policy baseline for all in-scope application services in docker-compose.yaml
-- [ ] T006 Preserve compatibility with Kafka/Kafka-UI infrastructure definitions in docker-compose.yaml
+- [X] T004 Add or confirm application service scaffold for backend and agent services in docker-compose.yaml
+- [X] T005 Define restart policy baseline for all in-scope application services in docker-compose.yaml
+- [X] T006 Preserve compatibility with Kafka/Kafka-UI infrastructure definitions in docker-compose.yaml
 
 **Checkpoint**: Foundation is ready for user-story implementation.
 
@@ -39,16 +39,16 @@
 
 ### Implementation for User Story 1
 
-- [ ] T007 [P] [US1] Create backend container build definition in backend_service/Dockerfile
-- [ ] T008 [P] [US1] Create orchestrator container build definition in orchestrator_agent/Dockerfile
-- [ ] T009 [P] [US1] Create planner container build definition in planner_agent/Dockerfile
-- [ ] T010 [P] [US1] Create RAG container build definition in rag_agent/Dockerfile
-- [ ] T011 [P] [US1] Create teaching container build definition in teaching_agent/Dockerfile
-- [ ] T012 [P] [US1] Create quiz container build definition in quiz_agent/Dockerfile
-- [ ] T013 [US1] Add compose entries for backend and all agent services with build contexts in docker-compose.yaml
-- [ ] T014 [US1] Add `healthcheck` for `kafka` and `backend-service` in docker-compose.yaml
-- [ ] T015 [US1] Configure each agent service to depend on both `kafka` and `backend-service` with health-aware conditions in docker-compose.yaml
-- [ ] T016 [US1] Update startup and readiness verification steps in specs/005-docker-agent-deployments/quickstart.md
+- [X] T007 [P] [US1] Create backend container build definition in backend_service/Dockerfile
+- [X] T008 [P] [US1] Create orchestrator container build definition in orchestrator_agent/Dockerfile
+- [X] T009 [P] [US1] Create planner container build definition in planner_agent/Dockerfile
+- [X] T010 [P] [US1] Create RAG container build definition in rag_agent/Dockerfile
+- [X] T011 [P] [US1] Create teaching container build definition in teaching_agent/Dockerfile
+- [X] T012 [P] [US1] Create quiz container build definition in quiz_agent/Dockerfile
+- [X] T013 [US1] Add compose entries for backend and all agent services with build contexts in docker-compose.yaml
+- [X] T014 [US1] Add `healthcheck` for `kafka` and `backend-service` in docker-compose.yaml
+- [X] T015 [US1] Configure each agent service to depend on both `kafka` and `backend-service` with health-aware conditions in docker-compose.yaml
+- [X] T016 [US1] Update startup and readiness verification steps in specs/005-docker-agent-deployments/quickstart.md
 
 **Checkpoint**: User Story 1 is independently deployable and verifiable.
 
@@ -62,10 +62,10 @@
 
 ### Implementation for User Story 2
 
-- [ ] T017 [US2] Add explicit per-service image tags in docker-compose.yaml
-- [ ] T018 [US2] Add per-service build matrix in specs/005-docker-agent-deployments/quickstart.md
-- [ ] T019 [US2] Encode independent-build acceptance checks in specs/005-docker-agent-deployments/contracts/deployment-contract.md
-- [ ] T020 [US2] Add targeted build command examples for all in-scope services in specs/005-docker-agent-deployments/quickstart.md
+- [X] T017 [US2] Add explicit per-service image tags in docker-compose.yaml
+- [X] T018 [US2] Add per-service build matrix in specs/005-docker-agent-deployments/quickstart.md
+- [X] T019 [US2] Encode independent-build acceptance checks in specs/005-docker-agent-deployments/contracts/deployment-contract.md
+- [X] T020 [US2] Add targeted build command examples for all in-scope services in specs/005-docker-agent-deployments/quickstart.md
 
 **Checkpoint**: User Story 2 build workflows are independently executable.
 
@@ -79,14 +79,14 @@
 
 ### Implementation for User Story 3
 
-- [ ] T021 [P] [US3] Standardize backend Dockerfile conventions in backend_service/Dockerfile
-- [ ] T022 [P] [US3] Standardize orchestrator Dockerfile conventions in orchestrator_agent/Dockerfile
-- [ ] T023 [P] [US3] Standardize planner Dockerfile conventions in planner_agent/Dockerfile
-- [ ] T024 [P] [US3] Standardize RAG Dockerfile conventions in rag_agent/Dockerfile
-- [ ] T025 [P] [US3] Standardize teaching Dockerfile conventions in teaching_agent/Dockerfile
-- [ ] T026 [P] [US3] Standardize quiz Dockerfile conventions in quiz_agent/Dockerfile
-- [ ] T027 [US3] Add service-to-directory mapping, healthcheck scope, and dependency rules in specs/005-docker-agent-deployments/contracts/deployment-contract.md
-- [ ] T028 [US3] Verify compose excludes healthchecks for agent services while keeping required checks on kafka/backend in docker-compose.yaml
+- [X] T021 [P] [US3] Standardize backend Dockerfile conventions in backend_service/Dockerfile
+- [X] T022 [P] [US3] Standardize orchestrator Dockerfile conventions in orchestrator_agent/Dockerfile
+- [X] T023 [P] [US3] Standardize planner Dockerfile conventions in planner_agent/Dockerfile
+- [X] T024 [P] [US3] Standardize RAG Dockerfile conventions in rag_agent/Dockerfile
+- [X] T025 [P] [US3] Standardize teaching Dockerfile conventions in teaching_agent/Dockerfile
+- [X] T026 [P] [US3] Standardize quiz Dockerfile conventions in quiz_agent/Dockerfile
+- [X] T027 [US3] Add service-to-directory mapping, healthcheck scope, and dependency rules in specs/005-docker-agent-deployments/contracts/deployment-contract.md
+- [X] T028 [US3] Verify compose excludes healthchecks for agent services while keeping required checks on kafka/backend in docker-compose.yaml
 
 **Checkpoint**: User Story 3 standardization is complete and auditable.
 
@@ -96,11 +96,11 @@
 
 **Purpose**: Final validation and cross-document consistency.
 
-- [ ] T029 [P] Validate compose rendering and syntax and document results in specs/005-docker-agent-deployments/quickstart.md
-- [ ] T030 [P] Validate full build and targeted build workflows and capture expected outcomes in specs/005-docker-agent-deployments/quickstart.md
-- [ ] T031 Validate healthcheck and dependency-gating runtime behavior and record evidence in specs/005-docker-agent-deployments/quickstart.md
-- [ ] T032 Validate restart behavior smoke flow and record evidence in specs/005-docker-agent-deployments/quickstart.md
-- [ ] T033 Final consistency pass across spec, plan, tasks, contract, and quickstart in specs/005-docker-agent-deployments/tasks.md
+- [X] T029 [P] Validate compose rendering and syntax and document results in specs/005-docker-agent-deployments/quickstart.md
+- [X] T030 [P] Validate full build and targeted build workflows and capture expected outcomes in specs/005-docker-agent-deployments/quickstart.md
+- [X] T031 Validate healthcheck and dependency-gating runtime behavior and record evidence in specs/005-docker-agent-deployments/quickstart.md
+- [X] T032 Validate restart behavior smoke flow and record evidence in specs/005-docker-agent-deployments/quickstart.md
+- [X] T033 Final consistency pass across spec, plan, tasks, contract, and quickstart in specs/005-docker-agent-deployments/tasks.md
 
 ---
 

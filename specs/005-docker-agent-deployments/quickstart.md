@@ -80,6 +80,17 @@ Expected result: service attempts automatic restart per compose restart policy.
 - Restart policy validation:
 	- Stopping one in-scope container triggers restart attempt (`restart: unless-stopped`).
 
+### Latest validation evidence (2026-06-15)
+
+- `docker compose config`: passed (compose renders with service_healthy dependency conditions).
+- `docker compose build backend-service orchestrator-agent planner-agent rag-agent teaching-agent quiz-agent`: passed.
+- `docker compose build planner-agent`: passed (targeted build).
+- `docker compose up -d`: passed; `kafka` and `backend-service` reached `healthy`.
+- `docker compose ps`: confirmed agent services running after healthy dependencies.
+- `grep -n "healthcheck:" docker-compose.yaml`: two entries (kafka, backend-service).
+- `grep -n "condition: service_healthy" docker-compose.yaml`: health-aware dependency links present for kafka-ui and all in-scope agent services.
+- Restart smoke: `docker compose exec -T planner-agent sh -lc "kill -9 1"` followed by `docker compose ps planner-agent` confirmed container recovered to `Up`.
+
 ## 9. Stop the stack
 ```bash
 docker compose down

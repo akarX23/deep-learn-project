@@ -3,6 +3,17 @@ services:
     image: apache/kafka:4.2.1
     container_name: kafka
     network_mode: host
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
     environment:
       KAFKA_NODE_ID: "1"
       KAFKA_PROCESS_ROLES: "broker,controller"
@@ -22,8 +33,10 @@ services:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
     network_mode: host
+    restart: unless-stopped
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     environment:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: localhost:9092
@@ -36,8 +49,19 @@ services:
       dockerfile: backend_service/Dockerfile
     network_mode: host
     restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/docs', timeout=3)\" >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     env_file:
       - .env.local
     environment:
@@ -51,7 +75,10 @@ services:
     network_mode: host
     restart: unless-stopped
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
+      backend-service:
+        condition: service_healthy
     env_file:
       - .env.local
     environment:
@@ -65,7 +92,10 @@ services:
   #   network_mode: host
   #   restart: unless-stopped
   #   depends_on:
-  #     - kafka
+  #     kafka:
+  #       condition: service_healthy
+  #     backend-service:
+  #       condition: service_healthy
   #   env_file:
   #     - .env.local
   #   environment:
@@ -79,7 +109,10 @@ services:
     network_mode: host
     restart: unless-stopped
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
+      backend-service:
+        condition: service_healthy
     env_file:
       - .env.local
     environment:
@@ -93,7 +126,10 @@ services:
     network_mode: host
     restart: unless-stopped
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
+      backend-service:
+        condition: service_healthy
     env_file:
       - .env.local
     environment:
@@ -107,7 +143,10 @@ services:
     network_mode: host
     restart: unless-stopped
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
+      backend-service:
+        condition: service_healthy
     env_file:
       - .env.local
     environment:
