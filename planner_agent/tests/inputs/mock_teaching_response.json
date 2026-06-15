@@ -1,0 +1,13 @@
+{
+  "request_id": "550e8400-e29b-41d4-a716-446655440000",
+  "teaching_content": "# Gradient Descent — Beginner Guide\n\nImagine you are hiking down a foggy mountain and you can only see the slope directly under your feet. Each step you take in the direction that feels most downhill is exactly what gradient descent does for a machine learning model.\n\n## What is it?\nGradient descent is an optimization algorithm. It helps a model learn by adjusting its parameters to minimize error.\n\n## Step-by-step\n1. Start with random parameters.\n2. Measure how wrong the model is (the loss).\n3. Compute which direction reduces the loss the most.\n4. Take a small step in that direction.\n5. Repeat until the model is good enough.",
+  "learner_level": "naive",
+  "sections": [
+    {"title": "What is Gradient Descent?", "content": "An optimization algorithm that minimizes loss."},
+    {"title": "The Mountain Analogy", "content": "Hiking down a foggy mountain step by step."},
+    {"title": "Step-by-step Process", "content": "Initialize, compute gradient, update, repeat."}
+  ],
+  "status": "complete",
+  "errors": [],
+  "schema_version": "1.0"
+}

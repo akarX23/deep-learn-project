@@ -290,3 +290,316 @@ class TeachingAgentOutput(BaseModel):
         if value not in {"ok", "error"}:
             raise ValueError("status must be 'ok' or 'error'")
         return value
+
+
+# ---------------------------------------------------------------------------
+# Planner Agent schemas
+# ---------------------------------------------------------------------------
+
+
+class LearnerLevel(str, Enum):
+    """Assessed learner proficiency level used by the Planner Agent."""
+
+    NAIVE = "naive"
+    INTERMEDIATE = "intermediate"
+    ADVANCED = "advanced"
+
+
+class LearnerProfile(BaseModel):
+    """Assessed learner profile derived from query + session context."""
+
+    learner_level: LearnerLevel
+    confidence_score: float = Field(ge=0.0, le=1.0)
+    level_reasoning: str
+    clarification_asked: bool = False
+
+    @field_validator("level_reasoning")
+    @classmethod
+    def validate_reasoning(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("level_reasoning cannot be empty")
+        return value
+
+
+class LearningPlan(BaseModel):
+    """Decomposed task plan specifying which agents to orchestrate."""
+
+    required_agents: List[str]
+    parallel_groups: List[List[str]] = Field(default_factory=list)
+    depth: str = "conceptual"
+    objective: str = ""
+    reasoning: str = ""
+
+
+class PlannerMessage(BaseModel):
+    """Kafka message consumed from the init-planner topic."""
+
+    request_id: str
+    session_id: str
+    user_id: str
+    user_query: str
+    session_context: List[Any] = Field(default_factory=list)
+    available_files: List[str] = Field(default_factory=list)
+    user_levels: List[str] = Field(
+        default_factory=list,
+        description="Pre-provided learner levels; if non-empty, LLM level inference is skipped.",
+    )
+    schema_version: str = "1.0"
+
+    @field_validator("request_id", "session_id", "user_id", "schema_version")
+    @classmethod
+    def validate_ids(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value cannot be empty")
+        return value
+
+    @field_validator("user_query")
+    @classmethod
+    def validate_user_query(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("user_query cannot be empty")
+        return value
+
+
+class ClarifyUserLevelMessage(BaseModel):
+    """Kafka message produced to clarify-user-level when learner level is ambiguous."""
+
+    request_id: str
+    session_id: str
+    clarification_question: str
+    context: str = ""
+    schema_version: str = "1.0"
+
+
+class UserClarificationResponse(BaseModel):
+    """Kafka message consumed from user-clarification-response."""
+
+    request_id: str
+    session_id: str
+    response: str
+    schema_version: str = "1.0"
+
+
+class TeachingKafkaInput(BaseModel):
+    """Input payload produced by the Planner to the teaching Kafka topic."""
+
+    request_id: str
+    user_query: str
+    learner_level: str
+    learning_path: dict[str, Any] = Field(default_factory=dict)
+    rag_material: str = ""
+    session_context: List[Any] = Field(default_factory=list)
+    schema_version: str = "1.0"
+
+    @field_validator("request_id", "user_query")
+    @classmethod
+    def validate_required(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value cannot be empty")
+        return value
+
+
+class TeachingKafkaOutput(BaseModel):
+    """Output payload consumed from the material-compiled Kafka topic."""
+
+    request_id: str
+    teaching_content: str = ""
+    learner_level: str = "intermediate"
+    sections: List[dict[str, Any]] = Field(default_factory=list)
+    status: str
+    errors: List[str] = Field(default_factory=list)
+    schema_version: str = "1.0"
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str) -> str:
+        if value not in {"complete", "partial", "failed"}:
+            raise ValueError("status must be one of: complete, partial, failed")
+        return value
+
+
+class QuizQuestion(BaseModel):
+    """A single quiz question with answer and explanation."""
+
+    id: str
+    type: str
+    question: str
+    options: List[str] = Field(default_factory=list)
+    answer: str
+    explanation: str = ""
+
+
+class QuizAgentInput(BaseModel):
+    """Input payload produced by the Planner to the quiz Kafka topic."""
+
+    request_id: str
+    topic: str
+    learner_level: str
+    num_questions: int = Field(default=5, ge=1)
+    question_types: List[str] = Field(default_factory=lambda: ["mcq", "true_false"])
+    rag_material: str = ""
+    schema_version: str = "1.0"
+
+    @field_validator("request_id", "topic")
+    @classmethod
+    def validate_required(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value cannot be empty")
+        return value
+
+
+class QuizAgentOutput(BaseModel):
+    """Output payload consumed from the quiz-complete Kafka topic."""
+
+    request_id: str
+    questions: List[QuizQuestion] = Field(default_factory=list)
+    learner_level: str = "intermediate"
+    total_questions: int = Field(default=0, ge=0)
+    status: str
+    errors: List[str] = Field(default_factory=list)
+    schema_version: str = "1.0"
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str) -> str:
+        if value not in {"complete", "partial", "failed"}:
+            raise ValueError("status must be one of: complete, partial, failed")
+        return value
+
+
+# ---------------------------------------------------------------------------
+# Planner Agent v2 schemas — used by the 9-node LangGraph workflow
+# ---------------------------------------------------------------------------
+
+
+class PlannerRequestEvent(BaseModel):
+    """Inbound Kafka payload consumed from the init-planner topic.
+
+    ``user_level`` carries pre-provided learner levels; when non-empty the
+    planner skips LLM level inference entirely (FR-005).
+    """
+
+    user_prompt: str
+    sid: str
+    user_level: List[str] = Field(
+        default_factory=list,
+        description="Pre-provided learner levels (empty → LLM infers level).",
+    )
+    file_paths: List[str] = Field(default_factory=list)
+    schema_version: str = "1.0"
+
+    @field_validator("user_prompt", "sid")
+    @classmethod
+    def validate_non_empty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value cannot be empty")
+        return value
+
+
+class LevelInferenceResult(BaseModel):
+    """Structured output from the combined level-and-quiz LLM inference call.
+
+    A single LLM call populates both the learner level assessment and whether
+    the user's query implies a desire to be tested (FR-024).
+    """
+
+    level: LearnerLevel
+    confidence: float = Field(ge=0.0, le=1.0)
+    quiz_requested: bool = False
+    reasoning: str = ""
+
+
+class ClarifyUserLevelEvent(BaseModel):
+    """Kafka event published to clarify-user-level when learner level is ambiguous."""
+
+    request_id: str
+    user_prompt: str
+    sid: str
+    reason: str = ""
+    schema_version: str = "1.0"
+
+
+class TeachingRequestEvent(BaseModel):
+    """Kafka event published to the teaching agent for one learner level."""
+
+    request_id: str
+    user_prompt: str
+    user_level: str
+    rag_compiled: str = ""
+    sid: str
+    schema_version: str = "1.0"
+
+    @field_validator("request_id", "user_prompt", "user_level", "sid")
+    @classmethod
+    def validate_required(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value cannot be empty")
+        return value
+
+
+class QuizRequestEvent(BaseModel):
+    """Kafka event published to the quiz agent after teaching materials are ready."""
+
+    request_id: str
+    user_prompt: str
+    user_levels: List[str] = Field(default_factory=list)
+    teaching_materials: dict[str, str] = Field(default_factory=dict)
+    sid: str
+    schema_version: str = "1.0"
+
+    @field_validator("request_id", "user_prompt", "sid")
+    @classmethod
+    def validate_required(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value cannot be empty")
+        return value
+
+
+class WorkflowCompleteEvent(BaseModel):
+    """Kafka event published to planner-response when all downstream agents finish."""
+
+    request_id: str
+    sid: str
+    rag_compiled: str = ""
+    teaching_materials: dict[str, str] = Field(default_factory=dict)
+    quiz_content: str = ""
+    status: str = "complete"
+    schema_version: str = "1.0"
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str) -> str:
+        if value not in {"complete", "partial", "failed"}:
+            raise ValueError("status must be one of: complete, partial, failed")
+        return value
+
+
+class PlannerResponse(BaseModel):
+    """Final response produced to the planner-response Kafka topic."""
+
+    request_id: str
+    session_id: str
+    user_id: str
+    user_query: str
+    learner_level: str
+    learning_plan: Optional[dict[str, Any]] = None
+    synthesized_content: str = ""
+    study_material: str = ""
+    quiz: Optional[dict[str, Any]] = None
+    status: str
+    errors: List[str] = Field(default_factory=list)
+    schema_version: str = "1.0"
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str) -> str:
+        if value not in {"complete", "partial", "failed"}:
+            raise ValueError("status must be one of: complete, partial, failed")
+        return value
+
+    @field_validator("request_id", "session_id", "user_id")
+    @classmethod
+    def validate_ids(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value cannot be empty")
+        return value
