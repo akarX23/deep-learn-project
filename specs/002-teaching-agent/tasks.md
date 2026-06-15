@@ -357,7 +357,7 @@ until ratified.
 
 ### P3-C: Agent Logic
 
-- [ ] T039 Add `_reflect()` method to `TeachingAgent` in `teaching_agent/agent.py`:
+- [x] T039 Add `_reflect()` method to `TeachingAgent` in `teaching_agent/agent.py`:
       ```
       _reflect(
           current_content: TeachingContent,
@@ -377,7 +377,7 @@ until ratified.
       - Append `tokens_used` from this call to `tokens_accumulator`
       - Return `ReflectionCritique(**parsed)`
 
-- [ ] T040 Add `_revise()` method to `TeachingAgent` in `teaching_agent/agent.py`:
+- [x] T040 Add `_revise()` method to `TeachingAgent` in `teaching_agent/agent.py`:
       ```
       _revise(
           current_content: TeachingContent,
@@ -399,7 +399,7 @@ until ratified.
       - Append `tokens_used` from this call to `tokens_accumulator`
       - Return revised `TeachingContent`
 
-- [ ] T041 Update `TeachingAgent.run()` in `teaching_agent/agent.py` to orchestrate the
+- [x] T041 Update `TeachingAgent.run()` in `teaching_agent/agent.py` to orchestrate the
       reflection loop:
       - After step 6 (initial diagram resolution), introduce:
         ```python
