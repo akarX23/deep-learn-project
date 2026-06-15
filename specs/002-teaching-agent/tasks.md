@@ -3,13 +3,13 @@
 **Input**: Design documents from `/specs/002-teaching-agent/`
 **Prerequisites**: plan.md ✓, spec.md ✓, research.md ✓, data-model.md ✓, contracts/ ✓, quickstart.md ✓
 
-**Organization**: Phase 1 (core pipeline, complete) + Phase 2 (Kafka integration, open).
-All Phase 2 tasks are reviewed and approved individually before implementation.
+**Organization**: Phase 1 (core pipeline) + Phase 2 (Kafka integration) + Phase 3 (reflection layer).
+All Phase 2 and Phase 3 tasks are reviewed and approved individually before implementation.
 
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel (different files, no blocking dependencies)
-- **[Story]**: User story from spec.md (US1–US4 = core pipeline; US5 = Kafka integration)
+- **[Story]**: User story from spec.md (US1–US4 = core pipeline; US5 = Kafka integration; US6 = reflection)
 
 ---
 
@@ -401,10 +401,11 @@ until ratified.
 
 - [x] T041 Update `TeachingAgent.run()` in `teaching_agent/agent.py` to orchestrate the
       reflection loop:
-      - After step 6 (initial diagram resolution), introduce:
+      - After step 6 (assembling the initial content), run the loop (step 7) before
+        the final assembly (step 8):
         ```python
         tokens_accumulator = [tokens_used]        # start with generation tokens
-        current_content = initial_content
+        current_content = content
         completed_iterations = 0
         max_iterations = get_max_reflection_iterations(output_mode)
         reflection_cfg = get_reflection_config(output_mode)
@@ -506,7 +507,7 @@ and add missing validation coverage. T047/T049/T050/T051/T053 are documentation
 reconciliations (no production code); T048 and T052 add test/validation coverage and depend
 on the T041 implementation existing.
 
-- [ ] T047 [Gap A] Reconcile reflection config design — keep `LLMConfig` generic.
+- [x] T047 [Gap A] Reconcile reflection config design — keep `LLMConfig` generic.
       `LLMConfig` retains only its existing fields (`model`, `api_base`, `api_key`,
       `temperature`, `max_tokens`, `effort`). Reflection settings are produced by helper
       functions, NOT added as `LLMConfig` fields:
@@ -541,13 +542,13 @@ on the T041 implementation existing.
       NOTE: while editing, also reconcile any residual stale Kafka-event shapes in those two
       docs left over from the planner-alignment schema change (separate pre-existing drift).
 
-- [ ] T050 [Gap D] Reconcile `_reflect()` / `_revise()` signatures between plan.md and
+- [x] T050 [Gap D] Reconcile `_reflect()` / `_revise()` signatures between plan.md and
       tasks.md. T039/T040 pass an explicit `tokens_accumulator: list[int]`; plan.md's
       "Agent Changes" section omits it. Adopt the explicit `tokens_accumulator` parameter as
       the canonical signature and update plan.md's "Agent Changes" to match (one consistent
       choice across both docs).
 
-- [ ] T051 [Gap E] Fix T041's `run()` integration description: the reflection loop runs
+- [x] T051 [Gap E] Fix T041's `run()` integration description: the reflection loop runs
       AFTER diagram resolution (step 5) and BEFORE final assembly (step 6) — not "after
       step 6". Replace the `initial_content` placeholder with the actual variable name used
       in `agent.py` (`content`), and align the snippet with the real `run()` structure.
@@ -558,7 +559,7 @@ on the T041 implementation existing.
       (assert exactly one `send()` call) with a monkeypatched multi-call `call_llm`. Confirms
       reflection — which lives inside `run()` — does not change the publish-once contract.
 
-- [ ] T053 [Gap G] Refresh stale global sections of tasks.md now that Phase 3 exists:
+- [x] T053 [Gap G] Refresh stale global sections of tasks.md now that Phase 3 exists:
       - Header **Organization** line — add Phase 3 (Reflection layer).
       - **[Story]** legend — add US6 = Reflection.
       - **Dependencies & Execution Order → Phase Dependencies** — fix "P2-F (T025–T027)" to
@@ -594,7 +595,9 @@ T039 and T040 can be developed in parallel (different methods) but both block T0
 - **P2-C (T021)**: Depends on P2-A + P2-B (needs Kafka types and event schemas)
 - **P2-D (T022)**: Depends on P2-B + P2-C (needs kafka.py and handlers.py)
 - **P2-E (T023–T024)**: Depends on P2-B + P2-C + P2-D (tests all three files)
-- **P2-F (T025–T027)**: Depends on P2-E completion
+- **P2-F (T025–T034)**: Depends on P2-E completion
+- **Phase 3 (T035–T053)**: P3-A→P3-E built per the Phase 3 Dependencies block;
+  P3-F (T047–T053) are doc-reconciliation / added-coverage tasks, mostly independent
 
 ### Within P2-A
 
@@ -610,6 +613,7 @@ T021 → [checkpoint]
 T022 → [checkpoint]
 T023 → T024 → [checkpoint]
 T025 → T026 → T027
+(Phase 3) T035 → T036 → T037/T038 → T039/T040 → T041 → T042 → T043–T053
 ```
 
 ---
