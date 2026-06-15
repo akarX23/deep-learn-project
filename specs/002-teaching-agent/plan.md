@@ -18,7 +18,8 @@ sequence that does not require stateful loop orchestration.
 
 Phase 2 adds a Kafka integration layer (`kafka.py`, `handlers.py`, `worker.py`) following
 the same three-file pattern as the RAG agent. The worker consumes `TeachingRequestEvent`
-payloads from the `"teaching"` Kafka topic, invokes `TeachingAgent.run()` unchanged, and
+payloads from the `"teaching"` Kafka topic, maps the event's `user_prompt` / `user_level` /
+`rag_compiled` onto `TeachingAgent.run()`'s `topic` / `output_mode` / `context`, and
 publishes `TeachingCompletionEvent` results to `"teaching-complete"`. The core pipeline
 logic from Phase 1 is not modified.
 
@@ -73,7 +74,11 @@ proposal pending team sign-off; see the proposal section in `spec.md`.)
 - Code Quality Gate: PASS. Data model and contracts are defined; no cross-module ambiguity.
   Module boundary for schemas follows the established `project/schemas.py` pattern.
 - Testing Gate: PASS. `quickstart.md` includes both full-run and targeted test instructions.
-  Test mocking pattern mirrors the RAG agent suite (monkeypatching `call_llm`).
+  Test mocking pattern mirrors the RAG agent suite (monkeypatching `call_llm`). Phase 3 adds
+  reflection tests (all monkeypatched, no real LLM): N=0 single-pass equivalence, critique
+  and revision fallback paths (SC-012), token accumulation across calls (SC-013), and the
+  two-iteration case. The SC-011 quality-improvement rubric (≥80% of runs) is validated
+  manually with a real model (tasks.md T046), not in the automated suite.
 - UX Consistency Gate: PASS. Contract defines stable field structure; diagram null-fallback
   behavior is documented so the UI can handle both cases.
 - Performance Gate: PASS. Token ceiling enforcement is at the LiteLLM call level with
@@ -123,11 +128,12 @@ teaching_agent/
 │                        #                      [Phase 1 core unchanged; reflection added in Phase 3]
 ├── config.py            # LLMConfig dataclass (add effort, reflection_max_tokens fields)
 │                        # get_llm_config(output_mode) — generation config
-│                        # get_reflection_config(output_mode) — critique config (Phase 3)
-│                        #   reads TEACHING_REFLECTION_MODEL, TEACHING_{MODE}_REFLECTION_MODEL,
-│                        #         TEACHING_REFLECTION_MAX_TOKENS,
-│                        #         TEACHING_MAX_REFLECTION_ITERATIONS,
-│                        #         TEACHING_{MODE}_MAX_REFLECTION_ITERATIONS
+│                        # get_reflection_config(output_mode) — critique config (Phase 3):
+│                        #   TEACHING_REFLECTION_MODEL, TEACHING_{MODE}_REFLECTION_MODEL,
+│                        #   TEACHING_REFLECTION_MAX_TOKENS
+│                        # get_max_reflection_iterations(output_mode) — iteration count (Phase 3):
+│                        #   TEACHING_{MODE}_MAX_REFLECTION_ITERATIONS →
+│                        #   TEACHING_MAX_REFLECTION_ITERATIONS → default 1
 ├── llm_client.py        # call_llm(messages, config) → (str, int); provider-agnostic via LiteLLM
 ├── prompts.py           # BEGINNER/INTERMEDIATE/ADVANCED_PROMPT (generation)
 │                        # REFLECTION_PROMPT_BY_MODE (critique — Phase 3)
@@ -183,8 +189,9 @@ Input
 Assemble TeachingAgentOutput with best available content
 ```
 
-N = `TEACHING_MAX_REFLECTION_ITERATIONS` (global) or `TEACHING_{MODE}_MAX_REFLECTION_ITERATIONS` (per-mode).
-N = 0 → steps [2]–[4] are skipped entirely; behavior identical to Phase 1.
+N = `get_max_reflection_iterations(output_mode)`, which resolves
+`TEACHING_{MODE}_MAX_REFLECTION_ITERATIONS` → `TEACHING_MAX_REFLECTION_ITERATIONS` (global)
+→ default 1. N = 0 → steps [2]–[4] are skipped entirely; behavior identical to Phase 1.
 
 ### Critique Prompt Design
 
@@ -252,6 +259,22 @@ In all cases: `status` remains `"ok"` if initial generation succeeded.
 `reflection_iterations` reflects the number of **completed** (critique + revision both
 succeeded) cycles, not attempted cycles.
 
+### Reflection Quality Validation (SC-011)
+
+The ≥80% quality-improvement target is validated **manually with a real model** (tasks.md
+T046), not in the automated suite — the automated reflection tests use a monkeypatched
+`call_llm` and assert control flow and token accounting, not output quality. A reviewer runs
+each of the 9 topic/mode pairs with reflection on (N≥1) versus off (N=0) and scores both the
+initial and reflected output on a fixed rubric:
+
+- **Clarity** — easier to follow; jargon appropriate to the mode.
+- **Structure adherence** — follows the mode's required section structure (FR-012/013/014).
+- **Example completeness** — the worked example / code is correct and self-contained.
+
+The reflected output must score **strictly higher** than the initial generation in ≥80% of
+the pairs. A "lateral move" (no net change) counts as a non-improvement, per the probabilistic
+assumption in `spec.md`.
+
 ## Behavior Rules and Requirement Clarifications
 
 These clarifications resolve interpretation questions left open by the Technical Context
@@ -309,6 +332,7 @@ validation rules live in `data-model.md` and `contracts/teaching-agent-contract.
 |---|---|
 | Inbound topic | `"teaching"` — consumed by `TeachingWorker`; published by Planner Agent |
 | Outbound topic | `"teaching-complete"` — published by `TeachingRequestEventHandler` |
+| Field mapping | Handler maps inbound `user_prompt → topic`, `user_level → output_mode`, `rag_compiled → context`; core `run()` signature unchanged (FR-020) |
 | `request_id` pass-through | Copied verbatim from `TeachingRequestEvent` to `TeachingCompletionEvent`; Teaching Agent never modifies it |
 | `sid` pass-through | Copied verbatim; Teaching Agent never reads or validates its contents |
 | Always-publish rule | A `TeachingCompletionEvent` is published for every consumed message regardless of outcome (error → empty `content`); Planner is never left waiting |
