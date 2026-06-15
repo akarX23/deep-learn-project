@@ -303,9 +303,9 @@ until ratified.
       **Note**: `ReflectionCritique` is internal — it MUST NOT appear in `TeachingAgentOutput`
       or `TeachingCompletionEvent`.
 
-- [ ] T036 Update `teaching_agent/config.py`:
-      - Add `reflection_model: str`, `reflection_max_tokens: int`, `max_reflection_iterations: int`
-        fields to `LLMConfig`
+- [x] T036 Update `teaching_agent/config.py`:
+      - Keep `LLMConfig` generic — NO new fields (T047-reconciled design); reflection
+        settings are produced by the helper functions below
       - Add `get_reflection_config(output_mode: str) → LLMConfig` function:
         - `model`: `TEACHING_{MODE}_REFLECTION_MODEL` → `TEACHING_REFLECTION_MODEL`
           → `TEACHING_MODEL` (required if nothing else set)
