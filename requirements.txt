@@ -7,18 +7,21 @@ websockets>=12.0
 # --- RAG Agent ---
 pymupdf>=1.27.0
 litellm>=1.40.0
-langgraph>=0.2.0
+langgraph>=1.2.0
 
 # --- Planner Agent ---
-# Add planner-specific dependencies here.
+langchain-core>=1.4.0
 
 # --- Teaching Agent ---
-# Add teaching-specific dependencies here.
-
-# --- Backend Service (Kafka) ---
-fastapi>=0.111.0
-uvicorn>=0.30.0
+litellm>=1.40.0
 kafka-python>=2.0.2
+
+# --- Backend Service ---
+fastapi>=0.110.0
+uvicorn>=0.29.0
+kafka-python>=2.0.2
+python-socketio>=5.11
+python-multipart>=0.0.9
 
 # --- Development / Testing ---
 pytest>=8.0.0

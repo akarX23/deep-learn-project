@@ -1,94 +1,66 @@
-# Quickstart: RAG Retrieval Agent
+# Quickstart: RAG Agent Deterministic Parallel Loop Simplification
 
 ## 1. Install dependencies
-
-Install project dependencies from repository root:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Core runtime dependencies for this feature include:
-- pydantic>=2
-- pymupdf
-- litellm
-- langgraph
-- pytest
+## 2. Configure environment
 
-## 2. Configure environment variables
+Set runtime values in `.env.local`:
 
-Use one project-level `.env.local` and place RAG settings in the RAG section.
-
-### Text model
-- `RAG_TEXT_PROVIDER` (default: `hosted_vllm`)
-- `RAG_TEXT_MODEL`
-- `RAG_TEXT_API_BASE` (optional for local endpoints)
-- `RAG_TEXT_API_KEY` (optional for unauthenticated local endpoints)
-- `RAG_TEXT_TEMPERATURE` (optional)
-- `RAG_TEXT_MAX_TOKENS` (optional)
-
-### Vision model
-- `RAG_VLM_PROVIDER` (default: `hosted_vllm`)
-- `RAG_VLM_MODEL`
-- `RAG_VLM_API_BASE` (optional)
-- `RAG_VLM_API_KEY` (optional)
-- `RAG_VLM_TEMPERATURE` (optional)
-- `RAG_VLM_MAX_TOKENS` (optional)
-- `RAG_VLM_BATCH_SIZE` (optional, default from config)
-
-### Embedding model
-- `RAG_EMBEDDING_PROVIDER` (default: `hosted_vllm`)
-- `RAG_EMBEDDING_MODEL`
-- `RAG_EMBEDDING_API_BASE` (optional)
-- `RAG_EMBEDDING_API_KEY` (optional)
-- `RAG_EMBEDDING_MAX_TOKENS` (optional)
-
-LiteLLM routing composes each call model as `<provider>/<model>`.
-
-## 3. Prepare sample input
-
-Use fixture input from:
-- `rag_agent/tests/inputs/sample_input.json`
-- `rag_agent/tests/inputs/sample.pdf`
-
-Verify `file_paths` in JSON point to valid files in your checkout.
-
-## 4. Run the agent
-
-From repository root:
-
-```bash
-python -m rag_agent.agent --input rag_agent/tests/inputs/sample_input.json
+```env
+BACKEND_KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+BACKEND_KAFKA_CLIENT_ID=rag-service
+BACKEND_KAFKA_SECURITY_PROTOCOL=
+BACKEND_KAFKA_SASL_MECHANISM=
+BACKEND_KAFKA_SASL_USERNAME=
+BACKEND_KAFKA_SASL_PASSWORD=
+BACKEND_KAFKA_SSL_CAFILE=
+RAG_PAGE_PARALLELISM=4
 ```
 
-Expected outcome:
-- Schema-valid `RAGAgentOutput`
-- `status` in `{complete, partial}` for non-fatal mixed outcomes
-- Non-empty `compiled_material` when at least one relevant page is retained
-
-## 5. Run tests
+## 3. Start local Kafka (optional)
 
 ```bash
-pytest rag_agent/tests/test_rag_agent.py -q
+docker compose up -d kafka kafka-ui
 ```
 
-## 6. Verify strict threshold behavior
+## 4. Start worker runtime
 
-Set `relevance_threshold` to `1.0` in sample input and run again.
+```bash
+python -m rag_agent.worker
+```
 
-Expected:
-- `total_pages_included == 0`
-- all page statuses are `SKIPPED_IRRELEVANT`
+## 5. Request processing flow
 
-## 7. Operational notes
+For each request event:
+1. worker consumes payload from `rag`
+2. worker dispatches to `process_request_event`
+3. `agent.py` builds deterministic page pointer order
+4. page tasks run in parallel with max workers from `RAG_PAGE_PARALLELISM`
+5. successful extracted content is reduced in pointer order
+6. failed pages are excluded from extracted content and tracked separately
+7. worker publishes completion payload to `rag-complete`
 
-- Source PDFs are opened once per request and reused via request-scoped `fitz.Document` handles.
-- `extracted_pages` contains audit metadata only; assembled text is returned only in `compiled_material`.
-- OCR remains out of scope for this feature iteration.
-- Ensure embedding env vars are set before running (`RAG_EMBEDDING_PROVIDER`, `RAG_EMBEDDING_MODEL`, and either `RAG_EMBEDDING_API_BASE` or `RAG_EMBEDDING_API_KEY`).
+## 6. Verify logs
 
-## 8. Validation snapshot
+Check for stage logs:
+- `page_dispatched`
+- `page_processed`
+- `page_failed`
+- `state_reduced`
 
-- Validated on 2026-06-08 with `rag_agent/tests/inputs/sample_input.json`
-- Runtime baseline: 1.93 seconds
-- Observed output: `status=complete`, `total_pages_processed=6`, `total_pages_included=5`
+## 7. Run validation checks
+
+```bash
+.venv/bin/python -m pytest -q rag_agent/tests
+.venv/bin/ruff check project rag_agent
+.venv/bin/ruff format --check project rag_agent
+.venv/bin/python -m compileall project rag_agent
+```
+
+## 8. Deferred scope reminders
+
+Advanced retries, rich validation, and expanded exception taxonomy remain deferred TODO scope.

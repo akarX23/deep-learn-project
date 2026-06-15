@@ -1,4 +1,4 @@
-"""Pure helper utilities for table formatting and context assembly."""
+"""Content assembly and math helpers for RAG page processing."""
 
 from __future__ import annotations
 
@@ -11,7 +11,10 @@ def serialize_table_to_markdown(table_matrix: list[list[object]]) -> str:
 
     if not table_matrix:
         return ""
-    rows = [["" if cell is None else str(cell).strip() for cell in row] for row in table_matrix]
+    rows = [
+        ["" if cell is None else str(cell).strip() for cell in row]
+        for row in table_matrix
+    ]
     header = rows[0]
     body = rows[1:] if len(rows) > 1 else []
     sep = ["---"] * len(header)
@@ -26,7 +29,9 @@ def serialize_table_to_markdown(table_matrix: list[list[object]]) -> str:
     return "\n".join(lines)
 
 
-def assemble_page_content(text: str, tables: list[str], image_descriptions: list[str]) -> str:
+def assemble_page_content(
+    text: str, tables: list[str], image_descriptions: list[str]
+) -> str:
     """Assemble text, tables, and image descriptions for one page."""
 
     sections: list[str] = []
@@ -35,7 +40,9 @@ def assemble_page_content(text: str, tables: list[str], image_descriptions: list
     if tables:
         sections.append("\n\n".join(t for t in tables if t.strip()))
     if image_descriptions:
-        image_block = "\n".join(f"- {item.strip()}" for item in image_descriptions if item.strip())
+        image_block = "\n".join(
+            f"- {item.strip()}" for item in image_descriptions if item.strip()
+        )
         if image_block:
             sections.append("Image Notes:\n" + image_block)
     return "\n\n".join(section for section in sections if section.strip())

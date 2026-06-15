@@ -1,0 +1,15 @@
+{
+  "status": "ok",
+  "output_mode": "advanced",
+  "content": {
+    "explanation": "1. Formal definition or specification: Recursion is a programming technique where a function invokes itself to solve a problem.\n2. Internal mechanics and implementation details: Recursion relies on the system call stack to manage function invocations, with each recursive call adding a new layer to the stack.\n3. Complexity analysis or performance characteristics: Recursion can lead to exponential time complexity (O(2^n)) and high memory usage due to the recursive call stack.\n4. Edge cases, failure modes, and subtle invariants: Edge cases include stack overflow errors from deep recursion, and failure modes include incorrect base case handling.\n5. Relationship to related concepts or alternative approaches: Recursion is related to dynamic programming, memoization, and iterative solutions, which can often provide more efficient alternatives.",
+    "diagram": null,
+    "notes": "Key invariants: * Recursive functions must have a base case to prevent infinite recursion.\n* Recursive functions should avoid modifying external state to prevent side effects.\nComplexity bounds: * Best case: O(n), where n is the number of recursive calls.\n* Worst case: O(2^n), where n is the number of recursive calls.\nGotchas: * Stack overflow errors from deep recursion.\n* Incorrect base case handling.",
+    "example": "Example of using recursion with memoization to optimize performance: `def fibonacci(n, memo = {}):\n  if n in memo: return memo[n]\n  if n <= 2: return 1\n  memo[n] = fibonacci(n-1, memo) + fibonacci(n-2, memo)\n  return memo[n]`. This approach chooses recursion with memoization over simpler alternatives like iteration to demonstrate a non-trivial usage pattern."
+  },
+  "metadata": {
+    "topic": "What is recursion?",
+    "tokens_used": 365,
+    "model": "groq/llama-3.3-70b-versatile"
+  }
+}

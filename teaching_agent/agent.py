@@ -121,6 +121,8 @@ class TeachingAgent:
         - intermediate / advanced: invalid or absent → null (non-fatal).
         - beginner: required → retry once on failure → use fallback template.
         """
+        if not isinstance(diagram_raw, str):
+            diagram_raw = None
         if diagram_raw and validate_mermaid(diagram_raw):
             return diagram_raw
 

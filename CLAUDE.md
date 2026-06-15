@@ -5,7 +5,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read
+<<<<<<< HEAD
 specs/004-ui-frontend/plan.md
+=======
+specs/001-rag-retrieval-agent/plan.md
+>>>>>>> origin/master
 <!-- SPECKIT END -->
 
 ## Project Overview

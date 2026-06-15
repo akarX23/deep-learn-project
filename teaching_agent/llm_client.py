@@ -38,6 +38,8 @@ def call_llm(messages: list[dict[str, Any]], config: LLMConfig) -> tuple[str, in
         kwargs["api_base"] = config.api_base
     if config.api_key:
         kwargs["api_key"] = config.api_key
+    if config.effort and any(v in config.model for v in ("sonnet-4-6", "opus-4-6")):
+        kwargs["output_config"] = {"effort": config.effort}
 
     try:
         response = completion(**kwargs)

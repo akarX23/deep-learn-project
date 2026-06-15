@@ -1,138 +1,305 @@
-# Quickstart: Kafka Backend Integration Service
+# Quickstart: Backend Kafka Bootstrap + RAG Test-Event API
 
-## 1. Configure environment
+## 1. Install dependencies
 
-Create/update `.env.local` in project root with backend Kafka settings:
+```bash
+pip install -r requirements.txt
+```
+
+## 2. Configure environment
+
+Set Kafka runtime settings in `.env.local`:
 
 ```env
 BACKEND_KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+BACKEND_KAFKA_CLIENT_ID=backend-service
 BACKEND_KAFKA_STARTUP_RETRY_COUNT=5
 BACKEND_KAFKA_STARTUP_RETRY_TIMEOUT_SECONDS=2
-BACKEND_KAFKA_CLIENT_ID=backend-service
+APP_ENV=dev
+BACKEND_ENABLE_TEST_EVENT_APIS=true
 ```
 
-Environment loading behavior:
-- `.env.local` is loaded when present.
-- Process environment variables override `.env.local` values.
+Optional secure-cluster settings:
 
-## 2. Start Kafka and Kafka UI locally
+```env
+BACKEND_KAFKA_SECURITY_PROTOCOL=
+BACKEND_KAFKA_SASL_MECHANISM=
+BACKEND_KAFKA_SASL_USERNAME=
+BACKEND_KAFKA_SASL_PASSWORD=
+BACKEND_KAFKA_SSL_CAFILE=
+```
 
-From project root:
+## 3. Start local Kafka infrastructure
 
 ```bash
 docker compose up -d kafka kafka-ui
 ```
 
-Validate containers are running:
+Wait until Kafka is ready (typically under 30 seconds):
 
 ```bash
-docker compose ps
+docker compose logs kafka | grep "Kafka Server started"
 ```
 
-Confirm compose image expectations:
-
-```bash
-docker compose config | grep -E "apache/kafka:4.2.1|provectuslabs/kafka-ui:latest"
-```
-
-Verify Kafka UI is reachable (default):
-
-```bash
-curl -I http://localhost:8080
-```
-
-## 3. Run backend service
-
-Example run command (exact path may differ after implementation):
+## 4. Run backend service
 
 ```bash
 python -m backend_service.app.main
 ```
 
-Expected startup behavior:
-- Kafka admin client initializes during lifespan startup.
-- On transient failures, startup retries follow configured retry count and timeout.
-- Startup exits with explicit failure if retry budget is exhausted.
-- On service shutdown, Kafka admin resources are closed via lifespan shutdown handling.
+Expected startup output:
 
-## 4. Create a topic
-
-Example request:
-
-```bash
-curl -X POST http://localhost:8001/api/v1/topics \
-  -H "Content-Type: application/json" \
-  -d '{"topic_name":"agent-events","num_partitions":1,"replication_factor":1}'
+```
+INFO  Kafka admin connect attempt 1/6
+INFO  Kafka admin connected
+INFO  Bootstrapping Kafka topics: ['rag', 'rag-complete']
+DEBUG Topic created: rag
+DEBUG Topic created: rag-complete
+INFO  Topic bootstrap complete: 2 created, 0 already existed, 0 errors
 ```
 
-Expected responses:
-- `201` with `status=created` for new topic.
-- `200` with `status=already_exists` if topic exists.
-- `4xx/5xx` with `status=error` for invalid input/runtime failures.
+On subsequent startups (topics already exist):
 
-Structured error response shape (for validation/HTTP/unhandled failures):
+```
+INFO  Bootstrapping Kafka topics: ['rag', 'rag-complete']
+DEBUG Topic already exists: rag
+DEBUG Topic already exists: rag-complete
+INFO  Topic bootstrap complete: 0 created, 2 already existed, 0 errors
+```
+
+## 5. Verify topics in Kafka UI
+
+Open http://localhost:8080 and confirm `rag` and `rag-complete` appear in the Topics list.
+
+## 6. Publish rag test event (default payload)
+
+```bash
+curl -s -X POST http://localhost:8001/api/v1/test-events/rag \
+	-H "Content-Type: application/json" \
+	-d '{
+		"request_id": "test-req-123",
+		"session_ctx": {"mode": "quick"},
+		"user_request": "Summarize gradient descent",
+		"file_paths": ["rag_agent/tests/inputs/sample.pdf"],
+		"created_at": null,
+		"source": "backend-service"
+	}'
+```
+
+Expected successful response shape:
 
 ```json
 {
-  "topic_name": null,
-  "status": "error",
-  "message": "..."
+	"request_id": "test-...",
+	"topic": "rag",
+	"publish_status": "published",
+	"metadata": {
+		"partition": 0,
+		"offset": 42,
+		"timestamp": 1781234567890
+	}
 }
 ```
 
-## 5. Run tests
+If broker metadata is not fully available, fields may be `null` while publish remains successful.
 
-```bash
-pytest backend_service/tests -q
+## 7. Use the default input factory from utils.py
+
+The `default_rag_test_event()` factory in `backend_service/app/utils.py` returns a fully initialized `RAGRequestEvent` with a fresh `uuid4`-based `request_id` and representative defaults:
+
+```python
+from backend_service.app.utils import default_rag_test_event
+
+event = default_rag_test_event()
+print(event.request_id)   # e.g. "test-4a7f9c..."
+print(event.user_request) # "Summarize gradient descent for local integration testing."
 ```
 
-Latest local evidence:
-- `13 passed` in `backend_service/tests`.
-- Covers startup success, retry-then-success, retry exhaustion, shutdown cleanup, env precedence, API success, duplicate handling, payload validation, HTTP exception envelope, unhandled exception envelope, and runtime error mapping.
-- Covers compose contract checks for Kafka image pin (`apache/kafka:4.2.1`), Kafka UI image wiring, and KRaft environment key presence.
-
-## 6. Run quality checks
+To publish a test event using the factory defaults:
 
 ```bash
-ruff check backend_service
-ruff format --check backend_service
-python -m compileall backend_service
+curl -s -X POST http://localhost:8001/api/v1/test-events/rag \
+	-H "Content-Type: application/json" \
+	-d '{
+		"request_id": "test-req-456",
+		"session_ctx": {"source": "backend-service", "mode": "integration-test"},
+		"user_request": "Summarize gradient descent for local integration testing.",
+		"file_paths": ["rag_agent/tests/inputs/sample.pdf"],
+		"created_at": null,
+		"source": "backend-service"
+	}'
 ```
 
-Latest local evidence:
-- `ruff check` passed.
-- `ruff format --check` passed.
-- `python -m compileall backend_service` completed successfully.
+## 8. Environment gating behavior
+- Request body is the complete `RAGRequestEvent` object.
+- Schema defaults are applied where fields are omitted.
+- Final payload is validated against `RAGRequestEvent` before publish.
 
-## 7. Performance baseline (local)
+## 8a. Connect to the WebSocket channel (Socket.IO)
 
-Measured with `fastapi.testclient.TestClient` and mocked Kafka admin calls:
-- Startup with one retry (configured timeout = 1s): `~1006.53 ms` total startup time.
-- Topic create API p95 latency across 30 calls: `~2.24 ms`.
+The backend mounts a Socket.IO server on the FastAPI app. The frontend connects as a Socket.IO client and is assigned a `sid`, which IS the application `session_id`.
 
-Interpretation:
-- Topic create latency is comfortably within the plan budget (`<= 2s` p95 local).
-- Startup behavior aligns with retry budget (`retry_count + 1` attempts with configured delay).
+```python
+import socketio
 
-## 8. Compose startup-time validation
+sio = socketio.Client()
 
-Target:
-- Bring up local Kafka + Kafka UI in under 2 minutes.
+@sio.on("stream-tokens")
+def on_stream_tokens(data):
+    print("stream-tokens:", data)
 
-Current environment result:
-- `docker compose` command is available, but startup validation is blocked by Docker daemon permission:
-  - `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`
+sio.connect("http://localhost:8001")
+print("session_id (sid):", sio.sid)
+sio.wait()
+```
 
-Validation command to run in a compose-capable environment:
+Shared event contracts (names + body schemas) live in `project/events.py` and are importable by both frontend and backend:
+
+```python
+from project.events import StreamTokensEventBody, WebSocketEvents
+
+print(WebSocketEvents.STREAM_TOKENS.value)  # "stream-tokens"
+payload = StreamTokensEventBody(
+	from_service="rag-agent",
+	content="hello",
+	metadata={"index": 1, "done": False},
+)
+```
+
+## 8b. Emit an event to a session from the backend
+
+From backend code, route a payload to a specific session via its `session_id` (== `sid`):
+
+```python
+from backend_service.app.socket import emit_event
+from project.events import WebSocketEvents, StreamTokensEventBody
+
+payload = StreamTokensEventBody(
+	from_service="rag-agent",
+	content="hello",
+	metadata={"index": 1, "done": False},
+)
+
+await emit_event(WebSocketEvents.STREAM_TOKENS, payload.model_dump(), session_id)
+```
+
+## 8c. Use the shared `UserRequest` schema
+
+The backend request contract includes `UserRequest` in `project/schemas.py`:
+
+```python
+from project.schemas import UserRequest
+
+req = UserRequest(
+	user_prompt="Explain gradient descent simply",
+	user_level=["beginner"],
+	sid="abc123",
+)
+```
+
+## 9. Ingest user requests with file uploads
+
+The backend exposes `POST /api/chat/request` for accepting user queries and file uploads from the frontend. `UserRequest` is provided as parsed form fields (`user_prompt`, `user_level`, `sid`) so Swagger displays separate fields. Files are saved to the configured directory (default `./uploads`) and a `PlannerRequestEvent` is published to Kafka for planner processing.
+
+### Configure upload directory (optional)
+
+```env
+UPLOAD_DIR=./uploads
+```
+
+The configured directory is automatically added to `.gitignore` to prevent accidental commits of uploaded files.
+
+### Upload a request with files
 
 ```bash
-start=$(date +%s)
-docker compose up -d kafka kafka-ui
-end=$(date +%s)
-echo $((end-start))
+curl -X POST http://localhost:8001/api/chat/request \
+	-F 'user_prompt=Explain neural networks' \
+	-F 'user_level=beginner' \
+	-F 'sid=session-123' \
+	-F 'files=@document1.pdf' \
+	-F 'files=@document2.txt'
 ```
 
-## 9. Scope reminder
+Expected successful response (200 OK):
 
-This backend service is limited to Kafka admin startup connectivity and topic creation API.
-No inter-service messaging proxy behavior is included in this feature.
+```json
+{
+  "message": "Request accepted and queued for planner processing"
+}
+```
+
+On validation failure (400 Bad Request):
+
+```json
+{
+  "error": "Missing required field: user_prompt"
+}
+```
+
+On server error (500 Internal Server Error):
+
+```json
+{
+  "error": "Failed to save uploaded files"
+}
+```
+
+### Verify file upload
+
+Files are saved to `./uploads/` with absolute paths passed to the planner:
+
+```bash
+ls -la ./uploads/
+```
+
+### PlannerRequestEvent schema
+
+The event published to Kafka `init-planner` topic includes:
+
+```python
+from project.schemas import PlannerRequestEvent
+
+event = PlannerRequestEvent(
+	user_prompt="Explain neural networks",
+	user_level=["beginner"],
+	sid="session-123",
+	file_paths=[
+		"/home/akarx/deep-learn-project/uploads/document1.pdf",
+		"/home/akarx/deep-learn-project/uploads/document2.txt"
+	]
+)
+```
+
+Note: Only absolute file paths are included; no per-file metadata is transmitted.
+
+
+No additional custom validation or exception handling is required for this schema in the current iteration.
+
+> Note: Listener bodies and the full `stream-tokens` emission flow are lightweight stubs in this iteration; edge cases (disconnect cleanup, missing session, auth, back-pressure) are marked TODO.
+
+## 9. Run tests
+
+```bash
+.venv/bin/python -m pytest backend_service/tests/ -q
+```
+
+## 10. Quality checks
+
+```bash
+.venv/bin/ruff check project backend_service
+.venv/bin/ruff format --check project backend_service
+.venv/bin/python -m compileall project backend_service
+```
+
+## 11. Performance notes
+
+- Topic bootstrap step target: ≤5 seconds against a local Kafka cluster (SC-003).
+- Test-event API target: ≤2 seconds p95 for single-request local publish/ack path.
+- Bootstrap time is O(n) over topic count — currently 2 topics, well within budget.
+
+## 12. Adding new topics
+
+1. Add the topic to the appropriate enum in `project/topics.py`.
+2. If needed, add a new getter function and include it in `get_all_topic_names()`.
+3. Restart the backend service — the new topic will be created on next startup automatically.
+4. Add a topic-specific test-event route and response contract entry if test publish support is required.

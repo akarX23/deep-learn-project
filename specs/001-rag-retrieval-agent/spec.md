@@ -1,151 +1,171 @@
-# Feature Specification: RAG Retrieval Agent
+# Feature Specification: RAG Kafka Worker Simplification
 
 **Feature Branch**: `[001-build-rag-retrieval-agent]`  
-**Created**: 2026-05-27  
+**Created**: 2026-06-12  
 **Status**: Draft  
-**Input**: User description: "Implement the RAG/Retrieval Agent for a multi-agent AI Tutor application, scoped to this agent only."
+**Input**: User description: "The RAG agent should not be initialized as a FASTAPI service. Remove all code associated with FastAPI and have a separate thread running the consumer loop. Additionally, remove the topic creation logic on startup and just assume that all topics already exists. Keep a simple check at startup which connects to Kafka directly to check if topics are present in Kafka. If not, start the application but with a clear message. Remove any direct API calls to the backend and the variables associated with it.
+
+Simplify the RAGRequestEventHandler by only focusing on ingesting Kafka events and dispatching them to the RAG pipeline. All the validation and metric calculation can be put as TODOs and implemented later. Also, each function sohuld have type safety for arguments as well as output. Avoid the use of \"any\" type wherever possible."
 
 ## Clarifications
 
-### Session 2026-06-08
+### Session 2026-06-12
 
-- Q: How should the fitz document lifecycle be modeled for one-time initialization across page processing? → A: Keep an in-memory dict of file path to fitz.Document on the RAGAgent instance for a single invocation, outside serializable graph state.
-- Q: How should .env.local be structured across agents? → A: Use one global .env.local with comment-based section headers per agent plus a shared section for variables used by all agents.
-- Q: How should requirements be structured across agents? → A: Use one requirements.txt with comment-based sections for shared dependencies and each agent (RAG, Planner, Teaching).
-- Q: What should be the batching scope for vision model image-description calls? → A: Batch images per page, preserve image order, and keep page association; apply VLM_BATCH_SIZE within each page.
-- Q: How should retained_content be handled in extracted_pages output? → A: Exclude retained_content from output payloads to avoid bloating extracted_pages; keep compiled_material as the only final assembled text output.
-- Q: How should LiteLLM provider keys be configured for text, VLM, and embedding models? → A: Use separate provider env vars for each modality and default each provider to hosted_vllm.
+- Q: Should this update create a new branch or a new feature directory? → A: No. Stay on current branch and update current feature directory in place.
+- Q: Should logging use a dedicated logger class or standard module logging? → A: Use standard `logging` module with `basicConfig(...)` and per-file `logging.getLogger(__name__)`; remove dedicated logger class.
+- Q: How should the runtime/module layout be simplified? → A: Remove `service.py`; add a `utils/` directory and place helper-oriented modules there (`helpers.py`, `llm_client.py`, `prompts.py`, `tools.py`).
+- Q: How should LLM and config logic be structured? → A: Simplify LLM operations to basic embedding + completion calls, defer complex validation/exception logic as TODOs, and consolidate `llm_client` + `config` responsibilities into `helpers.py`.
+- Q: How should consumer-loop and agent error handling be scoped? → A: Keep only basic exception handling in the consumer loop and `agent.py`; defer extensive validation/error orchestration as explicit TODOs.
 
-### Session 2026-06-08 (Post-Implementation Refinement)
+### Session 2026-06-13
 
-- Q: How should fitz document handles be typed for type-safety? → A: Import fitz.Document type and use it in type hints (e.g., dict[str, fitz.Document]) for explicit type safety in agent state management.
-- Q: Should the embedding model be local or remote? → A: Use remote LiteLLM-backed embedding API as primary path for consistency with existing text/VLM LiteLLM configuration pattern.
-- Q: What environment variables should configure remote embedding? → A: Use RAG_EMBEDDING_MODEL, RAG_EMBEDDING_API_BASE, RAG_EMBEDDING_API_KEY, and RAG_EMBEDDING_MAX_TOKENS to parallel the text and VLM configuration structure.
+- Q: Should this clarification switch branches or create a new feature directory? → A: No. Stay on the current branch and continue in feature directory `001-rag-retrieval-agent`.
+- Q: How should runtime startup flow be simplified? → A: Start from `worker.py`, initialize the threaded consumer loop, and perform only a direct Kafka topic presence check at startup.
+- Q: Where should Kafka connection and client creation live? → A: Keep Kafka connector initialization in `kafka.py` using environment variables directly, and create producer/consumer there.
+- Q: Should handler and factory abstractions remain? → A: No. Remove handler abstraction and factory structure; consumer loop calls `agent.py` directly and publishes output via `kafka.py` functions.
+- Q: Should `agent.py` publish to Kafka directly? → A: No. `agent.py` only returns processing output; the consumer loop publishes the completion event.
+- Q: How should `helpers.py` be simplified? → A: Keep only environment-variable extraction helper functions; remove classes and validators, and defer advanced validation/exception behavior as TODO tasks.
+
+### Session 2026-06-14
+
+- Q: Should `kafka.py` Protocol stubs (`KafkaConsumerProtocol`, `KafkaProducerProtocol`, `ConsumerRecordProtocol`) be kept? → A: No. Remove all three Protocol stubs; annotate with concrete `KafkaConsumer` / `KafkaProducer` types from `kafka-python` directly. Eliminates ~35 lines of structural typing for a single concrete implementation.
+- Q: Should `RAGWorker.__init__` retain injectable factory callables (`producer_factory`, `consumer_factory`, `request_processor`)? → A: No. Remove all three injectable parameters; call `create_producer`, `create_consumer`, and `process_request_event` directly inside the worker. Tests monkeypatch those module-level functions instead.
+- Q: Should trivial one-line wrapper functions in `kafka.py` (`consumer_subscribe_rag`, `poll_records`, `close_consumer`, `close_producer`) be retained? → A: No. Remove those four wrappers; call `consumer.subscribe()`, `consumer.poll()`, and `.close()` at the call sites. Keep the logic-bearing functions (`create_producer`, `create_consumer`, `publish_rag_complete`, `check_required_topics`) and inline `apply_kafka_security_options` from `helpers.py` directly into `kafka.py`'s private kwargs builders.
+- Q: Should `tools.py` retain `_with_optional_open` and the str-path branching that lets callers pass a file path or an open `fitz.Document`? → A: No. Remove `_with_optional_open` and all path-string support; extraction functions accept only `fitz.Document` directly. The agent always passes an open document; the str-path branch is dead code.
+- Q: Should `process_consumer_batch` remain a standalone function passed as a callable into `_poll_loop`? → A: No. Remove `process_consumer_batch`; inline the poll-and-dispatch logic directly into `_poll_loop`. Eliminates the function and the `processor` parameter threading through the call chain.
+- Q: How should page processing concurrency be handled inside the RAG agent loop? → A: Process pages in parallel with a fixed maximum concurrency controlled by an environment variable; avoid separate batching logic.
+- Q: How should invalid or missing page-concurrency env var values be handled? → A: Use default `4` when missing or invalid, and clamp minimum to `1`.
+- Q: How should final extracted-content ordering be handled when page processing runs in parallel? → A: Preserve original page-number order deterministically in final extracted content; parallelism affects execution only.
+- Q: How should failed pages be represented when building final state in the simplified agent flow? → A: Exclude failed pages from final extracted content, keep a simple list of failed page numbers with failure reason, and log key processing stages.
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - Extract Relevant PDF Content (Priority: P1)
+### User Story 1 - Run RAG as a Kafka Worker Process (Priority: P1)
 
-As a Planner Agent workflow, I need the RAG Agent to process uploaded PDFs page by page and keep only content relevant to the study prompt so downstream teaching receives focused material.
+As a platform operator, I need the RAG integration to run as a standalone background worker process so event processing is decoupled from HTTP service lifecycle concerns.
 
-**Why this priority**: Without reliable extraction and relevance filtering, no useful study material can be produced.
+**Why this priority**: This is the core architecture constraint for the feature; all other behavior depends on this runtime model.
 
-**Independent Test**: Can be fully tested by providing a valid input payload with one sample PDF and verifying page-level extraction records, relevance scores, and inclusion/skipping behavior.
+**Independent Test**: Start the worker process and verify a dedicated background consumer loop begins polling Kafka without requiring an HTTP service runtime.
 
 **Acceptance Scenarios**:
 
-1. **Given** a valid request with one or more PDF paths and a study prompt, **When** processing runs, **Then** every page in each reachable PDF is evaluated and logged in page audit output.
-2. **Given** extracted page content with relevance below threshold, **When** scoring is applied, **Then** that page is marked SKIPPED_IRRELEVANT and excluded from compiled material.
-3. **Given** a page that cannot be extracted or has no usable content, **When** extraction is attempted, **Then** the page is marked FAILED_EXTRACTION and processing continues.
+1. **Given** Kafka connectivity settings are present, **When** the worker starts, **Then** it initializes Kafka clients and starts a dedicated background consumer loop.
+2. **Given** the worker is running, **When** no events are available, **Then** the process remains alive and continues polling.
+3. **Given** a worker shutdown signal, **When** shutdown starts, **Then** the consumer loop exits and Kafka resources are closed cleanly.
 
 ---
 
-### User Story 2 - Compile Study Material for Teaching (Priority: P2)
+### User Story 2 - Verify Topic Presence Without Topic Creation (Priority: P2)
 
-As a Planner Agent workflow, I need one coherent Markdown study document from retained pages so it can be forwarded to the Teaching Agent without additional transformation.
+As an operator, I need startup behavior to check whether required topics already exist while avoiding automatic topic creation or backend API dependencies.
 
-**Why this priority**: The compiled document is the primary payload consumed by downstream tutoring behavior.
+**Why this priority**: Startup should be lightweight and safe in environments where topic provisioning is managed externally.
 
-**Independent Test**: Can be tested by running the full agent with a realistic prompt and verifying non-empty Markdown output containing organized sections and retained supporting content.
+**Independent Test**: Start the worker against a Kafka cluster with missing required topics and verify startup logs a clear warning while the worker still starts.
 
 **Acceptance Scenarios**:
 
-1. **Given** at least one retained page, **When** final compilation runs, **Then** the output contains a single non-empty Markdown document with coherent section headings.
-2. **Given** retained tables and image descriptions, **When** compilation runs, **Then** tabular and image-derived information is preserved in the final Markdown content.
+1. **Given** all required topics exist, **When** startup topic check runs, **Then** startup logs topic readiness and processing continues.
+2. **Given** one or more required topics are missing, **When** startup topic check runs, **Then** startup logs a clear warning listing missing topics and continues running.
+3. **Given** startup succeeds, **When** configuration is loaded, **Then** no backend topic-creation endpoint is called and no backend topic API setting is required.
 
 ---
 
-### User Story 3 - Return Contract-Safe Status and Audit (Priority: P3)
+### User Story 3 - Use Direct Consumer-to-Agent Flow Without Handler Abstraction (Priority: P3)
 
-As the Planner Agent integration point, I need schema-valid output with completion status and error reporting so I can decide whether to proceed, retry, or fail fast.
+As a maintainer, I need the consumer loop to call the RAG agent directly and publish completion events itself, so the runtime removes unnecessary handler and factory indirection while keeping typed interfaces.
 
-**Why this priority**: Planner orchestration depends on explicit status and page-level audit details.
+**Why this priority**: Removing intermediary abstractions makes event flow easier to reason about and reduces maintenance overhead.
 
-**Independent Test**: Can be tested by mixing valid and invalid file paths and verifying status, error list population, and mirrored request metadata in the output schema.
+**Independent Test**: Send an inbound request event and verify the consumer loop maps it directly to an `agent.py` call, receives output, and publishes `rag-complete` using `kafka.py` producer functions.
 
 **Acceptance Scenarios**:
 
-1. **Given** one valid PDF and one missing path, **When** processing completes, **Then** status is partial and non-fatal errors are reported.
-2. **Given** all files are unreadable, **When** processing cannot produce any successful extraction, **Then** status is failed and a fatal exception or failed-state behavior is raised consistently.
-3. **Given** a successful request, **When** output is returned, **Then** request_id, user_prompt, and schema_version are mirrored from input.
-4. **Given** successful page extraction, **When** output is returned, **Then** extracted_pages includes audit metadata only and omits retained page text content.
+1. **Given** an inbound request event on `rag`, **When** the consumer loop processes it, **Then** it directly calls `agent.py` with typed inputs and no handler layer.
+2. **Given** `agent.py` processing completes, **When** output is returned, **Then** the consumer loop publishes the completion payload to `rag-complete` through `kafka.py` producer helpers.
+3. **Given** advanced validation and edge-case handling are out of scope for this phase, **When** maintainers inspect the flow, **Then** explicit TODO markers identify deferred validation, metrics, and exception-hardening work.
 
 ---
 
 ### Edge Cases
 
-- One or more file paths do not exist.
-- A file exists but has zero readable pages.
-- A page contains images only and little or no text.
-- A page contains text but no tables or images.
-- Relevance threshold is set to 1.0, causing all pages to be skipped as irrelevant.
-- Table extraction succeeds on some pages and fails on others in the same file.
-- Image description generation fails for one image while other page extraction succeeds.
+- Kafka is reachable at startup but metadata fetch for topics partially fails.
+- Required topics are absent at startup but appear later while worker is already running.
+- Consumer receives malformed event payloads while strict validation is deferred.
+- Duplicate request events arrive for the same request identifier.
+- RAG pipeline execution fails for one event while worker must continue processing subsequent events.
+- Page concurrency env var is missing, non-numeric, or less than `1`; runtime falls back to bounded safe values without startup failure.
+- One or more page tasks fail during parallel execution; failed pages are excluded from extracted content while their page numbers and reasons are retained in a simple failure list.
+- `fitz.Document` handle is `None` or already-closed when extraction functions are called (caller responsibility; document lifecycle is managed by `agent.py`).
+- Monkeypatched module-level functions in tests (`create_producer`, `create_consumer`, `process_request_event`) must be restored between test cases to avoid state leakage.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: The system MUST accept a RAG Agent input payload containing request metadata, prompt, file paths, and extraction options.
-- **FR-002**: The system MUST process each provided PDF page by page and attempt extraction without requiring Planner or Teaching Agent runtime participation.
-- **FR-003**: The system MUST maintain strict scope to the RAG Agent and shared schema updates only.
-- **FR-004**: The system MUST produce page-level extraction audit entries containing file name, page number, relevance score, extraction status, OCR usage flag, and per-page errors.
-- **FR-005**: The system MUST support three page extraction statuses: SUCCESS, SKIPPED_IRRELEVANT, and FAILED_EXTRACTION.
-- **FR-006**: The system MUST score assembled page content against the user prompt and skip pages below the provided relevance threshold.
-- **FR-007**: The system MUST compile retained content into a single Markdown document intended as primary study material input for downstream teaching.
-- **FR-008**: The system MUST preserve relevant textual content and include extracted table and image-derived information when requested by input flags.
-- **FR-009**: The system MUST return output metadata that mirrors request_id, user_prompt, and schema_version from input.
-- **FR-010**: The system MUST return aggregate counters for total pages processed and total pages included.
-- **FR-011**: The system MUST report non-fatal errors in an errors list and continue processing remaining files/pages when possible.
-- **FR-012**: The system MUST return status as complete, partial, or failed, where partial indicates mixed success and failed indicates no usable completion path.
-- **FR-013**: The system MUST perform image understanding calls in one or more batches per page (bounded by VLM_BATCH_SIZE) and exactly one final compilation call after all pages have been processed.
-- **FR-014**: The system MUST expose extraction, assembly, scoring, prompt, configuration, and LLM client responsibilities through the requested module/file structure.
-- **FR-015**: The system MUST provide standalone test inputs including at least one sample PDF and a valid serialized sample input payload.
-- **FR-016**: The system MUST include automated tests that cover page counting, text/table/image extraction behavior, table serialization, relevance scoring high/low cases, schema-valid full-run output, partial failure handling, and strict relevance-threshold filtering.
-- **FR-017**: The system MUST define UX consistency requirements, including stable Markdown formatting conventions, predictable section organization, and clear labeling of retained study content.
-- **FR-018**: The system MUST define measurable performance requirements for synchronous processing, including per-request completion and graceful handling under expected document sizes.
-- **FR-019**: The system MUST load each source PDF document once per request and reuse that in-memory document handle across page-level extraction to avoid repeated document re-open operations.
-- **FR-020**: The system MUST keep runtime-only document handles outside serializable LangGraph state and manage their lifecycle within the request execution boundary.
-- **FR-021**: The system MUST define one project-level .env.local that includes a shared section and distinct agent-specific sections for configuration variables.
-- **FR-022**: The system MUST define one project-level requirements.txt with comment-based sections for shared dependencies and agent-specific dependencies (RAG, Planner, Teaching).
-- **FR-023**: The system MUST support batched image-description calls with batch size controlled by VLM_BATCH_SIZE and process batches within page boundaries while preserving image order.
-- **FR-024**: The system MUST support a configurable image-description instruction prompt that combines a general image-analysis directive with the request user_prompt context.
-- **FR-025**: The system MUST omit retained_content from extracted_pages in RAGAgentOutput; compiled_material is the only final text artifact returned in the response payload.
-- **FR-026**: The system MUST organize imports at the top of each file in grouped blocks with line breaks separating standard-library imports, third-party library imports, and project-local imports.
-- **FR-027**: The system MUST define fitz.Document type hints explicitly (e.g., dict[str, fitz.Document]) for document handle storage to ensure type-safety in static analysis and IDE support.
-- **FR-028**: The system MUST support remote embedding via LiteLLM API calls as the primary embedding source, replacing local sentence-transformers for consistency with text and vision model configuration patterns.
-- **FR-029**: The system MUST provide separate provider environment variables `RAG_TEXT_PROVIDER`, `RAG_VLM_PROVIDER`, and `RAG_EMBEDDING_PROVIDER` in .env.local, each defaulting to `hosted_vllm`.
-- **FR-030**: The system MUST include provider values in LiteLLM configuration so model routing uses `<provider>/<model>` composition for text, VLM, and embedding calls.
-- **FR-031**: The system MUST provide `RAG_TEXT_MODEL`, `RAG_TEXT_API_BASE`, `RAG_TEXT_API_KEY`, `RAG_VLM_MODEL`, `RAG_VLM_API_BASE`, `RAG_VLM_API_KEY`, `RAG_EMBEDDING_MODEL`, `RAG_EMBEDDING_API_BASE`, `RAG_EMBEDDING_API_KEY`, and `RAG_EMBEDDING_MAX_TOKENS` in .env.local to configure modality-specific LiteLLM endpoints and credentials.
+- **FR-001**: The system MUST run RAG Kafka integration as a standalone worker process and MUST NOT require an HTTP service runtime to process events.
+- **FR-002**: The system MUST start and manage a dedicated background consumer loop thread for continuous Kafka polling.
+- **FR-003**: The system MUST remove startup topic-creation behavior and MUST NOT perform external backend API calls for topic provisioning.
+- **FR-004**: The system MUST perform a startup check against Kafka metadata to determine whether required topics exist.
+- **FR-005**: If required topics are missing at startup, the system MUST log a clear actionable warning and continue starting.
+- **FR-006**: The system MUST consume request events from topic `rag` and dispatch them to the existing RAG pipeline path.
+- **FR-007**: The system MUST publish completion events to topic `rag-complete` after each processing attempt reaches terminal state.
+- **FR-008**: The system MUST remove the request handler abstraction; the consumer loop MUST ingest Kafka events and dispatch directly to `agent.py`.
+- **FR-009**: Public function interfaces in the worker, `kafka.py`, `agent.py`, and helper modules MUST use explicit typed inputs and outputs and SHOULD avoid untyped generic placeholders. Concrete `kafka-python` types (`KafkaConsumer`, `KafkaProducer`) MUST be used directly for all Kafka-related type annotations; structural Protocol stubs (`KafkaConsumerProtocol`, `KafkaProducerProtocol`, `ConsumerRecordProtocol`) MUST be removed.
+- **FR-010**: The worker MUST continue processing after single-event failures and MUST log error stages without terminating the process.
+- **FR-011**: The system MUST support clean shutdown by stopping the consumer loop thread and closing Kafka producer/consumer resources.
+- **FR-012**: The runtime MUST remove non-functional `service.py` from active structure and rely on a simplified worker-centric module layout.
+- **FR-013**: The worker startup path in `worker.py` MUST initialize the threaded consumer loop and perform a direct Kafka topic presence check before entering steady-state polling.
+- **FR-014**: The `kafka.py` module MUST initialize Kafka connector settings from environment variables directly and MUST expose producer/consumer creation functions (`create_producer`, `create_consumer`), a completion-event publisher (`publish_rag_complete`), and a topic-presence checker (`check_required_topics`). Trivial one-line wrapper functions (`consumer_subscribe_rag`, `poll_records`, `close_consumer`, `close_producer`) MUST be removed; callers MUST invoke consumer and producer methods directly.
+- **FR-015**: Security option application (`apply_kafka_security_options`) MUST be inlined directly into `kafka.py`'s private kwargs builder functions and MUST be removed from `helpers.py`. No other module should own Kafka client lifecycle or security-option wiring.
+- **FR-016**: The `agent.py` module MUST remain Kafka-agnostic and MUST only return processing output; it MUST NOT publish events directly.
+- **FR-017**: `helpers.py` MUST contain only environment-variable extraction helper functions (`get_text_llm_config`, `get_vlm_config`, `get_embedding_config`, `get_kafka_runtime_config`, and private `_read_*` helpers). Security-option application MUST be moved to `kafka.py`. All class-based abstractions and validators are out of scope and MUST be deferred as TODO tasks if needed.
+- **FR-018**: The system MUST define stable event contract expectations for inbound request and outbound completion messages.
+- **FR-019**: The system MUST define measurable performance and reliability expectations for poll-to-completion throughput and emission success.
+- **FR-020**: The system MUST define observability requirements for lifecycle stages across startup checks, consume, process, publish, and failures.
+- **FR-021**: `RAGWorker.__init__` MUST NOT accept injectable factory callables (`producer_factory`, `consumer_factory`, `request_processor`). The worker MUST call `create_producer`, `create_consumer`, and `process_request_event` directly. Test isolation MUST be achieved by monkeypatching those module-level functions rather than injecting alternatives through the constructor.
+- **FR-022**: `process_consumer_batch` MUST be removed as a standalone function. Poll-and-dispatch logic MUST be inlined directly into `_poll_loop`, eliminating the processor-callable indirection and the `RequestProcessor` type alias.
+- **FR-023**: Extraction functions in `tools.py` (`extract_text_from_page`, `extract_tables_from_page`, `extract_images_from_page`) MUST accept only an open `fitz.Document` object. The `_with_optional_open` helper and all path-string branching MUST be removed. The `open_pdf` utility function MAY remain as the caller-side document opener. The `_page_from_source` internal guard (`if page_number < 1`) MUST be removed; the agent guarantees 1-based page numbers from its own loop.
+- **FR-024**: `agent.py` MUST process document pages independently in parallel rather than strictly sequentially. Parallel execution MUST use a fixed maximum concurrency limit.
+- **FR-025**: The maximum page-parallelism value MUST be configured through an environment variable. If the variable is missing or invalid, the runtime MUST default to `4`; effective values MUST be clamped to a minimum of `1`.
+- **FR-026**: The implementation MUST NOT introduce a separate page-batching orchestration layer; the agent should dispatch page work directly and rely on the downstream inference server to manage request-level batching behavior.
+- **FR-027**: Individual page-processing logic and per-page output semantics MUST remain functionally equivalent to the current single-page processing behavior.
+- **FR-028**: When pages are processed in parallel, final extracted content and retained-page aggregation MUST preserve deterministic original page order (by source file and page number), not worker completion order.
+- **FR-029**: `agent.py` MUST exclude failed pages from final extracted content aggregation and retained-page context. Failed pages MUST be tracked in a simple failure list containing page number and failure reason.
+- **FR-030**: Logging MUST capture key stages for the simplified page flow (`page_dispatched`, `page_processed`, `page_failed`, `state_reduced`) with request correlation where available.
 
 ### Key Entities *(include if feature involves data)*
 
-- **RAGAgentInput**: Request contract containing request_id, user_prompt, file_paths, include_tables, include_images, relevance_threshold, and schema_version.
-- **RAGAgentOutput**: Response contract containing mirrored metadata, compiled_material, extracted_pages audit list, aggregate counters, errors, and final status.
-- **ExtractedPage**: Per-page audit record with source file reference, page number, relevance score, extraction status, OCR usage flag, and page-specific errors; excludes retained page text content in output.
-- **PageExtractionStatus**: Enum defining SUCCESS, SKIPPED_IRRELEVANT, and FAILED_EXTRACTION.
-- **Retained Page Content (Internal)**: Assembled page-level textual representation (text, table content, image descriptions) used internally for compilation but not returned in extracted_pages.
-- **Document Handle (fitz.Document)**: Opened PyMuPDF document instance with explicit fitz.Document type hint for type-safety; stored in dict[str, fitz.Document] and reused across page-level extraction within a single request lifecycle.
+- **RAGRequestEvent**: Inbound Kafka message payload consumed from `rag`, including request correlation and retrieval inputs.
+- **RAGCompletionEvent**: Outbound Kafka message payload produced to `rag-complete`, including result status and response content.
+- **WorkerRuntimeState**: Process-level state tracking loop status, startup topic check outcome, and shutdown signals.
+- **TopicPresenceCheckResult**: Startup check output identifying required topics, discovered topics, and missing-topic warnings.
+- **RequestLifecycleLogEntry**: Structured lifecycle record with request correlation and stage metadata.
+- **KafkaRuntimeGateway**: Functions in `kafka.py` responsible for env-based connector initialization and for creating/using producer and consumer objects. Annotated with concrete `KafkaConsumer` / `KafkaProducer` types; no Protocol stubs.
+- ~~`KafkaConsumerProtocol` / `KafkaProducerProtocol` / `ConsumerRecordProtocol`~~: **Removed.** Structural typing stubs replaced by concrete kafka-python types (FR-009).
+- ~~`RequestProcessor`~~: **Removed.** Type alias and injectable callback pattern replaced by direct function calls (FR-021, FR-022).
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: 100% of valid requests return schema-valid output matching the defined RAGAgentOutput contract.
-- **SC-002**: For requests with at least one relevant page, compiled_material is non-empty in at least 99% of successful or partial runs.
-- **SC-003**: For mixed-validity file lists (at least one valid and one invalid path), status is partial and errors is non-empty in 100% of runs.
-- **SC-004**: With relevance_threshold set to 1.0, total_pages_included equals 0 and all processed pages are marked SKIPPED_IRRELEVANT in 100% of runs.
-- **SC-005**: Generated study documents follow a consistent Markdown structure with section headings and preserved retained content in 100% of successful runs.
-- **SC-006**: Processing of a representative 5-10 page sample PDF completes synchronously within acceptable local development runtime, with no fatal crash on single-page extraction failures.
+- **SC-001**: 100% of worker starts attempt Kafka topic presence checks and emit a startup readiness or warning message.
+- **SC-002**: 100% of valid consumed `rag` events are dispatched into the RAG pipeline path.
+- **SC-003**: At least 99% of terminal processing attempts emit a corresponding `rag-complete` event.
+- **SC-004**: 100% of single-event failures are logged without terminating the worker process.
+- **SC-005**: Under representative load, p95 poll-to-completion latency remains within the agreed budget for this integration.
+- **SC-006**: 100% of exported function boundaries in worker Kafka modules are type-annotated in implementation review.
+- **SC-007**: After boilerplate reduction, the combined line count across `kafka.py`, `worker.py`, and `tools.py` MUST decrease (no new abstractions or stubs introduced to compensate for removed ones).
+- **SC-008**: With parallel page execution enabled, the agent MUST enforce the configured maximum in-flight page tasks and MUST never exceed the configured concurrency cap.
+- **SC-009**: Parallel runs over the same input MUST produce stable page ordering in extracted/retained outputs, matching source page order.
+- **SC-010**: For runs with page failures, 100% of failed pages MUST appear in the failure list with page number and reason, and 0 failed pages MUST appear in extracted content.
 
 ## Assumptions
 
-- Input files are PDFs and non-PDF formats are out of scope for this feature.
-- PDFs are primarily text-based for initial delivery; OCR is not required in this version.
-- Empty text on a page is recorded as FAILED_EXTRACTION and does not terminate the request.
-- Planner Agent and Teaching Agent behavior, orchestration, and prompt logic are out of scope.
-- Output artifact format is always Markdown.
-- The current branch remains unchanged for this specification task per user instruction.
-- The remote embedding API (configured via RAG_EMBEDDING_API_BASE and RAG_EMBEDDING_API_KEY) is available and operational at runtime; no local fallback model is required.
-- LiteLLM provider defaults are `hosted_vllm` for text, VLM, and embedding unless explicitly overridden via modality-specific provider environment variables.
-- fitz.Document type is available from the pymupdf package and can be imported directly for type annotations.
+- Topic provisioning is handled externally by infrastructure or deployment workflows.
+- Kafka cluster credentials and connectivity are available at worker startup.
+- Existing RAG pipeline behavior remains unchanged; this feature focuses on runtime structure and dispatch flow.
+- Deferred validation/metrics TODOs are acceptable for this phase as long as they are explicitly tracked.
+- Simplification and consolidation of module responsibilities are prioritized over introducing new abstraction layers in this iteration.
+- Current branch and feature directory remain unchanged for this update.

@@ -1,0 +1,14 @@
+[
+  {
+    "user_prompt": "Explain gradient descent from these notes",
+    "user_level": [],
+    "sid": "session-1",
+    "file_paths": ["/tmp/notes.pdf"]
+  },
+  {
+    "user_prompt": "Teach me photosynthesis and give me a quiz",
+    "user_level": ["beginner", "intermediate"],
+    "sid": "session-2",
+    "file_paths": []
+  }
+]

@@ -1,59 +1,127 @@
-# Research: Kafka Backend Integration Service
+# Research: Backend Kafka Startup Bootstrap + RAG Test-Event API
 
-## Decision 1: Kafka Admin Client Library
-- Decision: Use `kafka-python` `KafkaAdminClient` for topic management and broker connectivity checks.
-- Rationale: Mature Python client, straightforward admin APIs, and good compatibility with FastAPI sync startup hooks.
-- Alternatives considered: `confluent-kafka` admin API (high performance but heavier native dependency requirements), `aiokafka` (async-first, unnecessary for current sync admin scope).
+## Decision 1: Topic Name Source
+- **Decision**: Read topic names from `project/topics.get_all_topic_names()` as the single startup source.
+- **Rationale**: Centralized registry avoids config drift and keeps topic provisioning in one authoritative module.
+- **Alternatives considered**: Environment-provided topic lists (drift risk), hard-coded backend list (duplicate source of truth).
 
-## Decision 2: FastAPI Startup Connectivity Strategy
-- Decision: Initialize Kafka admin client during FastAPI lifespan startup and retry connection according to env-driven retry count and retry timeout.
-- Rationale: Ensures service readiness semantics are explicit and predictable before serving API calls while staying on non-deprecated framework APIs.
-- Alternatives considered: Lazy-initialize on first API call (delays failure and harms reliability), background retry after startup (unclear readiness state).
+## Decision 2: Bootstrap Placement
+- **Decision**: Keep topic bootstrap in `KafkaAdminService.bootstrap_topics(topic_names)` and call it from FastAPI lifespan startup.
+- **Rationale**: Preserves cohesion of Kafka admin operations and clean startup sequencing (`connect -> bootstrap -> serve -> close`).
+- **Alternatives considered**: Standalone helper in `main.py` (splits Kafka logic), direct client calls from lifespan (harder to test/mocks).
 
-## Decision 3: Environment Loading Precedence
-- Decision: Load `.env.local` when present, then allow already-initialized process environment variables to override file values.
-- Rationale: Supports local defaults while preserving container/orchestrator-injected runtime configuration.
-- Alternatives considered: `.env.local` only (breaks deployment injection), process env only (worse local developer ergonomics).
+## Decision 3: Idempotency + Non-Fatal Startup Errors
+- **Decision**: Treat existing topics as success and continue startup when individual topic creation fails, recording errors in `StartupTopicBootstrapResult`.
+- **Rationale**: Meets FR-003 and FR-008 while preserving observability via explicit warning logs.
+- **Alternatives considered**: Fail-fast on first topic error (violates spec behavior), silent ignore (insufficient diagnostics).
 
-## Decision 4: API Scope Boundary
-- Decision: Expose only one topic-creation API in this feature; no message relay, producer, or consumer endpoints.
-- Rationale: Keeps service responsibility minimal and aligned to requested admin/provisioning use case.
-- Alternatives considered: Broader Kafka management API set (out of scope), inter-service proxy capabilities (explicitly rejected).
+## Decision 4: Test-Event API Scope Pattern
+- **Decision**: Introduce topic-scoped test-event endpoint(s), starting with `rag`, and keep route behavior publish-only (no direct agent invocation).
+- **Rationale**: Aligns with FR-009 and FR-012 while establishing an extensible per-topic route pattern.
+- **Alternatives considered**: One generic topic endpoint for all payload types (weaker schema guarantees), direct service invocation route (violates scope boundary).
 
-## Decision 5: Docker Compose Topology
-- Decision: Provide root-level `docker-compose.yaml` with Kafka and Kafka UI services; pin Kafka to `apache/kafka:4.2.1`, keep Kafka UI on `provectuslabs/kafka-ui:latest`, and wire Kafka UI to `kafka:9092`.
-- Rationale: Satisfies clarified requirement for Apache Kafka image usage while retaining deterministic local reproducibility and immediate observability.
-- Alternatives considered: Bitnami Kafka image (rejected to avoid image-family drift from clarified requirement), `apache/kafka:latest` (rejected to avoid non-deterministic upgrades), Kafka-only compose (insufficient after Kafka UI clarification).
+## Decision 5: Environment Gating
+- **Decision**: Gate test-event routes by environment with dev/test enabled by default and production requiring explicit opt-in flag.
+- **Rationale**: Satisfies FR-013 and FR-014 and minimizes accidental production misuse.
+- **Alternatives considered**: Always-enabled routes (unsafe for prod), always-disabled unless enabled everywhere (friction in local testing).
 
-## Decision 6: Apache Kafka KRaft Compose Environment
-- Decision: Use KRaft-oriented environment keys aligned with Apache Kafka container guidance (`KAFKA_NODE_ID`, `KAFKA_PROCESS_ROLES`, listeners, quorum voters, replication-factor defaults).
-- Rationale: Keeps compose bootstrap self-contained without ZooKeeper, consistent with modern Kafka single-node local development setup.
-- Alternatives considered: ZooKeeper-based setup (unnecessary complexity for current scope), vendor-specific env key families not matching Apache Kafka docs.
+## Decision 6: Direct RAG Request Body
+- **Decision**: Use the `RAGRequestEvent` schema directly as the rag test-event request body, with model defaults applied where fields are omitted.
+- **Rationale**: Keeps the API contract simple and avoids merge logic while still providing a predictable default payload shape.
+- **Alternatives considered**: Separate override wrapper (extra indirection), custom request DTO (duplicates the schema).
 
-## Decision 7: Topic Creation Idempotency Behavior
-- Decision: Treat existing-topic requests as deterministic non-fatal responses (`already_exists`) rather than hard failures.
-- Rationale: Improves automation safety for repeated provisioning calls.
-- Alternatives considered: Raise error on duplicate topic creation (less user-friendly for internal automation).
+## Decision 7: Publish Metadata Contract
+- **Decision**: Return a normalized publish-result envelope with required correlation/status fields and optional Kafka metadata object (partition/offset/timestamp) when available.
+- **Rationale**: Meets FR-015 and FR-016 while handling partial metadata scenarios without breaking API shape.
+- **Alternatives considered**: Return raw broker object (leaky abstraction), omit metadata entirely (misses accepted clarification).
 
-## Decision 8: Retry Configuration Model
-- Decision: Use explicit environment variables for startup retry count and retry timeout seconds with strict validation.
-- Rationale: Makes startup behavior measurable and tunable per environment.
-- Alternatives considered: Hardcoded retry values (inflexible), exponential backoff with extra knobs (not required for first version).
+## Decision 8: Logging and Performance Validation
+- **Decision**: Keep startup summary logs at INFO, detailed outcomes at DEBUG, and validate two budgets: startup bootstrap <= 5s and test publish response <= 2s p95 in local dev.
+- **Rationale**: Satisfies observability and performance gates from constitution and spec success criteria.
+- **Alternatives considered**: Minimal logs only (insufficient traceability), no explicit response-time budget (performance gate miss).
 
-## Decision 9: Lifecycle Event Strategy
-- Decision: Use FastAPI lifespan events to perform Kafka admin initialization at startup and connection cleanup at shutdown; avoid deprecated `on_event` handlers.
-- Rationale: Keeps readiness and teardown behavior explicit, centralized at app boundary, and aligned with current framework guidance.
-- Alternatives considered: Deprecated `on_event` lifecycle handlers (rejected due to deprecation), lazy connection creation on first request (delayed failures), module-level singleton setup (harder to test and less deterministic teardown).
+## Decision 9: WebSocket Transport
+- **Decision**: Use Socket.IO via `python-socketio` (ASGI) mounted onto the FastAPI app for the frontend WebSocket channel.
+- **Rationale**: Native named-event listeners (`@sio.on(...)`) and `sio.emit(event, data, to=sid)` map directly to the spec's "lightweight listeners + emit named events" design and provide per-connection routing with minimal boilerplate (FR-020).
+- **Alternatives considered**: FastAPI/Starlette native `WebSocket` endpoints (requires a custom event-name dispatch layer), raw ASGI WebSocket (more boilerplate, no built-in event model).
 
-## Decision 10: Global Exception Handling Strategy
-- Decision: Add global FastAPI exception handlers for request validation errors, HTTP exceptions, and unhandled exceptions, returning one structured error envelope.
-- Rationale: Provides consistent client-facing error shape and simplifies observability/consumer parsing.
-- Alternatives considered: Per-route error shaping only (inconsistent coverage), default framework error bodies (inconsistent contract).
+## Decision 10: Shared WebSocket Contract Location
+- **Decision**: Define shared WebSocket contracts in `project/events.py` using event-name constants plus event body schemas. For now include `stream-tokens` with body fields `from_service`, `content`, and `metadata`.
+- **Rationale**: Frontend and backend must agree not only on event names but also on body shape. Keeping both in a shared module provides one source of truth and reduces contract drift (FR-021, FR-022).
+- **Alternatives considered**: Names-only in `events.py` with body schema elsewhere (higher drift risk), registry metadata + handlers (over-engineered for current scope).
 
-## Final Tradeoffs and Validation Notes
+## Decision 11: Session Identity and Connection Manager
+- **Decision**: Treat the application `session_id` as identical to the Socket.IO-generated `sid`; a simple `ConnectionManager` class maps `session_id -> connection` with minimal `get`/`set` methods. A user may own multiple independent sessions; each session is routed independently.
+- **Rationale**: All inbound data carries a `session_id`, so keying directly on `sid` removes any translation layer and keeps routing to a single lookup (FR-023, FR-024). Independence avoids cross-session leakage.
+- **Alternatives considered**: Separate app `session_id` mapped to `sid` (extra indirection), `user_id`-keyed many-to-one mapping (sessions are independent here, so not needed), Socket.IO rooms (unnecessary abstraction when `sid` already identifies the target).
 
-- Implementation keeps a synchronous startup path and synchronous admin API calls to reduce complexity for the first delivery.
-- Lifecycle management uses FastAPI lifespan events to avoid deprecated APIs and keep startup/shutdown orchestration in one place.
-- Local baseline from test harness:
-	- Startup with one retry and 1s retry timeout: ~1007 ms.
-	- Topic creation endpoint p95 (30 requests, mocked admin): ~2.60 ms.
+## Decision 12: Listener Placement and Emit Signature
+- **Decision**: Place lightweight Socket.IO listeners in a dedicated `backend_service/app/socket.py`, and expose `emit_event(event, payload, session_id)` in the same file to emit a named event to the connection identified by `session_id`. Listeners and `stream-tokens` emission logic are stubbed for later implementation.
+- **Rationale**: Centralizes WebSocket wiring in one file with a single emit entry point routed by `session_id` (== `sid`), matching FR-025 and FR-026 while keeping boilerplate minimal.
+- **Alternatives considered**: `emit_event(event, payload, user_id)` (routing is per-session, not per-user), spreading listeners across modules (harder to locate), fully implementing listeners now (spec defers behavior via TODO).
+
+## Decision 13: Deferred WebSocket Edge Cases
+- **Decision**: Defer disconnect cleanup, missing-`session_id` handling, concurrent-emit ordering/back-pressure, and WebSocket authentication via explicit TODO markers.
+- **Rationale**: Spec FR-027 mandates the simplest approach with minimum boilerplate; deferring non-essential resilience keeps the first iteration small and reviewable.
+- **Alternatives considered**: Implementing full lifecycle/auth now (scope creep against the spec's stated simplicity goal).
+
+## Decision 14: Add UserRequest Schema in Shared Backend Contracts
+- **Decision**: Add `UserRequest` to `project/schemas.py` with fields `user_prompt`, `user_level` (`list[str]`), and `sid`.
+- **Rationale**: The WebSocket and async request flow requires a standard backend request envelope keyed by session identity; defining it in shared schemas keeps downstream agent/backend contracts explicit (FR-028) while avoiding unused schema fields.
+- **Alternatives considered**: Defining `UserRequest` in `backend_service` only (less reusable), embedding this shape ad hoc in endpoint handlers (no central contract).
+
+## Decision 15: Validation Scope for New Schemas
+- **Decision**: Do not add custom validation or exception-handling logic for `stream-tokens` event body schema and `UserRequest` in this iteration.
+- **Rationale**: Explicitly matches the feature constraint to keep implementation minimal and defer hardening to later TODO tasks (FR-029).
+- **Alternatives considered**: Strict validators now (extra boilerplate and premature complexity).
+
+## Decision 16: User-Request API Endpoint Path and Method
+- **Decision**: Use `POST /api/chat/request` for accepting user requests with optional file uploads from the frontend.
+- **Rationale**: Clear and namespaced under `/api/chat/` for cohesive routing of conversation-related API routes; POST reflects state mutation (storing files and publishing an event).
+- **Alternatives considered**: `/api/requests` (less domain-specific), `/api/user-requests` (more verbose).
+
+## Decision 17: File Upload Constraints and Logging
+- **Decision**: Check for a maximum of 3 files per request; if exceeded, log a warning but do not reject the request.
+- **Rationale**: Satisfies FR-034's requirement for a simple count-based check while avoiding strict validation failures—allows logging of potential misuse without service interruption.
+- **Alternatives considered**: Silent ignore of extra files (insufficient diagnostics), strict 413 rejection (violates spec's simple, non-strict approach).
+
+## Decision 18: PlannerRequestEvent Schema and File Paths
+- **Decision**: Define `PlannerRequestEvent` in `project/schemas.py` with fields `user_prompt`, `user_level` (`list[str]`), `sid`, and `file_paths` (`list[str]` of absolute paths only). No per-file metadata is included.
+- **Rationale**: Meets FR-037 with minimal schema surface; absolute paths are sufficient for the planner to locate files without needing name/size metadata.
+- **Alternatives considered**: Include per-file metadata objects (unnecessary scope), relative paths (ambiguous when planner runs in different environment).
+
+## Decision 19: File Upload Directory Configuration and .gitignore
+- **Decision**: Store uploaded files in a directory configurable via the `UPLOAD_DIR` environment variable, defaulting to `./uploads`. Add `./uploads` to `.gitignore` to prevent accidental commits.
+- **Rationale**: Satisfies FR-032 and FR-033 with standard environment-based configuration and explicit version-control exclusion.
+- **Alternatives considered**: Hard-coded path only (no flexibility), no .gitignore entry (risk of accidental file commits).
+
+## Decision 20: Error Response Structure for User-Request API
+- **Decision**: Use a simple error response structure `{error: "<message>"}` with appropriate HTTP status codes (400 for validation failure, 500 for server errors).
+- **Rationale**: Matches FR-036 and keeps error handling consistent with the spec's stated "simple" approach while still providing diagnostic information.
+- **Alternatives considered**: Complex error objects with error codes and details (over-engineered for current scope), no structured error response (insufficient API clarity).
+
+## Decision 21: File Retention and Cleanup Policy
+- **Decision**: Retain uploaded files indefinitely in the `./uploads` directory in this iteration; cleanup policies and retention strategies are explicitly deferred to future iterations.
+- **Rationale**: Satisfies FR-038's requirement for a simple implementation by removing the cleanup concern from scope; retained files allow the planner to process requests asynchronously without time-pressure.
+- **Alternatives considered**: Auto-cleanup after planner processing (adds tracking complexity), time-based expiration (adds scheduler complexity and requires monitoring).
+
+## Decision 22: Parsed Form Model for UserRequest in Swagger
+- **Decision**: For `POST /api/chat/request`, accept `UserRequest` as parsed multipart form fields (`user_prompt`, `user_level`, `sid`) rather than a single JSON-string form field.
+- **Rationale**: This makes Swagger UI expose the request model as separate, typed fields while preserving multipart file uploads via `files`.
+- **Alternatives considered**: Single JSON string field (harder to use in Swagger), ad hoc endpoint-only DTOs (duplicates shared contract).
+
+## Decision 23: StreamTokensEventBody Schema Location and Re-Export Pattern
+- **Decision**: Define `StreamTokensEventBody` as the single canonical schema in `project/schemas.py` with fields `from_service` (str), `sid` (str), and `data` (dict). `project/events.py` imports and re-exports this schema by reference; any field change in `schemas.py` is automatically reflected everywhere.
+- **Rationale**: Single source of truth eliminates schema duplication and keeps `project/events.py` free of backend-only dependencies (frontend can import event names only if needed), while ensuring the WebSocket + Kafka payload remain synchronized.
+- **Alternatives considered**: Define separate Kafka and WebSocket schemas (duplication risk), keep schema only in `events.py` (makes it backend-specific and harder to reuse), import with alias (unclear which is canonical).
+
+## Decision 24: Backend Consumer Lifecycle Model (asyncio Background Task)
+- **Decision**: Implement the `backend-service-consumer` as an `asyncio` background task created via `asyncio.create_task(...)` inside the FastAPI lifespan startup block, before the service yields. The task runs continuously polling the `clarify-user-level` and `stream-tokens` Kafka topics, consuming messages and routing them to Socket.IO sessions via `emit_event`.
+- **Rationale**: Consistent with the existing lifespan pattern for synchronous Kafka admin operations; `asyncio` tasks are lightweight and naturally integrate with FastAPI's event loop, and they start/stop with the application lifecycle without needing a separate background thread or process.
+- **Alternatives considered**: Dedicated background thread (compatible but adds thread-safety complexity), separate worker process (over-engineered for in-process routing), manual polling in request handlers (couples WebSocket to request path, inefficient).
+
+## Decision 25: Socket Event Name Constants in WebSocketEvents Enum
+- **Decision**: Add two new socket event-name constants to the `WebSocketEvents` enum in `project/events.py`: `CLARIFY_USER_LEVEL_SKT = "clarify-user-level-skt"` and `STREAM_TOKENS_SKT = "stream-tokens-skt"`. Use these constants in all emit calls and listener registrations.
+- **Rationale**: Centralizing all socket event names in one enum (alongside the existing `STREAM_TOKENS` constant for the Kafka topic) prevents typos, simplifies refactoring, and ensures frontend and backend can share a single import of constant names without backend-specific schema dependencies.
+- **Alternatives considered**: Inline string literals in consumer code (typo risk, harder to refactor), separate constants file (one more import path), no constants at all (no type safety).
+
