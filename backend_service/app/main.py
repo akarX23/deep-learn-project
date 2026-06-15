@@ -22,6 +22,7 @@ from project.topics import get_all_topic_names
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+logging.getLogger("kafka").setLevel(logging.WARNING)
 
 
 def create_app(

@@ -12,6 +12,7 @@
 - Q: Should health checks be omitted for all services? → A: Add health checks for `kafka` and `backend-service`, and make all other in-scope services depend on both.
 - Q: How should uploaded files be shared between backend and RAG service? → A: Map a shared uploads volume so backend-generated paths are always valid and readable by the RAG agent.
 - Q: What Kafka client logging level should be used across services? → A: For each agent and service, set Kafka logger level to warning using `logging.getLogger("kafka").setLevel(logging.WARNING)`.
+- Q: What LiteLLM client logging level should be used across services? → A: For each agent and service that uses LiteLLM, set LiteLLM logger level to warning using `logging.getLogger("LiteLLM").setLevel(logging.WARNING)`.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -82,6 +83,7 @@ As a maintainer, I can rely on a consistent containerization pattern for every a
 - **FR-011**: The system MUST configure every in-scope agent service (orchestrator, planner, RAG, teaching, quiz) to depend on both `kafka` and `backend-service`.
 - **FR-012**: The system MUST map a shared uploads volume between `backend-service` and `rag-agent` so file paths produced by backend remain valid and readable by RAG.
 - **FR-013**: The system MUST ensure each in-scope agent and service configures Kafka client logging at warning level (`logging.getLogger("kafka").setLevel(logging.WARNING)`).
+- **FR-014**: The system MUST ensure each in-scope agent and service that uses LiteLLM configures the LiteLLM logger at warning level (`logging.getLogger("LiteLLM").setLevel(logging.WARNING)`).
 
 ### Key Entities *(include if feature involves data)*
 
@@ -102,6 +104,7 @@ As a maintainer, I can rely on a consistent containerization pattern for every a
 - **SC-007**: 100% of in-scope agent services are configured with dependency links to both `kafka` and `backend-service`.
 - **SC-008**: 100% of backend-emitted upload paths used by RAG resolve to readable files through the shared uploads volume mapping.
 - **SC-009**: 100% of in-scope services that use Kafka configure the Kafka logger level to warning.
+- **SC-010**: 100% of in-scope services that use LiteLLM configure the LiteLLM logger level to warning.
 
 ## Assumptions
 

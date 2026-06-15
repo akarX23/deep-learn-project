@@ -14,7 +14,7 @@ Applies to in-scope application components:
 
 ## Required Service Contract
 Each in-scope component MUST have exactly one compose service entry with:
-- `build.context`: points to the component directory
+- `build.context`: points to repository root (`.`) so shared packages can be copied during image build
 - `build.dockerfile`: points to Dockerfile in component directory
 - `restart`: explicitly set to a restartable policy
 - Unique compose service name
@@ -38,6 +38,12 @@ Each in-scope component MUST have a corresponding Dockerfile in its own director
 
 - Every in-scope service that uses Kafka clients MUST set:
 	- `logging.getLogger("kafka").setLevel(logging.WARNING)`
+- Logging policy MUST be applied during service startup.
+
+## LiteLLM Logging Contract
+
+- Every in-scope service that uses LiteLLM MUST set:
+	- `logging.getLogger("LiteLLM").setLevel(logging.WARNING)`
 - Logging policy MUST be applied during service startup.
 
 ## Buildability Contract
@@ -67,6 +73,8 @@ The compose definition MUST support:
 | `teaching-agent` | `teaching_agent/` | `teaching_agent/Dockerfile` |
 | `quiz-agent` | `quiz_agent/` | `quiz_agent/Dockerfile` |
 
+All in-scope services use `build.context: .` and an explicit service-specific Dockerfile path.
+
 All service names above are required for command-level examples and validation steps.
 
 ## Verification Contract
@@ -79,6 +87,7 @@ A feature-complete implementation must satisfy all checks:
 6. Every in-scope agent service declares dependencies on both `kafka` and `backend-service` with health-aware conditions.
 7. Backend and RAG share uploads volume and path readability is validated.
 8. Kafka-using services apply warning-level Kafka logging policy.
+9. LiteLLM-using services apply warning-level LiteLLM logging policy.
 
 ## Independent Build Acceptance Checks
 

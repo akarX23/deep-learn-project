@@ -11,9 +11,9 @@
 
 **Purpose**: Align feature artifacts and identify the exact in-scope service list before implementation.
 
-- [ ] T001 Confirm in-scope service inventory and canonical names in specs/005-docker-agent-deployments/spec.md
-- [ ] T002 Align service-to-directory mapping table with implementation targets in specs/005-docker-agent-deployments/contracts/deployment-contract.md
-- [ ] T003 [P] Align quickstart commands with canonical compose service keys in specs/005-docker-agent-deployments/quickstart.md
+- [X] T001 Confirm in-scope service inventory and canonical names in specs/005-docker-agent-deployments/spec.md
+- [X] T002 Align service-to-directory mapping table with implementation targets in specs/005-docker-agent-deployments/contracts/deployment-contract.md
+- [X] T003 [P] Align quickstart commands with canonical compose service keys in specs/005-docker-agent-deployments/quickstart.md
 
 ---
 
@@ -23,10 +23,10 @@
 
 **CRITICAL**: No user story work should start until this phase is complete.
 
-- [ ] T004 Define all in-scope application service blocks with build stanzas in docker-compose.yaml
-- [ ] T005 Configure restart policy baseline for all in-scope services in docker-compose.yaml
-- [ ] T006 Preserve Kafka and Kafka UI infrastructure compatibility in docker-compose.yaml
-- [ ] T007 [P] Set host networking mode consistently for all services in docker-compose.yaml
+- [X] T004 Define all in-scope application service blocks with build stanzas in docker-compose.yaml
+- [X] T005 Configure restart policy baseline for all in-scope services in docker-compose.yaml
+- [X] T006 Preserve Kafka and Kafka UI infrastructure compatibility in docker-compose.yaml
+- [X] T007 [P] Set host networking mode consistently for all services in docker-compose.yaml
 
 **Checkpoint**: Compose foundation is ready for story-specific work.
 
@@ -40,17 +40,17 @@
 
 ### Implementation for User Story 1
 
-- [ ] T008 [P] [US1] Create backend Docker build definition in backend_service/Dockerfile
-- [ ] T009 [P] [US1] Create orchestrator Docker build definition in orchestrator_agent/Dockerfile
-- [ ] T010 [P] [US1] Create planner Docker build definition in planner_agent/Dockerfile
-- [ ] T011 [P] [US1] Create RAG Docker build definition in rag_agent/Dockerfile
-- [ ] T012 [P] [US1] Create teaching Docker build definition in teaching_agent/Dockerfile
-- [ ] T013 [P] [US1] Create quiz Docker build definition in quiz_agent/Dockerfile
-- [ ] T014 [US1] Add healthchecks for kafka and backend-service in docker-compose.yaml
-- [ ] T015 [US1] Add health-aware depends_on links from each agent to kafka and backend-service in docker-compose.yaml
-- [ ] T016 [US1] Add shared uploads volume mapping between backend-service and rag-agent in docker-compose.yaml
-- [ ] T017 [US1] Document uploads path compatibility validation steps in specs/005-docker-agent-deployments/quickstart.md
-- [ ] T018 [US1] Document health/dependency startup validation workflow in specs/005-docker-agent-deployments/quickstart.md
+- [X] T008 [P] [US1] Create backend Docker build definition in backend_service/Dockerfile
+- [X] T009 [P] [US1] Create orchestrator Docker build definition in orchestrator_agent/Dockerfile
+- [X] T010 [P] [US1] Create planner Docker build definition in planner_agent/Dockerfile
+- [X] T011 [P] [US1] Create RAG Docker build definition in rag_agent/Dockerfile
+- [X] T012 [P] [US1] Create teaching Docker build definition in teaching_agent/Dockerfile
+- [X] T013 [P] [US1] Create quiz Docker build definition in quiz_agent/Dockerfile
+- [X] T014 [US1] Add healthchecks for kafka and backend-service in docker-compose.yaml
+- [X] T015 [US1] Add health-aware depends_on links from each agent to kafka and backend-service in docker-compose.yaml
+- [X] T016 [US1] Add shared uploads volume mapping between backend-service and rag-agent in docker-compose.yaml
+- [X] T017 [US1] Document uploads path compatibility validation steps in specs/005-docker-agent-deployments/quickstart.md
+- [X] T018 [US1] Document health/dependency startup validation workflow in specs/005-docker-agent-deployments/quickstart.md
 
 **Checkpoint**: User Story 1 stack startup, readiness gating, and shared uploads access are independently verifiable.
 
@@ -64,11 +64,11 @@
 
 ### Implementation for User Story 2
 
-- [ ] T019 [US2] Define explicit build context and dockerfile mapping for each in-scope service in docker-compose.yaml
-- [ ] T020 [US2] Define stable image naming/tagging for each in-scope service in docker-compose.yaml
-- [ ] T021 [US2] Add independent build acceptance checks for each service in specs/005-docker-agent-deployments/contracts/deployment-contract.md
-- [ ] T022 [US2] Add per-service build command matrix in specs/005-docker-agent-deployments/quickstart.md
-- [ ] T023 [US2] Add single-service build timing validation notes for SC-004 in specs/005-docker-agent-deployments/quickstart.md
+- [X] T019 [US2] Define explicit build context and dockerfile mapping for each in-scope service in docker-compose.yaml
+- [X] T020 [US2] Define stable image naming/tagging for each in-scope service in docker-compose.yaml
+- [X] T021 [US2] Add independent build acceptance checks for each service in specs/005-docker-agent-deployments/contracts/deployment-contract.md
+- [X] T022 [US2] Add per-service build command matrix in specs/005-docker-agent-deployments/quickstart.md
+- [X] T023 [US2] Add single-service build timing validation notes for SC-004 in specs/005-docker-agent-deployments/quickstart.md
 
 **Checkpoint**: User Story 2 independent-build workflow is complete and testable on its own.
 
@@ -82,14 +82,14 @@
 
 ### Implementation for User Story 3
 
-- [ ] T024 [P] [US3] Add Kafka warning-level logger configuration in backend_service/app/main.py
-- [ ] T025 [P] [US3] Add Kafka warning-level logger configuration in orchestrator_agent/worker.py
-- [ ] T026 [P] [US3] Add Kafka warning-level logger configuration in planner_agent/worker.py
-- [ ] T027 [P] [US3] Add Kafka warning-level logger configuration in rag_agent/worker.py
-- [ ] T028 [P] [US3] Add Kafka warning-level logger configuration in teaching_agent/worker.py
-- [ ] T029 [P] [US3] Add Kafka warning-level logger configuration in quiz_agent/agent.py
-- [ ] T030 [US3] Encode Kafka logging policy verification requirements in specs/005-docker-agent-deployments/contracts/deployment-contract.md
-- [ ] T031 [US3] Add Kafka logger policy verification checklist in specs/005-docker-agent-deployments/quickstart.md
+- [X] T024 [P] [US3] Add Kafka warning-level logger configuration in backend_service/app/main.py
+- [X] T025 [P] [US3] Add Kafka warning-level logger configuration in orchestrator_agent/worker.py
+- [X] T026 [P] [US3] Add Kafka warning-level logger configuration in planner_agent/worker.py
+- [X] T027 [P] [US3] Add Kafka warning-level logger configuration in rag_agent/worker.py
+- [X] T028 [P] [US3] Add Kafka warning-level logger configuration in teaching_agent/worker.py
+- [X] T029 [P] [US3] Add Kafka warning-level logger configuration in quiz_agent/agent.py
+- [X] T030 [US3] Encode Kafka logging policy verification requirements in specs/005-docker-agent-deployments/contracts/deployment-contract.md
+- [X] T031 [US3] Add Kafka logger policy verification checklist in specs/005-docker-agent-deployments/quickstart.md
 
 **Checkpoint**: User Story 3 standardization and Kafka logging policy are independently auditable.
 
@@ -99,13 +99,14 @@
 
 **Purpose**: Perform final verification and keep all feature artifacts synchronized.
 
-- [ ] T032 [P] Run compose schema validation and record results in specs/005-docker-agent-deployments/quickstart.md
-- [ ] T033 [P] Run full-stack build validation and record results in specs/005-docker-agent-deployments/quickstart.md
-- [ ] T034 [P] Run targeted build validation matrix and record results in specs/005-docker-agent-deployments/quickstart.md
-- [ ] T035 Run healthcheck and dependency-gating runtime validation and record evidence in specs/005-docker-agent-deployments/quickstart.md
-- [ ] T036 Run shared uploads readability validation and record evidence in specs/005-docker-agent-deployments/quickstart.md
-- [ ] T037 Run restart behavior smoke validation and record evidence in specs/005-docker-agent-deployments/quickstart.md
-- [ ] T038 Validate cross-artifact consistency across specs/005-docker-agent-deployments/spec.md, specs/005-docker-agent-deployments/plan.md, specs/005-docker-agent-deployments/contracts/deployment-contract.md, and specs/005-docker-agent-deployments/quickstart.md
+- [X] T032 [P] Run compose schema validation and record results in specs/005-docker-agent-deployments/quickstart.md
+- [X] T033 [P] Run full-stack build validation and record results in specs/005-docker-agent-deployments/quickstart.md
+- [X] T034 [P] Run targeted build validation matrix and record results in specs/005-docker-agent-deployments/quickstart.md
+- [X] T035 Run healthcheck and dependency-gating runtime validation and record evidence in specs/005-docker-agent-deployments/quickstart.md
+- [X] T036 Run shared uploads readability validation and record evidence in specs/005-docker-agent-deployments/quickstart.md
+- [X] T037 Run restart behavior smoke validation and record evidence in specs/005-docker-agent-deployments/quickstart.md
+- [X] T038 Validate cross-artifact consistency across specs/005-docker-agent-deployments/spec.md, specs/005-docker-agent-deployments/plan.md, specs/005-docker-agent-deployments/contracts/deployment-contract.md, and specs/005-docker-agent-deployments/quickstart.md
+- [X] T039 Add LiteLLM warning-level logging policy across LiteLLM-using services and document it in specs/005-docker-agent-deployments/spec.md, specs/005-docker-agent-deployments/contracts/deployment-contract.md, and specs/005-docker-agent-deployments/quickstart.md
 
 ---
 

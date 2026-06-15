@@ -23,6 +23,8 @@ docker compose build planner-agent
 ```
 Expected result: only planner-agent image is rebuilt.
 
+Timing note for SC-004: each targeted service build should complete in under 3 minutes on a standard development machine.
+
 ### Per-service independent build matrix
 
 ```bash
@@ -82,7 +84,17 @@ logging.getLogger("kafka").setLevel(logging.WARNING)
 
 Expected result: all in-scope Kafka-using services configure Kafka logger level to warning.
 
-## 10. Validation notes
+## 10. Verify LiteLLM logger level policy
+
+Inspect service startup code for each LiteLLM-using service and confirm:
+
+```python
+logging.getLogger("LiteLLM").setLevel(logging.WARNING)
+```
+
+Expected result: all in-scope LiteLLM-using services configure LiteLLM logger level to warning.
+
+## 11. Validation notes
 
 - Compose schema/rendering validation:
 	- `docker compose config` must render successfully.
@@ -100,21 +112,26 @@ Expected result: all in-scope Kafka-using services configure Kafka logger level 
 	- Backend-produced upload paths are readable by RAG.
 - Kafka logging validation:
 	- Kafka logger level is set to warning in each Kafka-using service.
+- LiteLLM logging validation:
+	- LiteLLM logger level is set to warning in each LiteLLM-using service.
 - Restart policy validation:
 	- Stopping one in-scope container triggers restart attempt (`restart: unless-stopped`).
 
 ### Latest validation evidence (2026-06-15)
 
 - `docker compose config`: passed (compose renders with service_healthy dependency conditions).
-- `docker compose build backend-service orchestrator-agent planner-agent rag-agent teaching-agent quiz-agent`: passed.
-- `docker compose build planner-agent`: passed (targeted build).
-- `docker compose up -d`: passed; `kafka` and `backend-service` reached `healthy`.
-- `docker compose ps`: confirmed agent services running after healthy dependencies.
+- `docker compose build --quiet backend-service orchestrator-agent planner-agent rag-agent teaching-agent quiz-agent`: passed; all six images built (`~2.9s` each in this run).
+- Targeted build matrix passed for: `backend-service`, `orchestrator-agent`, `planner-agent`, `rag-agent`, `teaching-agent`, `quiz-agent`.
+- `docker compose up -d`: passed; `kafka` and `backend-service` reached `healthy`, and all agent services started.
+- `docker compose ps kafka backend-service orchestrator-agent planner-agent rag-agent teaching-agent quiz-agent`: passed; `kafka` and `backend-service` healthy.
 - `grep -n "healthcheck:" docker-compose.yaml`: two entries (kafka, backend-service).
 - `grep -n "condition: service_healthy" docker-compose.yaml`: health-aware dependency links present for kafka-ui and all in-scope agent services.
+- Shared uploads check: wrote `speckit_shared_check.txt` in `backend-service:/app/uploads` and read it from `rag-agent:/app/uploads` (content: `shared-volume-check`).
 - Restart smoke: `docker compose exec -T planner-agent sh -lc "kill -9 1"` followed by `docker compose ps planner-agent` confirmed container recovered to `Up`.
+- Kafka logger policy check: `grep -n 'logging.getLogger("kafka").setLevel(logging.WARNING)'` matched all in-scope service runtime files.
+- LiteLLM logger policy check: `grep -n 'logging.getLogger("LiteLLM").setLevel(logging.WARNING)'` matched all in-scope LiteLLM-using service runtime files.
 
-## 11. Stop the stack
+## 12. Stop the stack
 ```bash
 docker compose down
 ```

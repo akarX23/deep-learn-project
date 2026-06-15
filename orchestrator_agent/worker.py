@@ -30,6 +30,8 @@ from orchestrator_agent.agent import PlannerAgent
 from orchestrator_agent.config import PlannerConfig, get_planner_config
 
 logger = logging.getLogger(__name__)
+logging.getLogger("kafka").setLevel(logging.WARNING)
+logging.getLogger("LiteLLM").setLevel(logging.WARNING)
 
 # Completion topics that trigger agent.resume() — topic value → log label.
 _RESUME_TOPICS: dict[str, str] = {

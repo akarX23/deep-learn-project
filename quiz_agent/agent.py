@@ -26,6 +26,8 @@ _log_handler_console.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s]
 
 logger = logging.getLogger("quiz_agent")
 logger.setLevel(logging.DEBUG)
+logging.getLogger("kafka").setLevel(logging.WARNING)
+logging.getLogger("LiteLLM").setLevel(logging.WARNING)
 logger.addHandler(_log_handler_file)
 logger.addHandler(_log_handler_console)
 logger.propagate = False

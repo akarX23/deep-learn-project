@@ -66,6 +66,8 @@ services:
       - .env.local
     environment:
       BACKEND_KAFKA_BOOTSTRAP_SERVERS: ${BACKEND_KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}
+    volumes:
+      - ./uploads:/app/uploads
 
   orchestrator-agent:
     image: deep-learn/orchestrator-agent:local
@@ -117,6 +119,8 @@ services:
       - .env.local
     environment:
       BACKEND_KAFKA_BOOTSTRAP_SERVERS: ${BACKEND_KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}
+    volumes:
+      - ./uploads:/app/uploads
 
   teaching-agent:
     image: deep-learn/teaching-agent:local

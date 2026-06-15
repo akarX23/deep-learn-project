@@ -27,6 +27,8 @@ from rag_agent.kafka import (
 from rag_agent.utils.helpers import get_kafka_runtime_config
 
 logger = logging.getLogger(__name__)
+logging.getLogger("kafka").setLevel(logging.WARNING)
+logging.getLogger("LiteLLM").setLevel(logging.WARNING)
 
 
 def _extract_request_id(payload: dict[str, object]) -> str:
