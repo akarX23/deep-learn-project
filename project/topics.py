@@ -46,6 +46,16 @@ class TeachingTopics(str, Enum):
     TEACHING_COMPLETE = "teaching-complete"
 
 
+class PlannerInboundTopics(str, Enum):
+    """All topics consumed by the orchestrator_agent worker (single consumer)."""
+
+    INIT_PLANNER = "init-planner"
+    USER_CLARIFICATION_RESPONSE = "user-clarification-response"
+    RAG_COMPLETE = "rag-complete"
+    MATERIAL_COMPILED = "material-compiled"
+    QUIZ_COMPLETE = "quiz-complete"
+
+
 def get_rag_topic_names() -> list[str]:
     """Return the full set of topics required by the RAG Kafka service."""
 
