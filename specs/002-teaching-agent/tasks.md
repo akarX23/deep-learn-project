@@ -469,7 +469,7 @@ until ratified.
       - `test_metadata_reflection_iterations_is_zero_when_disabled` — N=0;
         verify `metadata.reflection_iterations == 0`
 
-- [ ] T043 Update `.env.local` — add reflection env var stubs (commented out) under
+- [~] T043 Update `.env.local` — add reflection env var stubs (commented out) under
       Teaching Agent section:
       `TEACHING_MAX_REFLECTION_ITERATIONS`, `TEACHING_REFLECTION_MODEL`,
       `TEACHING_REFLECTION_MAX_TOKENS`; per-mode:
@@ -478,12 +478,20 @@ until ratified.
       `TEACHING_ADVANCED_MAX_REFLECTION_ITERATIONS`,
       `TEACHING_BEGINNER_REFLECTION_MODEL`, etc.
       Active default: `TEACHING_MAX_REFLECTION_ITERATIONS=1` (uncommented)
+      NOTE: documentation-only — `.env.local` does not exist in the repo and is
+      git-ignored. Reflection resolves via code defaults (N=1, critique ceiling 512)
+      regardless. Add stubs locally only if per-mode tuning is needed (consistent
+      with T030/T033).
 
-- [ ] T044 Update `CLAUDE.md` — add Reflection section under Teaching Agent:
+- [~] T044 Update `CLAUDE.md` — add Reflection section under Teaching Agent:
       - Reflection env vars and defaults
       - How to disable: `TEACHING_MAX_REFLECTION_ITERATIONS=0`
       - `metadata.reflection_iterations` interpretation
       - Wall-clock budget table updated for reflection-on vs reflection-off
+      NOTE: deferred — the repo's `CLAUDE.md` currently has NO Teaching Agent section
+      (it is RAG-only; Teaching is still listed as "not yet implemented"). A reflection
+      subsection has nothing to attach to. Adding a full Teaching Agent section is out of
+      scope here; tracked separately as a pre-existing CLAUDE.md gap.
 
 ---
 
