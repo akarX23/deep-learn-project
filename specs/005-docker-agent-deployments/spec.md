@@ -10,6 +10,8 @@
 ### Session 2026-06-15
 
 - Q: Should health checks be omitted for all services? → A: Add health checks for `kafka` and `backend-service`, and make all other in-scope services depend on both.
+- Q: How should uploaded files be shared between backend and RAG service? → A: Map a shared uploads volume so backend-generated paths are always valid and readable by the RAG agent.
+- Q: What Kafka client logging level should be used across services? → A: For each agent and service, set Kafka logger level to warning using `logging.getLogger("kafka").setLevel(logging.WARNING)`.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -61,6 +63,7 @@ As a maintainer, I can rely on a consistent containerization pattern for every a
 - A component repeatedly fails at startup; restart behavior should continue per policy without requiring manual intervention.
 - Service name collisions occur in compose definitions; each component must have a unique service identity.
 - If either `kafka` or `backend-service` health check is failing, dependent services should remain blocked by dependency gating until both become healthy.
+- If backend emits an upload path that does not resolve in the RAG container, the workflow should fail fast with a clear error instead of silently skipping file access.
 
 ## Requirements *(mandatory)*
 
@@ -77,6 +80,8 @@ As a maintainer, I can rely on a consistent containerization pattern for every a
 - **FR-009**: The system MUST define a scope of included components covering agents and backend services in this repository.
 - **FR-010**: The system MUST keep local deployment startup as a single compose-driven operation.
 - **FR-011**: The system MUST configure every in-scope agent service (orchestrator, planner, RAG, teaching, quiz) to depend on both `kafka` and `backend-service`.
+- **FR-012**: The system MUST map a shared uploads volume between `backend-service` and `rag-agent` so file paths produced by backend remain valid and readable by RAG.
+- **FR-013**: The system MUST ensure each in-scope agent and service configures Kafka client logging at warning level (`logging.getLogger("kafka").setLevel(logging.WARNING)`).
 
 ### Key Entities *(include if feature involves data)*
 
@@ -95,6 +100,8 @@ As a maintainer, I can rely on a consistent containerization pattern for every a
 - **SC-005**: For unexpected container exit events during local runs, 100% of in-scope services attempt automatic restart per configured policy.
 - **SC-006**: `kafka` and `backend-service` each expose a passing compose healthcheck in local startup flows.
 - **SC-007**: 100% of in-scope agent services are configured with dependency links to both `kafka` and `backend-service`.
+- **SC-008**: 100% of backend-emitted upload paths used by RAG resolve to readable files through the shared uploads volume mapping.
+- **SC-009**: 100% of in-scope services that use Kafka configure the Kafka logger level to warning.
 
 ## Assumptions
 

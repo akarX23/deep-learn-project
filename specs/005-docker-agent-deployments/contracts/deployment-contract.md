@@ -28,6 +28,18 @@ Each in-scope component MUST have a corresponding Dockerfile in its own director
 - Every in-scope agent service (`orchestrator-agent`, `planner-agent`, `rag-agent`, `teaching-agent`, `quiz-agent`) MUST depend on both `kafka` and `backend-service`.
 - Dependency gating MUST use health-aware compose conditions so agents start only after both dependencies are healthy.
 
+## Shared Uploads Volume Contract
+
+- `backend-service` and `rag-agent` MUST share an uploads volume mapping.
+- The path emitted by backend for uploaded files MUST be valid and readable by RAG without manual path rewriting.
+- Volume mapping MUST be explicit in compose and documented for local development.
+
+## Kafka Logging Contract
+
+- Every in-scope service that uses Kafka clients MUST set:
+	- `logging.getLogger("kafka").setLevel(logging.WARNING)`
+- Logging policy MUST be applied during service startup.
+
 ## Buildability Contract
 The compose definition MUST support:
 - Full-stack build (`compose build` on all in-scope services)
@@ -65,6 +77,8 @@ A feature-complete implementation must satisfy all checks:
 4. Restart policy exists on all in-scope services.
 5. `kafka` and `backend-service` each have passing healthchecks.
 6. Every in-scope agent service declares dependencies on both `kafka` and `backend-service` with health-aware conditions.
+7. Backend and RAG share uploads volume and path readability is validated.
+8. Kafka-using services apply warning-level Kafka logging policy.
 
 ## Independent Build Acceptance Checks
 

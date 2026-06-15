@@ -32,6 +32,20 @@
 - Alternatives considered:
   - Rely only on manual startup observation (rejected: less repeatable and harder to enforce in CI).
 
+## Decision 6: Share uploads volume between backend and RAG
+- Decision: Map a single shared uploads volume path between `backend-service` and `rag-agent` so backend-emitted file paths resolve directly for RAG reads.
+- Rationale: Removes path translation ambiguity and guarantees consistent filesystem visibility for upload processing.
+- Alternatives considered:
+  - Copy files between services over API (rejected: adds unnecessary transfer overhead and coupling).
+  - Maintain separate per-service upload directories (rejected: violates path consistency requirement).
+
+## Decision 7: Standardize Kafka logger level to warning across services
+- Decision: Configure each in-scope service using Kafka clients to set `logging.getLogger("kafka").setLevel(logging.WARNING)` during startup.
+- Rationale: Reduces Kafka client log noise while preserving warning/error visibility.
+- Alternatives considered:
+  - Keep default Kafka logger level (rejected: noisy operational logs).
+  - Raise to ERROR only (rejected: may hide useful warning signals).
+
 ## Implementation Notes
 
 - Standard Dockerfile pattern for all in-scope services:
@@ -46,3 +60,5 @@
   - Apply `restart: unless-stopped` to all in-scope services.
   - Add explicit `healthcheck` blocks for `kafka` and `backend-service`.
   - Use compose dependency conditions so agent services depend on both `kafka` and `backend-service` readiness.
+  - Map shared uploads volume across backend and RAG with matching mount path expectations.
+  - Set Kafka logger to warning in each Kafka-using service process.

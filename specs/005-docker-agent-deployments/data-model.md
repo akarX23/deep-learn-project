@@ -50,9 +50,32 @@
   - All in-scope components must be represented in application_services.
   - compose_file_path must resolve to repository root compose file.
 
+## Entity: SharedUploadsVolume
+- Description: Cross-service filesystem mapping that allows backend and RAG to access the same uploaded files.
+- Fields:
+  - volume_name (string)
+  - host_path (string | null)
+  - backend_mount_path (string)
+  - rag_mount_path (string)
+  - path_contract (string): Rule defining how backend-emitted paths remain valid for RAG reads.
+- Validation Rules:
+  - backend_mount_path and rag_mount_path must represent the same logical location or deterministic alias contract.
+  - backend-emitted upload paths must be resolvable by RAG without mutation.
+
+## Entity: ServiceLoggingPolicy
+- Description: Runtime logging rule applied to each Kafka-using service.
+- Fields:
+  - service_name (string)
+  - logger_name (string) = "kafka"
+  - level (enum) = WARNING
+- Validation Rules:
+  - each in-scope Kafka-using service must define kafka logger level WARNING at startup.
+
 ## Relationships
 - ContainerizedComponent 1 -> 1 ComposeServiceEntry (for in-scope feature scope).
 - DeploymentStack 1 -> N ComposeServiceEntry.
+- DeploymentStack 1 -> 1 SharedUploadsVolume.
+- ContainerizedComponent N -> 1 ServiceLoggingPolicy (for Kafka-using services).
 
 ## State Transitions
 - ContainerizedComponent lifecycle states:

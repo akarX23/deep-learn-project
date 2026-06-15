@@ -7,33 +7,34 @@
 
 ## Summary
 
-Containerize all in-scope local runtime components (backend service and all agent services)
-with per-directory Dockerfiles and compose-managed build entries. Keep a single compose
-entrypoint for full-stack startup, support independent service image builds, enforce
-restart behavior for every in-scope service, add healthchecks to `kafka` and
-`backend-service`, and gate remaining agent services on both healthy dependencies.
+Containerize all in-scope runtime components with per-directory Dockerfiles and
+compose-managed build entries. Keep one-command local startup, enforce restart behavior,
+add healthchecks for `kafka` and `backend-service`, gate agents on both healthy
+dependencies, mount a shared uploads volume between backend and RAG so backend file paths
+remain valid for RAG reads, and standardize Kafka client log level at warning for each
+agent and service.
 
 ## Technical Context
 
 **Language/Version**: Python 3.11  
-**Primary Dependencies**: FastAPI (backend service), kafka-python clients, agent-specific Python dependencies from `requirements.txt`  
-**Storage**: N/A (feature is deployment packaging/orchestration, no new datastore)  
-**Testing**: docker compose config validation, service image build verification, runtime smoke checks for health/dependency gating and restart behavior  
+**Primary Dependencies**: FastAPI, kafka-python, docker compose, agent-specific Python dependencies from `requirements.txt`  
+**Storage**: Filesystem shared volume for uploads (`backend-service` <-> `rag-agent`), no new database  
+**Testing**: docker compose config validation, image build checks, startup/health/dependency smoke checks, shared-volume path readability checks  
 **Target Platform**: Linux container runtime with Docker Compose  
 **Project Type**: Multi-service backend (Python agents + backend API + Kafka infra)  
-**Performance Goals**: Full local stack startup command succeeds with all in-scope services reaching running state; per-service build completes under 3 minutes on standard dev hardware  
-**Constraints**: Healthchecks required only for `kafka` and `backend-service`; all agent services must depend on both; all in-scope services must be restartable  
-**Scale/Scope**: 6 application services (backend_service, orchestrator_agent, planner_agent, rag_agent, teaching_agent, quiz_agent) plus existing infrastructure services in compose
+**Performance Goals**: Full stack starts with healthy required services; per-service image build under 3 minutes on standard dev hardware  
+**Constraints**: Healthchecks required only for `kafka` and `backend-service`; all agents depend on both; uploads paths must be valid across backend and RAG containers; Kafka logger level warning for each in-scope service  
+**Scale/Scope**: 6 application services (backend_service, orchestrator_agent, planner_agent, rag_agent, teaching_agent, quiz_agent) plus infrastructure services (`kafka`, `kafka-ui`)
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- Code Quality Gate: PASS. Changes are constrained to Dockerfiles, compose definitions, and related docs; Python quality gates remain unchanged and must still pass in CI.
-- Testing Gate: PASS. Required verification includes compose parse validation, per-service build checks, healthcheck/dependency gating checks, and runtime restart smoke checks.
-- UX Consistency Gate: PASS (not user-interface impacting). Existing frontend interaction/accessibility patterns are unaffected.
-- Performance Gate: PASS. Measurable budgets defined as stack startup completion and independent service build time threshold (<3 minutes).
-- Maintainability Gate: PASS. Standardized Dockerfile pattern and explicit compose service naming/dependency contracts are documented in contracts/quickstart.
+- Code Quality Gate: PASS. Changes are constrained to deployment/runtime configuration and service entrypoint logging setup; existing Python quality gates remain applicable.
+- Testing Gate: PASS. Verification includes compose config, build checks, health/dependency gating checks, shared-volume readability checks, and restart smoke checks.
+- UX Consistency Gate: PASS (no user-facing UX changes).
+- Performance Gate: PASS. Measurable startup and build budgets are defined in specification criteria and quickstart validations.
+- Maintainability Gate: PASS. Contracts and quickstart explicitly document service mapping, readiness dependencies, shared volume contract, and logging-level policy.
 
 ## Project Structure
 
@@ -71,9 +72,7 @@ requirements.txt
 specs/005-docker-agent-deployments/
 ```
 
-**Structure Decision**: Existing multi-service Python repository structure is retained.
-This feature adds deployment artifacts (Dockerfiles and compose service entries) in-place
-within each service directory and central compose orchestration at repository root.
+**Structure Decision**: Preserve current multi-service repository layout and implement deployment/runtime configuration changes in-place (Dockerfiles, compose, service worker logging settings, and spec artifacts).
 
 ## Complexity Tracking
 
@@ -85,8 +84,8 @@ within each service directory and central compose orchestration at repository ro
 
 ## Post-Design Constitution Check
 
-- Code Quality Gate: PASS. Design keeps changes isolated to deployment artifacts with no non-essential architecture churn.
-- Testing Gate: PASS. Design includes explicit verification strategy for compose configuration, image builds, health/dependency gating, and restart behavior checks.
-- UX Consistency Gate: PASS. Feature does not alter user-facing UX pathways.
-- Performance Gate: PASS. Design encodes measurable startup/build budgets defined in specification criteria.
-- Maintainability Gate: PASS. Contracts and quickstart define repeatable service naming/build/restart/healthcheck/dependency conventions.
+- Code Quality Gate: PASS. Design minimizes churn and scopes edits to deployment and service runtime configuration.
+- Testing Gate: PASS. Design provides deterministic validation points for healthchecks, dependencies, shared volume readability, and restart behavior.
+- UX Consistency Gate: PASS. No user-interface behavior is altered.
+- Performance Gate: PASS. Startup and build budgets remain measurable and validated in quickstart.
+- Maintainability Gate: PASS. Added contracts for volume mapping and Kafka logging policy improve operational clarity.
