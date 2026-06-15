@@ -51,18 +51,18 @@
 
 ### Tests for User Story 1
 
-- [ ] T013 [P] [US1] Add teaching token stream ordering test in `ui_frontend/tests/test_chat_stream.py`
-- [ ] T014 [P] [US1] Add planner status rendering state test in `ui_frontend/tests/test_status_panel.py`
-- [ ] T015 [P] [US1] Add reconnect transition integration test in `ui_frontend/tests/test_websocket_client.py`
+- [X] T013 [P] [US1] Add teaching token stream ordering test in `ui_frontend/tests/test_chat_stream.py`
+- [X] T014 [P] [US1] Add planner status rendering state test in `ui_frontend/tests/test_status_panel.py`
+- [X] T015 [P] [US1] Add reconnect transition integration test in `ui_frontend/tests/test_websocket_client.py`
 
 ### Implementation for User Story 1
 
-- [ ] T016 [US1] Implement chat stream reducer for `teaching.token` and `teaching.complete` in `ui_frontend/state.py`
-- [ ] T017 [US1] Implement planner status reducer for `planner.status` in `ui_frontend/state.py`
-- [ ] T018 [US1] Wire US1 event routes in `ui_frontend/router.py`
-- [ ] T019 [US1] Render Chat tab with incremental token append behavior in `ui_frontend/app.py`
-- [ ] T020 [US1] Render live Status panel connection and planner progress UI in `ui_frontend/app.py`
-- [ ] T021 [US1] Integrate reconnect callbacks and UI state transitions in `ui_frontend/websocket_client.py`
+- [X] T016 [US1] Implement chat stream reducer for `teaching.token` and `teaching.complete` in `ui_frontend/state.py`
+- [X] T017 [US1] Implement planner status reducer for `planner.status` in `ui_frontend/state.py`
+- [X] T018 [US1] Wire US1 event routes in `ui_frontend/router.py`
+- [X] T019 [US1] Render Chat tab with incremental token append behavior in `ui_frontend/app.py`
+- [X] T020 [US1] Render live Status panel connection and planner progress UI in `ui_frontend/app.py`
+- [X] T021 [US1] Integrate reconnect callbacks and UI state transitions in `ui_frontend/websocket_client.py`
 
 **Checkpoint**: US1 fully functional and independently testable.
 

@@ -11,7 +11,10 @@ from project.schemas import (
     EvaluationState,
     FrontendSession,
     PlannerStatusState,
+    PlannerStatusPayload,
     QuizState,
+    TeachingCompletePayload,
+    TeachingTokenPayload,
 )
 
 _ALLOWED_TABS = {"chat", "quiz", "evaluation"}
@@ -123,3 +126,60 @@ def mark_failed(session: FrontendSession, error: str) -> FrontendSession:
             )
         }
     )
+
+
+def apply_teaching_token(
+    session: FrontendSession,
+    payload: TeachingTokenPayload,
+) -> FrontendSession:
+    """Append in-order token chunks to chat state and ignore duplicates."""
+    chat_state = session.chat_state
+
+    if chat_state.stream_id == payload.stream_id and payload.sequence <= chat_state.last_sequence:
+        return session
+
+    if chat_state.stream_id != payload.stream_id:
+        chat_state = ChatStreamState(stream_id=payload.stream_id)
+
+    updated_chat_state = chat_state.model_copy(
+        update={
+            "stream_id": payload.stream_id,
+            "rendered_text": chat_state.rendered_text + payload.token,
+            "last_sequence": payload.sequence,
+            "is_complete": payload.is_final,
+        }
+    )
+    return session.model_copy(update={"chat_state": updated_chat_state})
+
+
+def apply_teaching_complete(
+    session: FrontendSession,
+    payload: TeachingCompletePayload,
+) -> FrontendSession:
+    """Finalize chat stream and optionally apply server-provided final text."""
+    final_text = payload.final_text or session.chat_state.rendered_text
+    updated_chat_state = session.chat_state.model_copy(
+        update={
+            "stream_id": payload.stream_id,
+            "rendered_text": final_text,
+            "is_complete": True,
+        }
+    )
+    return session.model_copy(update={"chat_state": updated_chat_state})
+
+
+def apply_planner_status(
+    session: FrontendSession,
+    payload: PlannerStatusPayload,
+    updated_at: datetime | None = None,
+) -> FrontendSession:
+    """Update planner status panel fields for the latest planner event."""
+    updated_status = session.planner_status.model_copy(
+        update={
+            "stage": payload.stage,
+            "message": payload.message,
+            "progress_percent": payload.progress_percent,
+            "updated_at": updated_at or _now_utc(),
+        }
+    )
+    return session.model_copy(update={"planner_status": updated_status})

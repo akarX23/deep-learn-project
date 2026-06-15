@@ -3,24 +3,26 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from datetime import datetime, timezone
 
 from project.schemas import (
     AgentEvent,
-    ChatStreamState,
     DiagnosticEvent,
     DiagnosticSeverity,
     EvaluationResultPayload,
-    EvaluationState,
+    EventType,
     FrontendSession,
     PlannerStatusPayload,
-    PlannerStatusState,
     QuizEventPayload,
     QuizPhase,
-    QuizState,
     SystemErrorPayload,
     TeachingCompletePayload,
     TeachingTokenPayload,
+)
+from ui_frontend.state import (
+    apply_planner_status,
+    apply_teaching_complete,
+    apply_teaching_token,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,9 +43,10 @@ def _add_diagnostic(
 ) -> FrontendSession:
     """Add a diagnostic entry to the session."""
     diag = DiagnosticEvent(
-        event_type=event_type,
         severity=severity,
-        message=message,
+        reason=message,
+        event_excerpt=event_type,
+        recorded_at=datetime.now(timezone.utc),
     )
     updated_diagnostics = list(session.diagnostics) + [diag]
     return session.model_copy(update={"diagnostics": updated_diagnostics})
@@ -65,31 +68,7 @@ def _handle_teaching_token(
             f"Invalid payload: {exc}",
         )
 
-    chat_state = session.chat_state
-    stream_id = payload.stream_id
-
-    # Check for duplicate sequence
-    if (
-        chat_state.stream_id == stream_id
-        and payload.sequence <= chat_state.last_sequence
-    ):
-        logger.debug(
-            f"Ignoring duplicate/out-of-order token: seq={payload.sequence} "
-            f"(last={chat_state.last_sequence})"
-        )
-        return session
-
-    # Append token and update sequence
-    updated_text = chat_state.rendered_text + payload.token
-    updated_chat_state = chat_state.model_copy(
-        update={
-            "stream_id": stream_id,
-            "rendered_text": updated_text,
-            "last_sequence": payload.sequence,
-        }
-    )
-
-    return session.model_copy(update={"chat_state": updated_chat_state})
+    return apply_teaching_token(session, payload)
 
 
 def _handle_teaching_complete(
@@ -108,11 +87,7 @@ def _handle_teaching_complete(
             f"Invalid payload: {exc}",
         )
 
-    # Mark stream as complete
-    updated_chat_state = session.chat_state.model_copy(
-        update={"is_complete": True}
-    )
-    return session.model_copy(update={"chat_state": updated_chat_state})
+    return apply_teaching_complete(session, payload)
 
 
 def _handle_planner_status(
@@ -131,15 +106,7 @@ def _handle_planner_status(
             f"Invalid payload: {exc}",
         )
 
-    updated_status = session.planner_status.model_copy(
-        update={
-            "stage": payload.stage,
-            "message": payload.message,
-            "progress_percent": payload.progress_percent,
-            "updated_at": event.timestamp,
-        }
-    )
-    return session.model_copy(update={"planner_status": updated_status})
+    return apply_planner_status(session, payload, updated_at=event.timestamp)
 
 
 def _handle_quiz_event(
@@ -243,13 +210,13 @@ def route_event(session: FrontendSession, event: AgentEvent) -> FrontendSession:
     Returns:
         Updated session with event applied or diagnostic collected
     """
-    event_type = event.event_type
+    event_type = event.event_type.value
 
     try:
         if event_type in TEACHING_EVENTS:
-            if event_type == "teaching.token":
+            if event.event_type == EventType.TEACHING_TOKEN:
                 return _handle_teaching_token(session, event)
-            elif event_type == "teaching.complete":
+            if event.event_type == EventType.TEACHING_COMPLETE:
                 return _handle_teaching_complete(session, event)
 
         elif event_type in PLANNER_EVENTS:
@@ -270,7 +237,7 @@ def route_event(session: FrontendSession, event: AgentEvent) -> FrontendSession:
                 session,
                 DiagnosticSeverity.WARNING,
                 event_type,
-                f"Unknown event type",
+                "Unknown event type",
             )
 
     except Exception as exc:

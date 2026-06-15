@@ -5,9 +5,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Callable, Optional
+from typing import Callable
 
-from project.schemas import AgentEvent, FrontendSession
+from project.schemas import AgentEvent, ConnectionLifecycleState
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ class WebSocketClient:
         self,
         websocket_url: str,
         on_event: Callable[[AgentEvent], None],
-        on_state_change: Callable[[str], None],
+        on_state_change: Callable[[ConnectionLifecycleState, str | None], None],
     ):
         """
         Initialize the WebSocket client.
@@ -40,19 +40,26 @@ class WebSocketClient:
         self.retry_count = 0
         self._running = False
 
+    def _emit_state(
+        self,
+        state: ConnectionLifecycleState,
+        last_error: str | None = None,
+    ) -> None:
+        self.on_state_change(state, last_error)
+
     async def connect(self) -> None:
         """Establish WebSocket connection."""
         try:
             import websockets
 
-            self.on_state_change("connecting")
+            self._emit_state(ConnectionLifecycleState.CONNECTING)
             self.websocket = await websockets.connect(self.websocket_url)
-            self.on_state_change("connected")
+            self._emit_state(ConnectionLifecycleState.CONNECTED)
             self.retry_count = 0
             logger.info(f"Connected to {self.websocket_url}")
         except Exception as exc:
             logger.error(f"Connection failed: {exc}")
-            self.on_state_change("failed")
+            self._emit_state(ConnectionLifecycleState.FAILED, str(exc))
             raise
 
     async def disconnect(self) -> None:
@@ -60,18 +67,21 @@ class WebSocketClient:
         if self.websocket:
             await self.websocket.close()
             self.websocket = None
-        self.on_state_change("disconnected")
+        self._emit_state(ConnectionLifecycleState.DISCONNECTED)
         logger.info("Disconnected from WebSocket")
 
     async def _handle_reconnect(self) -> None:
         """Attempt reconnection with bounded retry."""
         if self.retry_count >= MAX_RETRIES:
             logger.error(f"Max retries ({MAX_RETRIES}) exceeded")
-            self.on_state_change("failed")
+            self._emit_state(
+                ConnectionLifecycleState.FAILED,
+                f"Max retries ({MAX_RETRIES}) exceeded",
+            )
             return
 
         self.retry_count += 1
-        self.on_state_change("reconnecting")
+        self._emit_state(ConnectionLifecycleState.RECONNECTING)
         logger.info(f"Reconnect attempt {self.retry_count}/{MAX_RETRIES}")
 
         await asyncio.sleep(RECONNECT_DELAY_MS / 1000.0)
@@ -83,7 +93,7 @@ class WebSocketClient:
             if self.retry_count < MAX_RETRIES:
                 await self._handle_reconnect()
             else:
-                self.on_state_change("failed")
+                self._emit_state(ConnectionLifecycleState.FAILED, str(exc))
 
     async def run(self) -> None:
         """Main event loop: connect and consume messages."""
@@ -106,7 +116,7 @@ class WebSocketClient:
             logger.info("WebSocket run cancelled")
         except Exception as exc:
             logger.error(f"Fatal error in WebSocket loop: {exc}")
-            self.on_state_change("failed")
+            self._emit_state(ConnectionLifecycleState.FAILED, str(exc))
         finally:
             await self.disconnect()
 
@@ -130,7 +140,7 @@ class WebSocketClient:
 async def start_websocket_client(
     websocket_url: str,
     on_event: Callable[[AgentEvent], None],
-    on_state_change: Callable[[str], None],
+    on_state_change: Callable[[ConnectionLifecycleState, str | None], None],
 ) -> WebSocketClient:
     """Factory to create and start a WebSocket client."""
     client = WebSocketClient(websocket_url, on_event, on_state_change)
