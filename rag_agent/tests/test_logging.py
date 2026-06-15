@@ -2,11 +2,6 @@ from __future__ import annotations
 
 import logging
 
-import rag_agent.agent
-import rag_agent.handlers
-import rag_agent.kafka
-import rag_agent.worker
-
 
 def test_agent_module_logger_uses_dunder_name() -> None:
     module_logger = logging.getLogger("rag_agent.agent")
@@ -33,7 +28,6 @@ def test_worker_logs_startup_warning_for_missing_topics(caplog) -> None:
     import time
     from dataclasses import dataclass
 
-    from rag_agent.utils.helpers import KafkaRuntimeConfig
     from rag_agent.worker import RAGWorker
 
     @dataclass
@@ -45,7 +39,7 @@ def test_worker_logs_startup_warning_for_missing_topics(caplog) -> None:
         def __init__(self, topics):
             self._topics = topics
 
-        def subscribe(self, topics):
+        def subscribe(self, _topics):
             pass
 
         def poll(self, timeout_ms):
@@ -68,21 +62,40 @@ def test_worker_logs_startup_warning_for_missing_topics(caplog) -> None:
         def close(self):
             pass
 
-    config = KafkaRuntimeConfig(
-        bootstrap_servers="localhost:9092",
-        poll_timeout_ms=5,
-    )
+    config = {
+        "bootstrap_servers": "localhost:9092",
+        "client_id": "rag-service",
+        "consumer_group_id": "rag-service-consumer",
+        "poll_timeout_ms": 5,
+        "security_protocol": None,
+        "sasl_mechanism": None,
+        "sasl_username": None,
+        "sasl_password": None,
+        "ssl_cafile": None,
+    }
     # Only rag is present; rag-complete is missing
     fake_consumer = _FakeConsumer(topics={"rag"})
 
     with caplog.at_level(logging.WARNING, logger="rag_agent.worker"):
-        worker = RAGWorker(
-            config=config,
-            producer_factory=lambda _c: _FakeProducer(),
-            consumer_factory=lambda _c: fake_consumer,
-            handler_factory=lambda: type("H", (), {"process_request": lambda s, p, r=None: None})(),
-        )
-        worker.start()
-        worker.stop()
+        from rag_agent import worker as worker_mod
 
-    assert any("missing" in record.message.lower() or "startup_topic_check" in record.message for record in caplog.records)
+        original_create_consumer = worker_mod.create_consumer
+        original_create_producer = worker_mod.create_producer
+        original_process = worker_mod.process_request_event
+        try:
+            worker_mod.create_consumer = lambda _c: fake_consumer
+            worker_mod.create_producer = lambda _c: _FakeProducer()
+            worker_mod.process_request_event = lambda _payload, _producer: None
+
+            worker = RAGWorker(config=config)
+            worker.start()
+            worker.stop()
+        finally:
+            worker_mod.create_consumer = original_create_consumer
+            worker_mod.create_producer = original_create_producer
+            worker_mod.process_request_event = original_process
+
+    assert any(
+        "missing" in record.message.lower() or "startup_topic_check" in record.message
+        for record in caplog.records
+    )

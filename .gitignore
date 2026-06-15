@@ -23,6 +23,8 @@ htmlcov/
 # Environment files
 .env
 .env.local
+.env*
+*.log
 
 # OS/editor
 .DS_Store
@@ -33,3 +35,7 @@ Thumbs.db
 .idea/
 
 chat_logs
+
+# Uploaded user files
+uploads/
+./uploads

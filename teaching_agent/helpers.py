@@ -13,8 +13,8 @@ from project.schemas import (
 )
 
 
-# Matches an optional ```json or ``` fence wrapping the LLM response.
-_JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
+# Matches the opening fence line (```json or ```) at the start of a response.
+_JSON_FENCE_OPEN_RE = re.compile(r"^```(?:json)?\s*\n", re.MULTILINE)
 
 
 def build_messages(prompt: str) -> list[dict[str, str]]:
@@ -40,13 +40,16 @@ def parse_llm_response(raw: str) -> dict[str, Any]:
     text = raw.strip()
 
     # Strip markdown fences only when the entire response is fence-wrapped
-    # (i.e. the response starts with ```). Using match() rather than search()
-    # avoids falsely matching ``` blocks that appear inside JSON string values
-    # (e.g. a code example in the 'example' field).
+    # (i.e. the response starts with ``` or ```json). Strip the opening fence
+    # line, then find the LAST ``` as the closing delimiter so that triple-
+    # backtick code blocks inside JSON string values (e.g. in 'example') do
+    # not prematurely terminate the match.
     if text.startswith("```"):
-        fence_match = _JSON_FENCE_RE.match(text)
-        if fence_match:
-            text = fence_match.group(1).strip()
+        open_match = _JSON_FENCE_OPEN_RE.match(text)
+        if open_match:
+            body = text[open_match.end():]
+            close_pos = body.rfind("```")
+            text = (body[:close_pos] if close_pos != -1 else body).strip()
 
     try:
         parsed = json.loads(text)

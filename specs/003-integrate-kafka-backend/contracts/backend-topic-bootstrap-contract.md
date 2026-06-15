@@ -46,6 +46,19 @@
 - **Topics as of 2026-06-12**: `["rag", "rag-complete"]`
 - **Extension**: Add entries to `project/topics` enums; no backend service code changes needed.
 
+## Shared Schema Contract Dependencies
+
+- `project.schemas.StartupTopicBootstrapResult` defines startup bootstrap result structure.
+- `project.schemas.RAGRequestEvent` defines Kafka payload validation for `rag` test-event publishing.
+- The rag test-event response uses an inline JSON metadata object and does not introduce a separate metadata schema class.
+- The Kafka admin layer exposes a single shared producer reused by the test-events API.
+
+## Test-Event API Interaction with Startup
+
+- Test-event route registration depends on runtime route policy (dev/test default enabled, prod opt-in).
+- Topic bootstrap remains part of startup lifecycle regardless of test-event route enablement.
+- Successful startup bootstrap is a prerequisite for reliable test-event publishing on topic `rag`.
+
 ---
 
 ## Logging Contract

@@ -1,0 +1,15 @@
+{
+  "status": "ok",
+  "output_mode": "beginner",
+  "content": {
+    "explanation": "1. Recursion is when a process solves a problem by breaking it down into smaller versions of the same problem.\n2. Imagine a set of Russian nesting dolls, where each doll has a smaller version of itself inside.\n3. It matters because it helps solve complex problems by reducing them to simpler ones.\n4. It works by taking a problem, breaking it into a smaller version, solving that, and using the solution to solve the original problem, repeating this until the problem is small enough to solve directly.\n5. Beginners often get confused about when to stop the recursion, leading to infinite loops.",
+    "diagram": "graph TD\n    A[Start] --> B{Is problem small?}\n    B -->|Yes| C[Solve directly]\n    B -->|No| D[Break into smaller problem]\n    D --> E[Recursion]\n    E --> B",
+    "notes": "• Recursion breaks problems into smaller versions of themselves.\n• It keeps solving smaller problems until it reaches a problem small enough to solve directly.\n• The key is knowing when to stop the recursion.",
+    "example": "Imagine you want to count how many boxes are in a set of nested boxes. You start with the outer box, open it, and find a smaller box inside. You then open the smaller box and find an even smaller one, repeating this until you find a box with no smaller box inside. At each step, you count the box you've opened and then move to the smaller one, adding its count when you're done with it, until you've counted all boxes."
+  },
+  "metadata": {
+    "topic": "What is recursion?",
+    "tokens_used": 341,
+    "model": "groq/llama-3.3-70b-versatile"
+  }
+}

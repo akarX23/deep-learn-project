@@ -1,35 +1,48 @@
-# Implementation Plan: RAG Kafka Worker Simplification
+# Implementation Plan: RAG Agent Deterministic Parallel Loop Simplification
 
-**Branch**: `001-build-rag-retrieval-agent` | **Date**: 2026-06-12 | **Spec**: [spec.md](spec.md)  
-**Input**: Feature specification from `specs/001-rag-retrieval-agent/spec.md`
+**Branch**: `[001-build-rag-retrieval-agent]` | **Date**: 2026-06-14 | **Spec**: [spec.md](specs/001-rag-retrieval-agent/spec.md)
+**Input**: Feature specification from `/specs/001-rag-retrieval-agent/spec.md`
 
 ## Summary
 
-Simplify the `rag_agent/` module by: removing `service.py` and the dedicated `StructuredLogger` class, migrating all files to standard `logging.getLogger(__name__)`, adding a `utils/` directory containing helper-oriented modules (`helpers.py`, `llm_client.py`, `prompts.py`, `tools.py`), consolidating LLM + config responsibilities into `helpers.py`, reducing `agent.py` and the request handler to basic exception handling only with TODOs marking deferred behaviour, and confirming the standalone worker process runtime introduced in the prior iteration.
+Simplify `rag_agent/agent.py` by removing LangGraph StateGraph orchestration and replacing it with a deterministic loop that dispatches per-page work in parallel with bounded concurrency. Build only minimal final state from successful page extracted content, ignore failed pages from extracted content aggregation, keep a simple failure list, and retain stage logging for dispatch/process/fail/reduce.
 
 ## Technical Context
 
-**Language/Version**: Python 3.11  
-**Primary Dependencies**: kafka-python 2.0+, LiteLLM, PyMuPDF (fitz), sentence-transformers, pydantic v2  
-**Storage**: N/A  
-**Testing**: pytest  
-**Target Platform**: Linux (local dev + server)  
-**Project Type**: Background worker / CLI  
-**Performance Goals**: SC-005 — p95 poll-to-completion within agreed budget; SC-003 — ≥99% terminal attempts emit `rag-complete`  
-**Constraints**: No HTTP runtime dependency; simplicity over abstraction; deferred concerns must be marked with inline TODOs; no `Any` type in public interfaces where avoidable  
-**Scale/Scope**: Single-worker, single-cluster; processes one event at a time per poll batch
+**Language/Version**: Python 3.11
+**Primary Dependencies**: kafka-python, PyMuPDF (fitz), pydantic v2, litellm
+**Storage**: N/A (worker runtime, Kafka transport)
+**Testing**: pytest, ruff check, ruff format --check, python -m compileall
+**Target Platform**: Linux server worker process
+**Project Type**: Backend worker service
+**Performance Goals**:
+- Maintain SC-003 completion emit reliability target (>=99% terminal attempts)
+- Enforce bounded in-flight page tasks (SC-008)
+- Preserve deterministic output ordering under parallel execution (SC-009)
+**Constraints**:
+- No LangGraph StateGraph dependency in `agent.py` page processing flow
+- Keep validation and exception handling basic
+- Preserve Kafka-agnostic `agent.py` boundaries
+- Keep final state simple: extracted content from successful pages + simple failure list
+**Scale/Scope**:
+- Multi-file, multi-page request inputs
+- Parallelism applied inside one request execution
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **Code Quality Gate**: All changed files must pass `ruff check` and `ruff format --check`. No dead code, no commented-out blocks. `service.py` and `logging.py` must be deleted or emptied and removed from all imports.
-- **Testing Gate**: All existing passing tests must remain green after refactor. Tests that depend on `StructuredLogger` or `logging.py` must be updated. New handler simplification should include a regression test confirming basic dispatch still works.
-- **UX Consistency Gate**: N/A — background worker; no user-facing UI. Log output follows standard Python `logging` format; no emoji, no custom formatting class.
-- **Performance Gate**: No new I/O paths introduced. Removal of `StructuredLogger` JSON serialization reduces per-event overhead — no regression expected. SC-005 p95 budget inherited from existing behaviour.
-- **Maintainability Gate**: All deferred concerns must have explicit `# TODO:` comments. `helpers.py` docstring must note consolidated responsibilities. Non-obvious decisions (why `llm_client`/`config` merged, why `logging.py` removed) documented in `research.md`.
-
-**Post-design re-check**: All gates pass. No added complexity. Simplification reduces surface area.
+- Code Quality Gate: PASS
+  - Remove unnecessary orchestration abstraction and keep straightforward control flow.
+  - Maintain explicit typing and small function boundaries.
+- Testing Gate: PASS
+  - Add/adjust tests for deterministic ordering, failed-page exclusion, and failure-list behavior.
+- UX Consistency Gate: PASS (N/A direct UI)
+  - Operator-facing behavior is logging; ensure stage logs remain clear and consistent.
+- Performance Gate: PASS
+  - Bounded parallelism and deterministic reduction explicitly validated.
+- Maintainability Gate: PASS
+  - Fewer orchestration layers; simple state model documented in artifacts.
 
 ## Project Structure
 
@@ -37,55 +50,98 @@ Simplify the `rag_agent/` module by: removing `service.py` and the dedicated `St
 
 ```text
 specs/001-rag-retrieval-agent/
-├── plan.md              # This file
-├── research.md          # Phase 0 output
-├── data-model.md        # Phase 1 output
-├── quickstart.md        # Phase 1 output
+├── plan.md
+├── research.md
+├── data-model.md
+├── quickstart.md
 ├── contracts/
 │   └── rag-agent-contract.md
-└── tasks.md             # Phase 2 output (/speckit.tasks)
+└── tasks.md
 ```
 
-### Source Code (touched files)
+### Source Code (repository root)
 
 ```text
+project/
+├── schemas.py
+└── topics.py
+
 rag_agent/
-├── __init__.py
-├── agent.py                    # Simplified — basic exception handling only, TODOs for rest
-├── handlers.py                 # Simplified — basic dispatch, no StructuredLogger dependency
-├── kafka.py                    # Unchanged (topic-check logic lives here)
-├── worker.py                   # Simplified — remove StructuredLogger usage
-├── logging.py                  # DELETE (replaced by standard logging module)
-├── service.py                  # DELETE (was already a compatibility shim)
+├── agent.py
+├── kafka.py
+├── worker.py
 ├── utils/
-│   ├── __init__.py             # NEW
-│   ├── helpers.py              # MOVED + MERGED (helpers + llm_client + config functions)
-│   ├── llm_client.py           # MOVED from root — simplified to basic LLM/embedding calls
-│   ├── prompts.py              # MOVED from root — unchanged
-│   └── tools.py                # MOVED from root — unchanged
+│   ├── helpers.py
+│   ├── llm_client.py
+│   ├── prompts.py
+│   └── tools.py
 └── tests/
     ├── test_rag_agent.py
     ├── test_worker_runtime.py
-    ├── test_request_event.py
-    ├── test_completion_event.py
     ├── test_kafka_integration.py
-    └── test_logging.py         # UPDATE — remove StructuredLogger tests; add basicConfig test
+    └── test_logging.py
 ```
 
-**Structure Decision**: Flat module layout with `utils/` subdirectory. No service layer, no custom logging class. `helpers.py` in `utils/` is the consolidated home for pure helper functions, LLM call wrappers, and config loading. All other `utils/` files are existing modules moved without structural changes.
+**Structure Decision**: Keep worker-centric structure and implement simplified deterministic parallel loop directly in `rag_agent/agent.py` without LangGraph orchestration.
 
-## Data Flow
+## Phase 0: Outline & Research
 
-```
-[Kafka topic: rag]
-  → KafkaConsumer.poll()           # worker.py consumer loop thread
-  → process_consumer_batch()       # worker.py
-      → RAGRequestEventHandler.__call__(payload, producer)  # handlers.py
-          → parse_event(payload)   → RAGRequestEvent
-          → RAGAgent.run(input)    # agent.py (basic exception handling)
-              → utils/tools.py     # PDF extraction, scoring
-              → utils/helpers.py   # call_llm(), call_embedding(), assemble_page_content()
-          → build_completion_event()
-          → publish_rag_complete(producer, event)
-  → [Kafka topic: rag-complete]
-```
+1. Confirm simple bounded parallel loop pattern for per-page tasks.
+2. Confirm deterministic reduction strategy by pointer order.
+3. Confirm minimal final state model (successful extracted content + failure list).
+4. Capture decisions in `research.md`.
+
+## Phase 1: Design & Contracts
+
+1. Update `data-model.md` for simplified runtime state and failure list entity.
+2. Update contract for non-StateGraph execution and failed-page exclusion semantics.
+3. Update quickstart flow and logging stages.
+4. Keep `.github/copilot-instructions.md` plan reference pointing to current plan file.
+
+## Phase 2: Implementation Planning (Tasking Input)
+
+Planned implementation slices:
+1. Replace LangGraph page orchestration with deterministic bounded parallel loop.
+2. Build minimal final state from successful pages only.
+3. Add failure-list capture with page number + reason and stage logging.
+4. Keep basic validation/exception handling only.
+5. Run tests and quality gates.
+
+## Post-Design Constitution Check
+
+- Code Quality Gate: PASS
+  - Simplification reduces abstraction and state complexity.
+- Testing Gate: PASS
+  - Design includes deterministic-order and failure-list verification.
+- UX Consistency Gate: PASS
+  - Logging stage expectations explicitly documented.
+- Performance Gate: PASS
+  - Bounded parallelism requirement retained.
+- Maintainability Gate: PASS
+  - Final state model is intentionally minimal.
+
+## Complexity Tracking
+
+No constitution violations requiring exception.
+
+## Final Implementation Notes (2026-06-14)
+
+- Replaced LangGraph orchestration in `rag_agent/agent.py` with deterministic bounded parallel dispatch using `ThreadPoolExecutor`.
+- Preserved deterministic reduction by pointer order while allowing out-of-order worker completion.
+- Excluded failed pages from final extracted content aggregation and retained-page compilation context.
+- Added simple failed-page tracking via error summary entries in format `file:page:<n>: <reason>`.
+- Added stage logs for `page_dispatched`, `page_processed`, `page_failed`, and `state_reduced` with request correlation.
+- Kept validation and exception handling basic per scope constraints.
+
+### Verification Evidence
+
+- `pytest -q rag_agent/tests/test_rag_agent.py`
+- `pytest -q rag_agent/tests/test_worker_runtime.py rag_agent/tests/test_kafka_integration.py`
+- `ruff check project rag_agent`
+- `ruff format --check project rag_agent`
+- `python -m compileall project rag_agent`
+
+### Residual Risks
+
+- Failure details are currently surfaced via `errors` list entries rather than a dedicated structured output field in `RAGAgentOutput`.
+- Retry/dead-letter behavior for publish and page-level failures remains intentionally out of scope.
