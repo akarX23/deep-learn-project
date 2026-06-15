@@ -279,9 +279,6 @@ def main() -> None:
             st.session_state.event_queue,
         )
 
-    # ── Background event poller ───────────────────────────────────────────
-    _event_poller()
-
     # ── Sidebar ───────────────────────────────────────────────────────────
     _render_status_panel(cfg, session)
 
@@ -296,6 +293,9 @@ def main() -> None:
 
     with evaluation_tab:
         st.info("Evaluation results will appear here.")
+
+    # ── Background event poller (must be last: st.rerun() aborts the script) ──
+    _event_poller()
 
 
 if __name__ == "__main__":

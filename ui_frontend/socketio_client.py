@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import queue
+import threading
 from datetime import datetime, timezone
-from typing import Callable, Optional
+from typing import Optional
 
 import socketio
 
@@ -24,20 +26,18 @@ class SocketIOClient:
     def __init__(
         self,
         server_url: str,
-        on_event: Callable[[AgentEvent], None],
-        on_state_change: Callable[[ConnectionLifecycleState, str | None], None],
+        event_queue: queue.Queue,
     ):
         """
         Initialize the Socket.IO client.
 
         Args:
             server_url: Socket.IO server endpoint URL from config
-            on_event: Callback when a valid event is received
-            on_state_change: Callback when connection state changes (for routing to state.py)
+            event_queue: Thread-safe queue shared with the Streamlit script thread.
+                Items placed: ("connected", sid), ("state", state, error), ("event", AgentEvent)
         """
         self.server_url = server_url
-        self.on_event = on_event
-        self.on_state_change = on_state_change
+        self._event_queue = event_queue
         self.sio = socketio.AsyncClient(
             reconnection=True,
             reconnection_attempts=MAX_RETRIES,
@@ -60,14 +60,16 @@ class SocketIOClient:
         state: ConnectionLifecycleState,
         last_error: str | None = None,
     ) -> None:
-        """Emit a connection state change to the registered callback."""
-        self.on_state_change(state, last_error)
+        """Put a lifecycle state change into the event queue."""
+        self._event_queue.put(("state", state, last_error))
 
     async def _on_connect(self) -> None:
         """Handle successful connection to Socket.IO server."""
         self.sid = self.sio.sid
         self._connect_error_count = 0
-        self._emit_state(ConnectionLifecycleState.CONNECTED)
+        # Enqueue a dedicated tuple so the Streamlit thread receives sid atomically
+        # with the CONNECTED lifecycle state in a single queue item.
+        self._event_queue.put(("connected", self.sid))
         logger.info(f"Connected to {self.server_url}, sid={self.sid}")
 
     async def _on_disconnect(self) -> None:
@@ -116,7 +118,7 @@ class SocketIOClient:
                 payload=payload,
                 source_agent=data.get("from_service", "teaching") if isinstance(data, dict) else "teaching",
             )
-            self.on_event(event)
+            self._event_queue.put(("event", event))
         except Exception as exc:
             logger.error(f"Failed to process stream-tokens event: {exc}", exc_info=True)
 
@@ -139,7 +141,7 @@ class SocketIOClient:
                 payload=payload,
                 source_agent="planner",
             )
-            self.on_event(event)
+            self._event_queue.put(("event", event))
         except Exception as exc:
             logger.error(f"Failed to process clarify-user-level event: {exc}", exc_info=True)
 
@@ -220,33 +222,41 @@ class SocketIOClient:
         logger.info("Socket.IO client stop requested")
 
 
-async def start_socketio_client(
+def start_socketio_client(
     server_url: str,
-    on_event: Callable[[AgentEvent], None],
-    on_state_change: Callable[[ConnectionLifecycleState, str | None], None],
+    event_queue: queue.Queue,
 ) -> SocketIOClient:
     """
-    Factory to create and start a Socket.IO client.
-    
+    Create a SocketIOClient and start it in a dedicated background thread.
+
+    Safe to call from Streamlit's ScriptRunner thread (no running asyncio loop
+    required). The client runs in a daemon thread with its own event loop so it
+    is automatically torn down when the process exits.
+
     Args:
-        server_url: Socket.IO server URL (e.g., http://localhost:8000)
-        on_event: Callback invoked when AgentEvent is received
-        on_state_change: Callback invoked when connection state changes
-        
+        server_url: Socket.IO server URL (e.g., http://localhost:8001)
+        event_queue: Thread-safe queue that receives tuples from the client:
+            ("connected", sid)
+            ("state", ConnectionLifecycleState, error | None)
+            ("event", AgentEvent)
+
     Returns:
-        SocketIOClient instance running in background task
-        
-    Raises:
-        RuntimeError: If no event loop is running (must be called from async context)
+        SocketIOClient instance running in the background thread.
     """
-    client = SocketIOClient(server_url, on_event, on_state_change)
-    try:
-        asyncio.create_task(client.run())
-    except RuntimeError as exc:
-        logger.error(
-            "Failed to create background task: %s. Ensure this is called from an async context.",
-            exc,
-            exc_info=True,
-        )
-        raise
+    client = SocketIOClient(server_url, event_queue)
+
+    loop = asyncio.new_event_loop()
+    ready = threading.Event()
+
+    def _run_loop() -> None:
+        asyncio.set_event_loop(loop)
+        ready.set()
+        loop.run_forever()
+
+    thread = threading.Thread(target=_run_loop, name="socketio-event-loop", daemon=True)
+    thread.start()
+    ready.wait()  # ensure loop is running before scheduling coroutine
+
+    asyncio.run_coroutine_threadsafe(client.run(), loop)
+    logger.info("Socket.IO background event loop started (thread: %s)", thread.name)
     return client
