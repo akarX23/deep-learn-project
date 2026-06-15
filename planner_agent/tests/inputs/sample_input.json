@@ -1,12 +1,14 @@
-{
-  "request_id": "550e8400-e29b-41d4-a716-446655440000",
-  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "user_id": "usr-001",
-  "user_query": "Explain gradient descent from the uploaded chapter",
-  "session_context": [
-    {"role": "user", "content": "I just started learning ML last week"},
-    {"role": "assistant", "content": "Great! Let me know what topic you want to explore."}
-  ],
-  "available_files": ["rag_agent/tests/inputs/sample.pdf"],
-  "schema_version": "1.0"
-}
+[
+  {
+    "user_prompt": "Explain gradient descent from these notes",
+    "user_level": [],
+    "sid": "session-1",
+    "file_paths": ["/tmp/notes.pdf"]
+  },
+  {
+    "user_prompt": "Teach me photosynthesis and give me a quiz",
+    "user_level": ["beginner", "intermediate"],
+    "sid": "session-2",
+    "file_paths": []
+  }
+]

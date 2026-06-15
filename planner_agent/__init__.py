@@ -1,1 +1,1 @@
-"""Planner Agent — central async orchestrator for the AI Tutor multi-agent system."""
+"""Planner agent package: LangGraph orchestrator for multi-agent workflows."""

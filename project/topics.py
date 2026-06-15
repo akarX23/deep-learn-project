@@ -6,18 +6,11 @@ from enum import Enum
 
 
 class PlannerTopics(str, Enum):
-    """Topics the planner publishes to and downstream agents consume from."""
+    """Topics published by the planner or consumed by downstream agents."""
 
     RAG = "rag"
+    INIT_PLANNER = "init-planner"
     TEACHING = "teaching"
-
-
-class PlannerAgentTopics(str, Enum):
-    """Planner-agent-specific outbound topics for control-plane events."""
-
-    CLARIFY_USER_LEVEL = "clarify-user-level"
-    QUIZ_REQUEST = "quiz"
-    WORKFLOW_COMPLETE = "planner-response"
 
 
 class RAGTopics(str, Enum):
@@ -26,24 +19,31 @@ class RAGTopics(str, Enum):
     RAG_COMPLETE = "rag-complete"
 
 
-class PlannerInboundTopics(str, Enum):
-    """Topics the Planner Agent consumes."""
+class PlannerAgentTopics(str, Enum):
+    """Topics produced by the planner agent to trigger downstream agents."""
 
-    INIT_PLANNER = "init-planner"
-    USER_CLARIFICATION_RESPONSE = "user-clarification-response"
-    RAG_COMPLETE = "rag-complete"
-    MATERIAL_COMPILED = "material-compiled"
+    QUIZ_REQUEST = "quiz-request"
+    CLARIFY_USER_LEVEL = "clarify-user-level"
+    WORKFLOW_COMPLETE = "workflow-complete"
+
+
+class BackendStreamTopics(str, Enum):
+    """Topics the backend consumes to forward events to Socket.IO sessions."""
+
+    STREAM_TOKENS = "stream-tokens"
+
+
+class AgentCompletionTopics(str, Enum):
+    """Completion topics consumed by the planner to resume paused workflows."""
+
+    TEACHING_COMPLETE = "teaching-complete"
     QUIZ_COMPLETE = "quiz-complete"
 
 
-class PlannerOutboundTopics(str, Enum):
-    """Topics the Planner Agent produces to."""
+class TeachingTopics(str, Enum):
+    """Topics owned by the Teaching Agent."""
 
-    CLARIFY_USER_LEVEL = "clarify-user-level"
-    RAG = "rag"
-    TEACHING = "teaching"
-    QUIZ = "quiz"
-    PLANNER_RESPONSE = "planner-response"
+    TEACHING_COMPLETE = "teaching-complete"
 
 
 def get_rag_topic_names() -> list[str]:
@@ -52,13 +52,10 @@ def get_rag_topic_names() -> list[str]:
     return [PlannerTopics.RAG.value, RAGTopics.RAG_COMPLETE.value]
 
 
-def get_planner_topic_names() -> list[str]:
-    """Return all topics required by the Planner Agent."""
+def get_teaching_topic_names() -> list[str]:
+    """Return the full set of topics required by the Teaching Agent Kafka service."""
 
-    return (
-        [t.value for t in PlannerInboundTopics]
-        + [t.value for t in PlannerOutboundTopics]
-    )
+    return [PlannerTopics.TEACHING.value, TeachingTopics.TEACHING_COMPLETE.value]
 
 
 def get_all_topic_names() -> list[str]:
@@ -69,17 +66,22 @@ def get_all_topic_names() -> list[str]:
     bootstrap the Kafka cluster with all required topics.
 
     Returns:
-        list[str]: Deduplicated topic names from all registered topic enums.
+        list[str]: All topic names from every topic enum
     """
-    seen: set[str] = set()
-    result: list[str] = []
-    for name in (
-        [t.value for t in PlannerTopics]
-        + [t.value for t in RAGTopics]
-        + [t.value for t in PlannerInboundTopics]
-        + [t.value for t in PlannerOutboundTopics]
-    ):
-        if name not in seen:
-            seen.add(name)
-            result.append(name)
-    return result
+    return (
+        [topic.value for topic in PlannerTopics]
+        + [topic.value for topic in RAGTopics]
+        + [topic.value for topic in PlannerAgentTopics]
+        + [topic.value for topic in AgentCompletionTopics]
+        + [topic.value for topic in TeachingTopics]
+        + [topic.value for topic in BackendStreamTopics]
+    )
+
+
+def get_backend_consumer_topic_names() -> list[str]:
+    """Return topics the backend consumer subscribes to for Socket.IO forwarding."""
+
+    return [
+        PlannerAgentTopics.CLARIFY_USER_LEVEL.value,
+        BackendStreamTopics.STREAM_TOKENS.value,
+    ]
