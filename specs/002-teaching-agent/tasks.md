@@ -90,18 +90,17 @@ Backend service will auto-bootstrap `"teaching"` and `"teaching-complete"` on ne
       returning `[PlannerTopics.TEACHING, TeachingTopics.TEACHING_COMPLETE]` — used by
       `TeachingWorker.start()` for startup topic presence check (mirrors `get_rag_topic_names()`)
 
-- [x] T018 Add `TeachingRequestEvent` to `project/schemas.py` (Teaching Agent section):
-      fields: `request_id` (str, required, non-empty), `session_ctx` (dict, required, may be `{}`),
-      `topic` (str), `output_mode` (str), `context` (str, default `""`),
-      `created_at` (str | None), `source` (str | None);
-      validators: `request_id` non-empty, `session_ctx` not null, `topic`/`output_mode` non-empty
+- [x] T018 Add `TeachingRequestEvent` to `project/schemas.py` (Planner Agent section, shared with the Planner):
+      fields: `request_id` (str, required, non-empty), `sid` (str, session identifier),
+      `user_prompt` (str, the topic), `user_level` (str, the learner level),
+      `rag_compiled` (str, RAG-compiled context, default `""`);
+      the worker maps these onto the core pipeline's `topic` / `output_mode` / `context` (see T021)
 
-- [x] T019 Add `TeachingCompletionEvent` to `project/schemas.py` (Teaching Agent section):
-      fields: `request_id` (str), `session_ctx` (dict), `topic` (str), `output_mode` (str),
-      `status` (str — `"ok"` or `"error"`), `content` (TeachingContent | None),
-      `tokens_used` (int, ge=0), `model` (str), `started_at` (str), `completed_at` (str),
-      `duration_ms` (int, ge=0), `errors` (list[str], default `[]`),
-      `source` (str, default `"teaching-agent"`)
+- [x] T019 Add `TeachingCompletionEvent` to `project/schemas.py` (Planner Agent section, shared with the Planner):
+      fields: `request_id` (str, non-empty), `sid` (str), `user_level` (str, non-empty),
+      `content` (str, default `""` — the serialized `TeachingContent` JSON, or `""` on error);
+      validators: `request_id` / `user_level` non-empty. No `status`, timing, `tokens_used`,
+      `model`, `errors`, or `source` fields — the completion event carries content only
 
 **Checkpoint**: `python -c "from project.topics import get_all_topic_names; assert 'teaching' in get_all_topic_names()"` passes
 
@@ -137,16 +136,16 @@ Backend service will auto-bootstrap `"teaching"` and `"teaching-complete"` on ne
 - [x] T021 Create `teaching_agent/handlers.py`:
       - `TeachingRequestEventHandler` class with injectable dependencies:
         `agent_factory` (default: `TeachingAgent`), `publisher` (default:
-        `publish_teaching_complete`), `clock` (default: `datetime.now(UTC)`)
+        `publish_teaching_complete`) — no `clock` (completion event has no timing fields)
       - `parse_event(payload: dict) → TeachingRequestEvent` — validates inbound payload
-      - `build_completion_event(event, result, started_at, completed_at) → TeachingCompletionEvent`
-        — maps `TeachingAgentOutput` fields + timing into completion event;
-        flattens `metadata.tokens_used` and `metadata.model` into top-level fields
+      - `build_completion_event(event, result) → TeachingCompletionEvent`
+        — copies `request_id`, `sid`, `user_level` from the event; serializes
+        `result.content` to JSON (`""` when content is None)
       - `process_request(payload: dict, producer=None) → TeachingCompletionEvent | None`:
-        parse event → extract `TeachingAgentInput` fields → `agent.run()` → build completion
-        event → publish; on parse failure: log error and return None (no publish);
-        on agent failure: still publish error completion event (always-publish rule)
-      - `_isoformat_utc(dt: datetime) → str` — UTC ISO 8601 serialization helper
+        parse event → map `user_prompt → topic`, `user_level → output_mode`,
+        `rag_compiled → context` → `agent.run()` → build completion event → publish;
+        on parse failure: log error and return None (no publish);
+        on agent failure: still publish completion event with empty `content` (always-publish rule)
       - `_extract_request_id(payload: dict) → str` — returns `"unknown"` if absent
 
 **Checkpoint**: Unit-testable without Kafka — `TeachingRequestEventHandler` instantiates with fake `agent_factory` and `publisher` lambda
@@ -239,17 +238,20 @@ Backend service will auto-bootstrap `"teaching"` and `"teaching-complete"` on ne
       - effort: `TEACHING_{MODE}_EFFORT` → no fallback (optional; `None` when unset)
       No hardcoded values remain in config.py; all defaults resolve from env/config files only.
 
-- [x] T030 Update `.env.local` — add per-mode env var stubs (commented out) under Teaching Agent section:
+- [~] T030 Update `.env.local` — add per-mode env var stubs (commented out) under Teaching Agent section:
       `TEACHING_BEGINNER_MODEL`, `TEACHING_BEGINNER_API_KEY`, `TEACHING_BEGINNER_MAX_TOKENS`,
       same for `INTERMEDIATE` and `ADVANCED`; shared `TEACHING_MODEL` / `TEACHING_API_KEY`
       remain as the active fallback defaults. Stubs are commented out so they act as
       in-place documentation without overriding the shared fallbacks.
+      NOTE: documentation-only — these per-mode stubs are NOT currently present in `.env.local`;
+      `get_llm_config()` resolves them at runtime regardless, and the shared `TEACHING_*`
+      fallbacks are the active config. Re-add the stubs only if per-mode tuning is needed.
 
 - [x] T031 Update `CLAUDE.md` env var table — add per-mode override rows
       (`TEACHING_{MODE}_MODEL`, `TEACHING_{MODE}_API_KEY`, `TEACHING_{MODE}_MAX_TOKENS`)
       with fallback description; update Output mode rules table to reference env vars.
 
-- [ ] T032 Update `teaching_agent/config.py` and `teaching_agent/llm_client.py` for per-mode
+- [x] T032 Update `teaching_agent/config.py` and `teaching_agent/llm_client.py` for per-mode
       temperature and effort (FR-009, Decision 12):
       - `LLMConfig`: add `effort: str | None = None` field
       - `get_llm_config()`: read `TEACHING_{MODE}_TEMPERATURE` (fallback: `TEACHING_TEMPERATURE`,
@@ -258,10 +260,19 @@ Backend service will auto-bootstrap `"teaching"` and `"teaching-complete"` on ne
         `"opus-4-6"`, pass `output_config={"effort": config.effort}` as a kwarg to
         `litellm.completion()`; silently skip for all other models
 
-- [ ] T033 Update `.env.local` — add per-mode temperature and effort stubs under Teaching Agent
+- [~] T033 Update `.env.local` — add per-mode temperature and effort stubs under Teaching Agent
       section: `TEACHING_BEGINNER_TEMPERATURE`, `TEACHING_INTERMEDIATE_TEMPERATURE`,
       `TEACHING_ADVANCED_TEMPERATURE`, `TEACHING_BEGINNER_EFFORT`, `TEACHING_INTERMEDIATE_EFFORT`,
       `TEACHING_ADVANCED_EFFORT`; variables go in `.env.local` (not `.env.local.example`)
+      NOTE: documentation-only — these stubs are NOT currently present in `.env.local`.
+      `get_llm_config()` reads `TEACHING_{MODE}_TEMPERATURE` (fallback `TEACHING_TEMPERATURE`,
+      default 0.7) and `TEACHING_{MODE}_EFFORT` (optional, `None` when unset) at runtime
+      regardless. Re-add the stubs only if per-mode tuning is needed.
+
+- [ ] T034 Remove the dead commented-out `TeachingCompletionEvent` block in
+      `project/schemas.py` (Teaching Agent section, ~lines 411–433). It was superseded by the
+      active planner-aligned `TeachingCompletionEvent` in the Planner Agent section and is now
+      obsolete. Constitution Principle V — remove obsolete code paths.
 
 **Checkpoint**: All Phase 2 tests pass; `"teaching"` and `"teaching-complete"` topics
 registered in `project/topics.py`; worker boots and processes messages end-to-end

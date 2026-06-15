@@ -188,8 +188,8 @@ validation rules live in `data-model.md` and `contracts/teaching-agent-contract.
 | Inbound topic | `"teaching"` — consumed by `TeachingWorker`; published by Planner Agent |
 | Outbound topic | `"teaching-complete"` — published by `TeachingRequestEventHandler` |
 | `request_id` pass-through | Copied verbatim from `TeachingRequestEvent` to `TeachingCompletionEvent`; Teaching Agent never modifies it |
-| `session_ctx` pass-through | Copied verbatim; Teaching Agent never reads or validates its contents |
-| Always-publish rule | A `TeachingCompletionEvent` is published for every consumed message regardless of `status`; Planner is never left waiting |
+| `sid` pass-through | Copied verbatim; Teaching Agent never reads or validates its contents |
+| Always-publish rule | A `TeachingCompletionEvent` is published for every consumed message regardless of outcome (error → empty `content`); Planner is never left waiting |
 | Malformed payload | Logged with `request_id` (or `"unknown"` if absent), skipped; poll loop continues without crashing |
 | Topic bootstrap | `PlannerTopics.TEACHING` and `TeachingTopics.TEACHING_COMPLETE` registered in `project/topics.py`; both included in `get_all_topic_names()`; backend service creates topics at startup |
 | Test isolation | All Kafka dependencies injectable via factory parameters; tests use Protocol-compatible fakes, no real Kafka required |

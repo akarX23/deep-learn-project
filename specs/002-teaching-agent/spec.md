@@ -111,21 +111,21 @@ empty topics; verify that every response returns the defined JSON structure with
 The Teaching Agent is never called directly. The Planner Agent publishes a `TeachingRequestEvent`
 to the `"teaching"` Kafka topic. The Teaching Agent worker consumes it, runs the core pipeline,
 and publishes a `TeachingCompletionEvent` to `"teaching-complete"`. The Planner correlates the
-response back to the originating request via `request_id` and `session_ctx`.
+response back to the originating request via `request_id` and `sid`.
 
 **Why this priority**: Kafka is the only inter-agent communication bus. Without this layer the
 Teaching Agent cannot participate in the system regardless of how well the core pipeline works.
 
 **Independent Test**: Publish a valid `TeachingRequestEvent` payload to the `"teaching"` topic
 and verify that a `TeachingCompletionEvent` appears on `"teaching-complete"` with the same
-`request_id`, `session_ctx`, and a valid `TeachingAgentOutput` payload.
+`request_id` and `sid`, and the serialized teaching `content`.
 
 **Acceptance Scenarios**:
 
-1. **Given** a valid `TeachingRequestEvent` on the `"teaching"` topic, **When** the worker consumes it, **Then** `TeachingAgent.run()` is invoked with the extracted `topic`, `output_mode`, and `context` fields.
-2. **Given** the core pipeline returns `status: "ok"`, **When** the result is assembled, **Then** a `TeachingCompletionEvent` with `status: "ok"` is published to `"teaching-complete"` within the same processing cycle.
-3. **Given** the core pipeline returns `status: "error"` (invalid input or LLM failure), **When** the result is assembled, **Then** a `TeachingCompletionEvent` with `status: "error"` and null `content` is still published to `"teaching-complete"` — the Planner is always notified.
-4. **Given** any `TeachingCompletionEvent`, **When** it is published, **Then** `request_id` and `session_ctx` are copied verbatim from the inbound `TeachingRequestEvent` for downstream correlation.
+1. **Given** a valid `TeachingRequestEvent` on the `"teaching"` topic, **When** the worker consumes it, **Then** `TeachingAgent.run()` is invoked with `user_prompt`, `user_level`, and `rag_compiled` mapped to `topic`, `output_mode`, and `context`.
+2. **Given** the core pipeline returns `status: "ok"`, **When** the result is assembled, **Then** a `TeachingCompletionEvent` carrying the serialized teaching `content` is published to `"teaching-complete"` within the same processing cycle.
+3. **Given** the core pipeline returns `status: "error"` (invalid input or LLM failure), **When** the result is assembled, **Then** a `TeachingCompletionEvent` with an empty `content` string is still published to `"teaching-complete"` — the Planner is always notified.
+4. **Given** any `TeachingCompletionEvent`, **When** it is published, **Then** `request_id` and `sid` are copied verbatim from the inbound `TeachingRequestEvent` for downstream correlation.
 5. **Given** a malformed or schema-invalid Kafka payload, **When** the worker receives it, **Then** the error is logged and the worker continues processing subsequent messages without crashing.
 
 ---
@@ -140,7 +140,7 @@ and verify that a `TeachingCompletionEvent` appears on `"teaching-complete"` wit
 - LLM call fails or returns an empty response — agent must return `status: "error"` with an appropriate message rather than propagating an exception.
 - Generated Mermaid diagram is syntactically invalid — agent must not return the invalid diagram; it must either fix it or set `diagram` to null.
 - Kafka payload is missing required fields or has wrong types — worker must log and skip, never crash.
-- `session_ctx` is an empty dict `{}` — valid; worker must pass it through to the completion event unchanged.
+- `sid` is a session identifier string; the worker must pass it through to the completion event unchanged.
 - Same `request_id` arrives twice (retry) — worker processes it again; idempotency is the Planner's responsibility.
 
 ## Requirements *(mandatory)*
@@ -175,12 +175,12 @@ and verify that a `TeachingCompletionEvent` appears on `"teaching-complete"` wit
 ### Kafka Integration Requirements (Phase 2)
 
 - **FR-019**: The Teaching Agent MUST consume requests from the Kafka topic `"teaching"`. This topic is published to by the Planner Agent and is the sole entry point into the Teaching Agent at runtime.
-- **FR-020**: The Teaching Agent worker MUST extract `topic`, `output_mode`, and `context` from the inbound `TeachingRequestEvent` and pass them to `TeachingAgent.run()` unchanged. The core pipeline logic MUST NOT be modified.
-- **FR-021**: Upon receiving a result from `TeachingAgent.run()` — whether `status: "ok"` or `status: "error"` — the worker MUST publish a `TeachingCompletionEvent` to the Kafka topic `"teaching-complete"`. The Planner is always notified regardless of outcome.
-- **FR-022**: `TeachingRequestEvent` MUST include `request_id` (non-empty string, unique per request, assigned by the Planner) and `session_ctx` (dict, may be empty) for request tracing and user/session correlation.
-- **FR-023**: `TeachingCompletionEvent` MUST carry back the same `request_id` and `session_ctx` from the originating `TeachingRequestEvent` verbatim, so the Planner can correlate responses to requests.
-- **FR-024**: `TeachingCompletionEvent` MUST include `started_at` (ISO 8601 UTC), `completed_at` (ISO 8601 UTC), and `duration_ms` (non-negative integer) for audit and latency tracking.
-- **FR-025**: Both `TeachingRequestEvent` and `TeachingCompletionEvent` schemas MUST be defined in `project/schemas.py` in the Teaching Agent section. No schema definitions belong inside `teaching_agent/`.
+- **FR-020**: The Teaching Agent worker MUST extract `user_prompt`, `user_level`, and `rag_compiled` from the inbound `TeachingRequestEvent` and map them to `TeachingAgent.run()`'s `topic`, `output_mode`, and `context` arguments respectively. The core pipeline logic MUST NOT be modified.
+- **FR-021**: Upon receiving a result from `TeachingAgent.run()` — whether the core pipeline returns `status: "ok"` or `status: "error"` — the worker MUST publish a `TeachingCompletionEvent` to the Kafka topic `"teaching-complete"`. The completion event does not carry a status field; an error outcome is conveyed as an empty `content` string. The Planner is always notified regardless of outcome.
+- **FR-022**: `TeachingRequestEvent` MUST include `request_id` (non-empty string, unique per request, assigned by the Planner) and `sid` (session identifier string) for request tracing and user/session correlation, plus `user_prompt` (the topic), `user_level` (the learner level), and `rag_compiled` (the RAG-compiled context, default empty string).
+- **FR-023**: `TeachingCompletionEvent` MUST carry back the same `request_id` and `sid` from the originating `TeachingRequestEvent` verbatim, so the Planner can correlate responses to requests.
+- **FR-024**: `TeachingCompletionEvent` MUST include `request_id`, `sid`, `user_level`, and `content` — where `content` is the serialized `TeachingContent` JSON produced by the core pipeline, or an empty string when the pipeline returns an error. It carries no timing fields.
+- **FR-025**: Both `TeachingRequestEvent` and `TeachingCompletionEvent` schemas MUST be defined in `project/schemas.py` (Planner Agent section, shared with the Planner). No schema definitions belong inside `teaching_agent/`.
 - **FR-026**: `"teaching"` MUST be added to the existing `PlannerTopics` enum in `project/topics.py` (consistent with `PlannerTopics.RAG`); `"teaching-complete"` MUST be registered as `TeachingTopics.TEACHING_COMPLETE` in a new `TeachingTopics` enum. Both values MUST be included in `get_all_topic_names()` so the backend service bootstraps them at startup.
 - **FR-027**: The Kafka integration MUST follow the same three-file structure used by the RAG agent: `teaching_agent/kafka.py` (I/O primitives and Protocol types), `teaching_agent/handlers.py` (business logic, zero Kafka I/O), `teaching_agent/worker.py` (lifecycle, poll loop). All Kafka-facing dependencies MUST be injectable for testing — no real Kafka connection required in tests.
 - **FR-028**: A malformed or schema-invalid inbound Kafka message MUST be logged with its `request_id` (or `"unknown"` if absent) and skipped; the worker poll loop MUST continue processing subsequent messages.
@@ -192,8 +192,8 @@ and verify that a `TeachingCompletionEvent` appears on `"teaching-complete"` wit
 - **TeachingContent**: The structured explanation payload. Contains `explanation` (full markdown explanation), `diagram` (Mermaid syntax or null), `notes` (summary markdown), and `example` (worked example or code snippet, or null).
 - **OutputMode**: Enum of `beginner`, `intermediate`, `advanced`. Determines explanation structure, diagram rules, token ceiling, and language register.
 - **TeachingMetadata**: Audit record. Contains `topic` (mirrored from input), `tokens_used` (actual consumption), and `model` (model identifier).
-- **TeachingRequestEvent**: Inbound Kafka payload published by the Planner to the `"teaching"` topic. Contains `request_id` (unique per request), `session_ctx` (user/session tracking dict), `topic`, `output_mode`, `context`, and optional `created_at` / `source` fields. Defined in `project/schemas.py`.
-- **TeachingCompletionEvent**: Outbound Kafka payload published by the Teaching Agent to `"teaching-complete"`. Contains `request_id` and `session_ctx` (passed through verbatim from the request), `topic`, `output_mode`, `status`, `content` (null on error), `tokens_used`, `model`, `started_at`, `completed_at`, `duration_ms`, and `errors`. Defined in `project/schemas.py`.
+- **TeachingRequestEvent**: Inbound Kafka payload published by the Planner to the `"teaching"` topic. Contains `request_id` (unique per request), `sid` (session identifier), `user_prompt` (topic), `user_level` (learner level), and `rag_compiled` (RAG context, default empty). Defined in `project/schemas.py`.
+- **TeachingCompletionEvent**: Outbound Kafka payload published by the Teaching Agent to `"teaching-complete"`. Contains `request_id` and `sid` (passed through verbatim from the request), `user_level`, and `content` (serialized `TeachingContent` JSON, empty string on error). Defined in `project/schemas.py`.
 - **TeachingTopics**: Enum in `project/topics.py` with value `TEACHING_COMPLETE = "teaching-complete"` — the outbound topic owned by the Teaching Agent. The inbound topic `"teaching"` is registered under `PlannerTopics.TEACHING`, consistent with the pattern used by `PlannerTopics.RAG`. Both `PlannerTopics.TEACHING` and `TeachingTopics.TEACHING_COMPLETE` are included in `get_all_topic_names()` so the backend service bootstraps both topics at startup.
 - **TeachingWorker**: Owns the Kafka consume → dispatch → publish lifecycle. Lives in `teaching_agent/worker.py`. Follows the same structure as `RAGWorker`: injectable factories for consumer, producer, and handler; background poll thread; `start()` / `stop()` / `get_state()` interface.
 - **TeachingRequestEventHandler**: Business logic bridge between Kafka and the core pipeline. Lives in `teaching_agent/handlers.py`. Parses `TeachingRequestEvent`, calls `TeachingAgent.run()`, builds `TeachingCompletionEvent`, and publishes it. Has injectable `agent_factory`, `publisher`, and `clock` dependencies so it can be tested without Kafka.
@@ -209,7 +209,7 @@ and verify that a `TeachingCompletionEvent` appears on `"teaching-complete"` wit
 - **SC-005**: Token consumption stays within the per-mode ceiling set via `TEACHING_{MODE}_MAX_TOKENS` (default 4096 each) in 100% of runs.
 - **SC-006**: Error conditions (empty topic, LLM failure, invalid diagram) always produce a schema-valid `status: "error"` response with no unhandled exceptions in 100% of runs.
 - **SC-007**: A single Teaching Agent request for any mode completes within a time budget suitable for a live tutoring interaction, with no fatal crash on LLM or diagram validation failures.
-- **SC-008**: 100% of `TeachingCompletionEvent` messages published to `"teaching-complete"` carry the same `request_id` and `session_ctx` as the originating `TeachingRequestEvent`.
+- **SC-008**: 100% of `TeachingCompletionEvent` messages published to `"teaching-complete"` carry the same `request_id` and `sid` as the originating `TeachingRequestEvent`.
 - **SC-009**: 100% of processed requests — including error cases — result in a `TeachingCompletionEvent` being published. The Planner is never left waiting without a response.
 - **SC-010**: A malformed inbound Kafka message never crashes the worker poll loop; subsequent messages continue to be processed in 100% of cases.
 
@@ -220,7 +220,7 @@ and verify that a `TeachingCompletionEvent` appears on `"teaching-complete"` wit
 - The `context` field carries a prior session summary generated by a Memory Agent; the Memory Agent is a separate system component not implemented in this feature.
 - When `context` is empty, the agent produces a complete response without prior-session context.
 - `request_id` is assigned by the Planner Agent before publishing to Kafka. The Teaching Agent treats it as an opaque string and passes it through unchanged.
-- `session_ctx` is a free-form dict assigned by the Planner. The Teaching Agent passes it through unchanged in `TeachingCompletionEvent`. The Teaching Agent never reads or validates its contents.
+- `sid` is a session identifier string assigned by the Planner. The Teaching Agent passes it through unchanged in `TeachingCompletionEvent`. The Teaching Agent never reads or validates its contents.
 - LLM connection parameters (API key, model name, temperature, token limits) are provided through environment variables. During development, a free-tier provider (e.g. Groq, Gemini) may be used. In production, the target provider may differ. The agent logic MUST NOT depend on any provider-specific SDK — all LLM calls go through `teaching_agent/llm_client.py`.
 - Output format is always JSON; no plain-text or streaming responses are produced in this version.
 - OCR, PDF processing, and direct retrieval are out of scope; that responsibility belongs to the RAG Agent.
