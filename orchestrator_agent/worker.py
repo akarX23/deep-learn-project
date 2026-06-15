@@ -26,8 +26,8 @@ import time
 from typing import Any
 
 from project.topics import PlannerInboundTopics
-from planner_agent.agent import PlannerAgent
-from planner_agent.config import PlannerConfig, get_planner_config
+from orchestrator_agent.agent import PlannerAgent
+from orchestrator_agent.config import PlannerConfig, get_planner_config
 
 logger = logging.getLogger(__name__)
 
