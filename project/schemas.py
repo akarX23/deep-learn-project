@@ -274,6 +274,7 @@ class LevelInferenceResult(BaseModel):
     level: UserLevelEnum
     confidence: float
     quiz_requested: bool = False
+    reasoning: str = ""
 
 
 class TeachingRequestEvent(BaseModel):
@@ -612,4 +613,19 @@ class QuizAgentOutput(BaseModel):
     def validate_status(cls, value: str) -> str:
         if value not in {"generated", "evaluated", "error"}:
             raise ValueError("status must be one of: generated, evaluated, error")
+        return value
+
+
+class LearnerProfile(BaseModel):
+    """Learner proficiency assessment result from the Orchestration Agent."""
+
+    learner_level: UserLevelEnum
+    confidence_score: float = Field(ge=0.0, le=1.0)
+    level_reasoning: str
+
+    @field_validator("level_reasoning")
+    @classmethod
+    def validate_level_reasoning(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("level_reasoning cannot be empty")
         return value

@@ -133,14 +133,6 @@ class PlannerWorker:
                 )
                 self._agent.resume(request_id, payload)
 
-            elif topic == PlannerInboundTopics.USER_CLARIFICATION_RESPONSE.value:
-                # Clarification responses are not consumed by the planner in the
-                # current design.  The frontend re-sends a new init-planner event
-                # with user_level pre-filled after the user answers.
-                logger.debug(
-                    "user_clarification_response_ignored request_id=%s", request_id
-                )
-
             else:
                 logger.warning(
                     "unknown_topic_received topic=%s request_id=%s", topic, request_id

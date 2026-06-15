@@ -9,7 +9,7 @@ from typing import Any
 from orchestrator_agent.config import LLMConfig
 from orchestrator_agent.llm_client import call_llm_json
 from orchestrator_agent.prompts import LEARNER_LEVEL_PROMPT
-from project.schemas import LearnerLevel, LearnerProfile
+from project.schemas import UserLevelEnum, LearnerProfile
 
 logger = logging.getLogger(__name__)
 
@@ -98,10 +98,10 @@ def assess_learner_level(
         # Clamp confidence and validate level.
         confidence = max(0.0, min(1.0, confidence))
         try:
-            level = LearnerLevel(level_str)
+            level = UserLevelEnum(level_str)
         except ValueError:
             logger.warning("unknown_level level=%s defaulting to intermediate", level_str)
-            level = LearnerLevel.INTERMEDIATE
+            level = UserLevelEnum.INTERMEDIATE
             confidence = min(confidence, 0.5)
 
         return LearnerProfile(
@@ -113,7 +113,7 @@ def assess_learner_level(
     except Exception as exc:
         logger.warning("assess_learner_level_failed error=%s using default", exc)
         return LearnerProfile(
-            learner_level=LearnerLevel.INTERMEDIATE,
+            learner_level=UserLevelEnum.INTERMEDIATE,
             confidence_score=0.5,
             level_reasoning="Level assessment failed; defaulting to intermediate.",
         )

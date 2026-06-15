@@ -50,7 +50,6 @@ class PlannerInboundTopics(str, Enum):
     """All topics consumed by the orchestrator_agent worker (single consumer)."""
 
     INIT_PLANNER = "init-planner"
-    USER_CLARIFICATION_RESPONSE = "user-clarification-response"
     RAG_COMPLETE = "rag-complete"
     MATERIAL_COMPILED = "material-compiled"
     QUIZ_COMPLETE = "quiz-complete"

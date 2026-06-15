@@ -288,6 +288,7 @@ class PlannerAgent:
                     ],
                     get_llm_config(),
                 )
+                print(raw)
                 result = LevelInferenceResult(**json.loads(raw))
                 logger.info(
                     "[%s] infer_level: level=%s confidence=%.2f quiz=%s reasoning=%r",
