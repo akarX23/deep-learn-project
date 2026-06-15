@@ -432,7 +432,7 @@ until ratified.
 
 ### P3-D: Tests
 
-- [ ] T042 Add reflection tests to `teaching_agent/tests/test_teaching_agent.py`:
+- [x] T042 Add reflection tests to `teaching_agent/tests/test_teaching_agent.py`:
       (monkeypatch `call_llm` as in existing tests; no real LLM required)
 
       - `test_reflection_disabled_when_iterations_zero` — set env
