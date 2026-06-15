@@ -22,6 +22,14 @@ payloads from the `"teaching"` Kafka topic, invokes `TeachingAgent.run()` unchan
 publishes `TeachingCompletionEvent` results to `"teaching-complete"`. The core pipeline
 logic from Phase 1 is not modified.
 
+Phase 3 introduces the **Reflection pattern** as an internal quality loop layered on top of
+the Phase 1 pipeline. After initial generation, the agent issues a **critique** LLM call to
+identify weaknesses per output field, then a **revision** LLM call to produce an improved
+TeachingContent. This cycle repeats N times (configurable; default N=1; N=0 restores
+single-pass behavior). The output schema and Kafka contract are unchanged — reflection is
+invisible to all external consumers. (The Phase 3 spec items — US6, FR-029–FR-037 — are a
+proposal pending team sign-off; see the proposal section in `spec.md`.)
+
 ## Technical Context
 
 **Language/Version**: Python 3.11
@@ -30,8 +38,11 @@ logic from Phase 1 is not modified.
 **Testing**: pytest
 **Target Platform**: Linux runtime (local dev and container-ready execution)
 **Project Type**: Agent module/library within a multi-agent backend
-**Performance Goals**: Beginner mode ≤ 5s wall-clock; intermediate ≤ 10s; advanced ≤ 20s on developer hardware under a fast-endpoint model
-**Constraints**: Synchronous execution only; per-mode token ceilings enforced at LiteLLM call level via `TEACHING_{MODE}_MAX_TOKENS` env vars (default 4096 each); per-mode model, API key, temperature, and effort also configurable via `TEACHING_{MODE}_MODEL` / `TEACHING_{MODE}_API_KEY` / `TEACHING_{MODE}_TEMPERATURE` / `TEACHING_{MODE}_EFFORT` with fallback to shared `TEACHING_MODEL` / `TEACHING_API_KEY` / `TEACHING_TEMPERATURE`; effort (`low | medium | high`) maps to `output_config={"effort": value}` for Claude 4.6 models only, silently skipped for all others; Mermaid validation required before returning diagram; JSON output only; no LangGraph
+**Performance Goals**:
+- Reflection disabled (N=0): beginner ≤ 5s, intermediate ≤ 10s, advanced ≤ 20s on developer hardware with a fast-endpoint model
+- 1 reflection iteration (default): beginner ≤ 15s, intermediate ≤ 25s, advanced ≤ 45s on developer hardware with a fast-endpoint model
+- Wall-clock must be measured at both settings; regression vs. Phase 1 baseline is expected and documented
+**Constraints**: Synchronous execution only; per-mode token ceilings enforced at LiteLLM call level via `TEACHING_{MODE}_MAX_TOKENS` env vars (default 4096 each); per-mode model, API key, temperature, and effort also configurable via `TEACHING_{MODE}_MODEL` / `TEACHING_{MODE}_API_KEY` / `TEACHING_{MODE}_TEMPERATURE` / `TEACHING_{MODE}_EFFORT` with fallback to shared `TEACHING_MODEL` / `TEACHING_API_KEY` / `TEACHING_TEMPERATURE`; effort (`low | medium | high`) maps to `output_config={"effort": value}` for Claude 4.6 models only, silently skipped for all others; Mermaid validation required before returning diagram; JSON output only; no LangGraph; reflection iterations controlled by `TEACHING_MAX_REFLECTION_ITERATIONS` (global, default 1; 0 disables) and per-mode `TEACHING_{MODE}_MAX_REFLECTION_ITERATIONS` override; critique model configurable via `TEACHING_REFLECTION_MODEL` (falls back to `TEACHING_MODEL`); per-mode `TEACHING_{MODE}_REFLECTION_MODEL` also supported; critique token ceiling `TEACHING_REFLECTION_MAX_TOKENS` (default 512); revision reuses per-mode generation ceiling; `metadata.tokens_used` sums all LLM calls in the lifecycle; `metadata.reflection_iterations` reports completed cycles
 **Scale/Scope**: One synchronous request per invocation; invoked once per user query by the Planner Agent
 
 ## Constitution Check
@@ -66,10 +77,14 @@ logic from Phase 1 is not modified.
 - UX Consistency Gate: PASS. Contract defines stable field structure; diagram null-fallback
   behavior is documented so the UI can handle both cases.
 - Performance Gate: PASS. Token ceiling enforcement is at the LiteLLM call level with
-  actual consumption reported in metadata. Wall-clock targets are stated.
+  actual consumption reported in metadata. Wall-clock targets are stated; reflection adds
+  2N LLM calls per request; wall-clock budget updated per FR-018; N=0 restores the Phase 1
+  budget; the latency cost is justified by the quality improvement requirement (SC-011).
 - Maintainability Gate: PASS. Environment-variable-driven configuration eliminates
   hard-coded provider coupling. Separate prompt templates per mode are independently
-  auditable.
+  auditable; reflection prompts isolated in `REFLECTION_PROMPT_BY_MODE` /
+  `REVISION_PROMPT_BY_MODE` constants, independently auditable and replaceable without
+  touching agent logic.
 
 ## Project Structure
 
@@ -93,18 +108,30 @@ specs/002-teaching-agent/
 ```text
 project/
 ├── schemas.py           # Phase 1: OutputMode, TeachingAgentInput, TeachingContent,
-│                        #           TeachingMetadata, TeachingAgentOutput
+│                        #           TeachingMetadata (add reflection_iterations int field),
+│                        #           TeachingAgentOutput
 │                        # Phase 2: TeachingRequestEvent, TeachingCompletionEvent
+│                        # Phase 3: ReflectionCritique (internal; not in output events)
 └── topics.py            # Phase 2: Add TEACHING to PlannerTopics; add TeachingTopics enum
                          #           (TEACHING_COMPLETE only); include in get_all_topic_names()
 
 teaching_agent/
 ├── __init__.py
-├── agent.py             # TeachingAgent class: run(), input validation, prompt dispatch,
-│                        #                      response assembly  [Phase 1 — no changes in Phase 2]
-├── config.py            # LLMConfig dataclass, get_llm_config(), per-mode max_tokens map
+├── agent.py             # TeachingAgent class: run(), _resolve_diagram(),
+│                        #                      _reflect(), _revise()
+│                        #                      reflection loop (N iterations)
+│                        #                      [Phase 1 core unchanged; reflection added in Phase 3]
+├── config.py            # LLMConfig dataclass (add effort, reflection_max_tokens fields)
+│                        # get_llm_config(output_mode) — generation config
+│                        # get_reflection_config(output_mode) — critique config (Phase 3)
+│                        #   reads TEACHING_REFLECTION_MODEL, TEACHING_{MODE}_REFLECTION_MODEL,
+│                        #         TEACHING_REFLECTION_MAX_TOKENS,
+│                        #         TEACHING_MAX_REFLECTION_ITERATIONS,
+│                        #         TEACHING_{MODE}_MAX_REFLECTION_ITERATIONS
 ├── llm_client.py        # call_llm(messages, config) → (str, int); provider-agnostic via LiteLLM
-├── prompts.py           # BEGINNER_PROMPT, INTERMEDIATE_PROMPT, ADVANCED_PROMPT constants
+├── prompts.py           # BEGINNER/INTERMEDIATE/ADVANCED_PROMPT (generation)
+│                        # REFLECTION_PROMPT_BY_MODE (critique — Phase 3)
+│                        # REVISION_PROMPT_BY_MODE (revision — Phase 3)
 ├── validators.py        # validate_mermaid(diagram: str) → bool; regex-based structural check
 ├── helpers.py           # parse_llm_response(raw: str) → dict; build_error_output()
 ├── kafka.py             # Phase 2: Protocol types (KafkaConsumerProtocol, KafkaProducerProtocol)
@@ -129,6 +156,101 @@ teaching_agent/
 Schemas in `project/schemas.py` (shared contract location). No new top-level directories.
 No LangGraph — the linear pipeline requires only a plain class. Phase 2 Kafka files follow
 the RAG agent three-file pattern exactly for system-wide consistency.
+
+## Reflection Architecture
+
+> Phase 3. Corresponds to the Reflection proposal in `spec.md` (US6, FR-029–FR-037),
+> pending team sign-off. Implementation is gated on that ratification.
+
+### Pattern: Generate → Critique → Revise (×N)
+
+```
+Input
+  │
+  ▼
+[1] Generation call  →  initial TeachingContent  (PROMPT_BY_MODE)
+  │
+  ▼
+[2] Critique call    →  ReflectionCritique JSON  (REFLECTION_PROMPT_BY_MODE)
+  │    (if fails: skip to [4] with initial output)
+  ▼
+[3] Revision call    →  revised TeachingContent  (REVISION_PROMPT_BY_MODE)
+  │    (if fails: skip to [4] with initial output)
+  ▼
+[4] Repeat [2]–[3] up to N-1 more times
+  │
+  ▼
+Assemble TeachingAgentOutput with best available content
+```
+
+N = `TEACHING_MAX_REFLECTION_ITERATIONS` (global) or `TEACHING_{MODE}_MAX_REFLECTION_ITERATIONS` (per-mode).
+N = 0 → steps [2]–[4] are skipped entirely; behavior identical to Phase 1.
+
+### Critique Prompt Design
+
+`REFLECTION_PROMPT_BY_MODE` instructs the LLM to return a `ReflectionCritique` JSON:
+- `quality_score` (int, 1–10): holistic score of the current output
+- `issues`: list of `{field, issue, severity}` objects; `field` ∈ {explanation, diagram, notes, example}
+- `revision_instructions`: a concise string instructing the revision call on what to fix
+
+The critique prompt includes: `{topic}`, `{output_mode}`, `{current_output}` (the current
+TeachingContent serialised as JSON). It does not include `{context}` to keep the critique
+call within `TEACHING_REFLECTION_MAX_TOKENS` (default 512).
+
+### Revision Prompt Design
+
+`REVISION_PROMPT_BY_MODE` is structurally similar to `PROMPT_BY_MODE` but adds two
+additional placeholders:
+- `{current_output}`: the current TeachingContent JSON (so the LLM refines, not reinvents)
+- `{revision_instructions}`: the `revision_instructions` string from the critique
+
+The revision call uses the same token ceiling and model as the generation call
+(`TEACHING_{MODE}_MAX_TOKENS`, `TEACHING_{MODE}_MODEL` or `TEACHING_MODEL`).
+It returns JSON with the same structure as generation (explanation, diagram, notes, example).
+
+### Agent Changes
+
+Two new private methods added to `TeachingAgent` in `agent.py`:
+
+- `_reflect(current_content, topic, output_mode, config) → ReflectionCritique | None`
+  Calls the LLM with `REFLECTION_PROMPT_BY_MODE[output_mode]`. Parses the response into
+  `ReflectionCritique`. Returns `None` on any failure (parse error, LiteLLM exception).
+  Adds critique tokens to the running `tokens_used` total.
+
+- `_revise(current_content, critique, topic, output_mode, context, config) → TeachingContent | None`
+  Calls the LLM with `REVISION_PROMPT_BY_MODE[output_mode]`. Passes the existing content
+  plus `critique.revision_instructions`. Parses and validates the response (including Mermaid).
+  Returns `None` on any failure. Adds revision tokens to the running `tokens_used` total.
+
+`run()` updated: after the initial generation and diagram validation, enter the reflection
+loop. On each iteration, call `_reflect()`; if `None`, break and return current content.
+Call `_revise()`; if `None`, break and return current content. Replace current content with
+revision. After N iterations, assemble `TeachingAgentOutput` with `tokens_used` = sum of
+all calls and `reflection_iterations` = number of completed cycles.
+
+### Token Accounting
+
+```
+tokens_used = generation_tokens
+            + sum(critique_tokens_i + revision_tokens_i  for i in completed_cycles)
+```
+
+`metadata.tokens_used` always reflects total real consumption.
+`metadata.reflection_iterations` is a new field (int, ge=0) — add to `TeachingMetadata`
+in `project/schemas.py`.
+
+### Graceful Degradation
+
+| Failure point | Recovery |
+|---|---|
+| Critique call fails (exception or parse error) | Break loop; return current content (initial or last revision) |
+| Revision call fails (exception or parse error) | Break loop; return content from before this iteration |
+| Revision produces invalid Mermaid (beginner) | Apply same retry-once + fallback-template rule as generation |
+| Revision produces invalid Mermaid (inter/adv) | Set diagram to null in revised content |
+
+In all cases: `status` remains `"ok"` if initial generation succeeded.
+`reflection_iterations` reflects the number of **completed** (critique + revision both
+succeeded) cycles, not attempted cycles.
 
 ## Behavior Rules and Requirement Clarifications
 
@@ -188,11 +310,28 @@ validation rules live in `data-model.md` and `contracts/teaching-agent-contract.
 | Inbound topic | `"teaching"` — consumed by `TeachingWorker`; published by Planner Agent |
 | Outbound topic | `"teaching-complete"` — published by `TeachingRequestEventHandler` |
 | `request_id` pass-through | Copied verbatim from `TeachingRequestEvent` to `TeachingCompletionEvent`; Teaching Agent never modifies it |
-| `session_ctx` pass-through | Copied verbatim; Teaching Agent never reads or validates its contents |
-| Always-publish rule | A `TeachingCompletionEvent` is published for every consumed message regardless of `status`; Planner is never left waiting |
+| `sid` pass-through | Copied verbatim; Teaching Agent never reads or validates its contents |
+| Always-publish rule | A `TeachingCompletionEvent` is published for every consumed message regardless of outcome (error → empty `content`); Planner is never left waiting |
 | Malformed payload | Logged with `request_id` (or `"unknown"` if absent), skipped; poll loop continues without crashing |
 | Topic bootstrap | `PlannerTopics.TEACHING` and `TeachingTopics.TEACHING_COMPLETE` registered in `project/topics.py`; both included in `get_all_topic_names()`; backend service creates topics at startup |
 | Test isolation | All Kafka dependencies injectable via factory parameters; tests use Protocol-compatible fakes, no real Kafka required |
+
+### Reflection Rules (FR-029 – FR-037, Phase 3)
+
+| Rule | Detail |
+|---|---|
+| Default behavior | N=1 reflection iteration; configurable via `TEACHING_MAX_REFLECTION_ITERATIONS` |
+| Disable reflection | Set `TEACHING_MAX_REFLECTION_ITERATIONS=0`; exact Phase 1 behavior restored |
+| Per-mode override | `TEACHING_{MODE}_MAX_REFLECTION_ITERATIONS` takes precedence over global |
+| Critique model | `TEACHING_REFLECTION_MODEL` → fallback `TEACHING_MODEL`; per-mode: `TEACHING_{MODE}_REFLECTION_MODEL` |
+| Critique token ceiling | `TEACHING_REFLECTION_MAX_TOKENS` (default 512); critique must fit to be parseable |
+| Revision token ceiling | Per-mode generation ceiling (`TEACHING_{MODE}_MAX_TOKENS`, default 4096) |
+| Failure recovery | Any failure in critique or revision → return best available content; status stays `"ok"` |
+| tokens_used | Sum of completion_tokens across all LLM calls (generation + all critiques + all revisions) |
+| reflection_iterations | Number of completed (both critique and revision succeeded) cycles; 0 when disabled |
+| Output schema | `TeachingAgentOutput` and `TeachingCompletionEvent` are unchanged; reflection is internal |
+| Kafka publish | TeachingCompletionEvent published exactly once, after all reflection iterations |
+| Mermaid rules | Applied identically to revised output as to initial output (FR-005, FR-006, FR-007) |
 
 ### Edge-Case Handling (spec "Edge Cases", FR-010)
 
