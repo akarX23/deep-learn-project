@@ -11,7 +11,6 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY backend_service /app/backend_service
 COPY project /app/project
-COPY uploads /app/uploads
 
 EXPOSE 8001
 
