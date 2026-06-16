@@ -28,6 +28,8 @@ from project.schemas import (
 from project.topics import AgentCompletionTopics, PlannerTopics, RAGTopics
 
 logger = logging.getLogger(__name__)
+logging.getLogger("kafka").setLevel(logging.WARNING)
+logging.getLogger("LiteLLM").setLevel(logging.WARNING)
 
 COMPLETION_TOPICS: tuple[str, ...] = (
     RAGTopics.RAG_COMPLETE.value,
