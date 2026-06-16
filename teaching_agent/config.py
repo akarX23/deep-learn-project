@@ -38,6 +38,8 @@ class LLMConfig:
 
 
 _DEFAULT_MAX_TOKENS = 4096
+_DEFAULT_REFLECTION_MAX_TOKENS = 512
+_DEFAULT_REFLECTION_ITERATIONS = 1
 
 
 def _read_float(name: str, default: float) -> float:
@@ -60,6 +62,13 @@ def _read_int(name: str, default: int) -> int:
         raise ValueError(f"{name} must be an integer") from exc
 
 
+def _resolve_temperature(mode_upper: str) -> float:
+    """Per-mode temperature override, else shared TEACHING_TEMPERATURE, else 0.7."""
+    if os.getenv(f"TEACHING_{mode_upper}_TEMPERATURE"):
+        return _read_float(f"TEACHING_{mode_upper}_TEMPERATURE", 0.7)
+    return _read_float("TEACHING_TEMPERATURE", 0.7)
+
+
 def get_llm_config(output_mode: str) -> LLMConfig:
     """Build LLM config from environment variables for the given output mode.
 
@@ -80,11 +89,7 @@ def get_llm_config(output_mode: str) -> LLMConfig:
 
     api_key = os.getenv(f"TEACHING_{mode_upper}_API_KEY") or os.getenv("TEACHING_API_KEY")
     max_tokens = _read_int(f"TEACHING_{mode_upper}_MAX_TOKENS", _DEFAULT_MAX_TOKENS)
-    temperature = (
-        _read_float(f"TEACHING_{mode_upper}_TEMPERATURE", -1.0)
-        if os.getenv(f"TEACHING_{mode_upper}_TEMPERATURE")
-        else _read_float("TEACHING_TEMPERATURE", 0.7)
-    )
+    temperature = _resolve_temperature(mode_upper)
     effort = os.getenv(f"TEACHING_{mode_upper}_EFFORT") or None
 
     return LLMConfig(
@@ -95,6 +100,67 @@ def get_llm_config(output_mode: str) -> LLMConfig:
         max_tokens=max_tokens,
         effort=effort,
     )
+
+
+def get_reflection_config(output_mode: str) -> LLMConfig:
+    """Build the reflection (critique) LLM config for the given output mode.
+
+    Returns a generic LLMConfig whose `model` and `max_tokens` ARE the reflection
+    model and reflection ceiling (no extra fields on LLMConfig). Resolution:
+      - model:       TEACHING_{MODE}_REFLECTION_MODEL -> TEACHING_REFLECTION_MODEL
+                     -> TEACHING_MODEL (required)
+      - api_key:     TEACHING_{MODE}_API_KEY -> TEACHING_API_KEY (same as generation)
+      - max_tokens:  TEACHING_REFLECTION_MAX_TOKENS -> 512
+      - temperature: same resolution as generation
+      - effort:      never set for reflection calls
+    """
+    mode_upper = output_mode.upper()
+
+    model = (
+        os.getenv(f"TEACHING_{mode_upper}_REFLECTION_MODEL")
+        or os.getenv("TEACHING_REFLECTION_MODEL")
+        or os.getenv("TEACHING_MODEL")
+    )
+    if not model:
+        raise RuntimeError(
+            f"No reflection model configured for '{output_mode}' mode. "
+            f"Set TEACHING_{mode_upper}_REFLECTION_MODEL, TEACHING_REFLECTION_MODEL, "
+            "or TEACHING_MODEL to a LiteLLM-compatible model string."
+        )
+
+    api_key = os.getenv(f"TEACHING_{mode_upper}_API_KEY") or os.getenv("TEACHING_API_KEY")
+
+    return LLMConfig(
+        model=model,
+        api_base=os.getenv("TEACHING_API_BASE"),
+        api_key=api_key or None,
+        temperature=_resolve_temperature(mode_upper),
+        max_tokens=_read_int(
+            "TEACHING_REFLECTION_MAX_TOKENS", _DEFAULT_REFLECTION_MAX_TOKENS
+        ),
+        effort=None,
+    )
+
+
+def get_max_reflection_iterations(output_mode: str) -> int:
+    """Resolve the reflection iteration count (N) for the given output mode.
+
+    TEACHING_{MODE}_MAX_REFLECTION_ITERATIONS -> TEACHING_MAX_REFLECTION_ITERATIONS
+    -> default 1. Clamped to >= 0 (0 disables reflection).
+    """
+    mode_upper = output_mode.upper()
+    raw = (
+        os.getenv(f"TEACHING_{mode_upper}_MAX_REFLECTION_ITERATIONS")
+        or os.getenv("TEACHING_MAX_REFLECTION_ITERATIONS")
+    )
+    if raw is None:
+        return _DEFAULT_REFLECTION_ITERATIONS
+    try:
+        return max(0, int(raw))
+    except ValueError as exc:
+        raise ValueError(
+            "TEACHING_MAX_REFLECTION_ITERATIONS must be an integer"
+        ) from exc
 
 
 # ---------------------------------------------------------------------------

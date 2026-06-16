@@ -22,14 +22,19 @@ def build_messages(prompt: str) -> list[dict[str, str]]:
     return [{"role": "user", "content": prompt}]
 
 
-def parse_llm_response(raw: str) -> dict[str, Any]:
+def parse_llm_response(
+    raw: str, required_fields: tuple[str, ...] = ("explanation", "notes")
+) -> dict[str, Any]:
     """Extract and parse the JSON object from the LLM's raw text response.
 
     The LLM is instructed to return bare JSON, but may occasionally wrap it
     in markdown fences. This function strips fences before parsing.
 
     Returns:
-        Parsed dict containing at least 'explanation' and 'notes'.
+        Parsed dict. Each name in `required_fields` must be present and a
+        non-empty string (default 'explanation'/'notes' for generation and
+        revision; pass () for critique responses, which are validated by the
+        ReflectionCritique model instead).
 
     Raises:
         ValueError: If the response cannot be parsed or required fields are missing.
@@ -59,8 +64,8 @@ def parse_llm_response(raw: str) -> dict[str, Any]:
     if not isinstance(parsed, dict):
         raise ValueError("LLM response JSON is not an object")
 
-    # 'explanation' and 'notes' are always required; diagram and example may be null.
-    for required_field in ("explanation", "notes"):
+    # Each required field must be present and a non-empty string.
+    for required_field in required_fields:
         if required_field not in parsed:
             raise ValueError(f"LLM response missing required field: '{required_field}'")
         if not isinstance(parsed[required_field], str) or not parsed[required_field].strip():

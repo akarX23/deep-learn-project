@@ -332,3 +332,48 @@ def _make_completion_event():
         user_level="beginner",
         content="",
     )
+
+
+def test_reflection_enabled_publishes_exactly_once(monkeypatch) -> None:
+    """SC-014: with reflection on (N>=1), one consumed request -> exactly one
+    TeachingCompletionEvent published. Reflection lives inside TeachingAgent.run(),
+    so it must not change the publish-once contract.
+    """
+    import json
+
+    import teaching_agent.agent as agent_module
+
+    monkeypatch.setenv("TEACHING_MODEL", "test/model")
+    monkeypatch.setenv("TEACHING_MAX_REFLECTION_ITERATIONS", "1")
+    monkeypatch.delenv("TEACHING_BEGINNER_MAX_REFLECTION_ITERATIONS", raising=False)
+
+    gen = json.dumps({"explanation": "g", "diagram": "graph TD\n  A --> B", "notes": "n", "example": "e"})
+    crit = json.dumps({"quality_score": 6, "issues": [], "revision_instructions": "looks ok"})
+    rev = json.dumps({"explanation": "r", "diagram": "graph TD\n  A --> B", "notes": "n2", "example": "e2"})
+    scripted = iter([(gen, 100), (crit, 50), (rev, 120)])
+    monkeypatch.setattr(agent_module, "call_llm", lambda messages, config: next(scripted))
+
+    sent = []
+
+    class _FakeProducer:
+        def send(self, topic, payload):
+            sent.append((topic, payload))
+
+        def flush(self):
+            pass
+
+    handler = TeachingRequestEventHandler()  # real agent + real publish_teaching_complete
+    handler.process_request(
+        {
+            "request_id": "req-reflect-1",
+            "sid": "s-1",
+            "user_prompt": "What is a loop?",
+            "user_level": "beginner",
+            "rag_compiled": "",
+        },
+        producer=_FakeProducer(),
+    )
+
+    assert len(sent) == 1                              # exactly one publish (SC-014)
+    assert sent[0][0] == "teaching-complete"
+    assert sent[0][1]["request_id"] == "req-reflect-1"

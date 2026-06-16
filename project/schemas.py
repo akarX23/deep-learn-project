@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class PageExtractionStatus(str, Enum):
@@ -396,6 +396,7 @@ class TeachingMetadata(BaseModel):
     topic: str
     tokens_used: int = Field(ge=0)
     model: str
+    reflection_iterations: int = Field(default=0, ge=0)
 
     @field_validator("model")
     @classmethod
@@ -419,6 +420,39 @@ class TeachingAgentOutput(BaseModel):
         if value not in {"ok", "error"}:
             raise ValueError("status must be 'ok' or 'error'")
         return value
+
+
+# --- Reflection (Phase 3) — internal models -------------------------------
+# ReflectionIssue / ReflectionCritique are used ONLY inside TeachingAgent.run();
+# they are never serialized into TeachingAgentOutput or TeachingCompletionEvent.
+
+
+class ReflectionIssue(BaseModel):
+    """A single weakness in the current output, flagged by the critique step."""
+
+    field: str  # explanation | diagram | notes | example
+    issue: str
+    severity: Literal["low", "medium", "high"]
+
+
+class ReflectionCritique(BaseModel):
+    """Internal critique produced by the reflection step (Phase 3).
+
+    Consumed only within TeachingAgent.run() to drive the revision call;
+    not part of any external contract.
+    """
+
+    quality_score: int = Field(ge=1, le=10)
+    issues: List[ReflectionIssue] = Field(default_factory=list)
+    revision_instructions: str = ""
+
+    @model_validator(mode="after")
+    def require_instructions_when_issues_present(self) -> "ReflectionCritique":
+        if self.issues and not self.revision_instructions.strip():
+            raise ValueError(
+                "revision_instructions cannot be empty when issues are present"
+            )
+        return self
 
 
 # class TeachingCompletionEvent(BaseModel):

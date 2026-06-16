@@ -126,7 +126,7 @@ teaching_agent/
 │                        #                      _reflect(), _revise()
 │                        #                      reflection loop (N iterations)
 │                        #                      [Phase 1 core unchanged; reflection added in Phase 3]
-├── config.py            # LLMConfig dataclass (add effort, reflection_max_tokens fields)
+├── config.py            # LLMConfig dataclass (generic; effort added in T032, no reflection fields)
 │                        # get_llm_config(output_mode) — generation config
 │                        # get_reflection_config(output_mode) — critique config (Phase 3):
 │                        #   TEACHING_REFLECTION_MODEL, TEACHING_{MODE}_REFLECTION_MODEL,
@@ -219,15 +219,15 @@ It returns JSON with the same structure as generation (explanation, diagram, not
 
 Two new private methods added to `TeachingAgent` in `agent.py`:
 
-- `_reflect(current_content, topic, output_mode, config) → ReflectionCritique | None`
+- `_reflect(current_content, topic, output_mode, config, tokens_accumulator) → ReflectionCritique | None`
   Calls the LLM with `REFLECTION_PROMPT_BY_MODE[output_mode]`. Parses the response into
   `ReflectionCritique`. Returns `None` on any failure (parse error, LiteLLM exception).
-  Adds critique tokens to the running `tokens_used` total.
+  Appends the critique call's tokens to `tokens_accumulator`.
 
-- `_revise(current_content, critique, topic, output_mode, context, config) → TeachingContent | None`
+- `_revise(current_content, critique, topic, output_mode, context, config, tokens_accumulator) → TeachingContent | None`
   Calls the LLM with `REVISION_PROMPT_BY_MODE[output_mode]`. Passes the existing content
   plus `critique.revision_instructions`. Parses and validates the response (including Mermaid).
-  Returns `None` on any failure. Adds revision tokens to the running `tokens_used` total.
+  Returns `None` on any failure. Appends the revision call's tokens to `tokens_accumulator`.
 
 `run()` updated: after the initial generation and diagram validation, enter the reflection
 loop. On each iteration, call `_reflect()`; if `None`, break and return current content.
@@ -238,13 +238,16 @@ all calls and `reflection_iterations` = number of completed cycles.
 ### Token Accounting
 
 ```
-tokens_used = generation_tokens
-            + sum(critique_tokens_i + revision_tokens_i  for i in completed_cycles)
+tokens_used = sum of completion_tokens over EVERY LLM call that returns
+              (generation + each critique + each revision), per SC-013 —
+              including a critique/revision whose response later fails to parse
+              (the call still consumed tokens).
 ```
 
 `metadata.tokens_used` always reflects total real consumption.
-`metadata.reflection_iterations` is a new field (int, ge=0) — add to `TeachingMetadata`
-in `project/schemas.py`.
+`metadata.reflection_iterations` counts only fully completed (critique + revision)
+cycles and is independent of `tokens_used`. It is a new field (int, ge=0) added to
+`TeachingMetadata` in `project/schemas.py`.
 
 ### Graceful Degradation
 

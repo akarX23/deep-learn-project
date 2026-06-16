@@ -3,13 +3,13 @@
 **Input**: Design documents from `/specs/002-teaching-agent/`
 **Prerequisites**: plan.md ✓, spec.md ✓, research.md ✓, data-model.md ✓, contracts/ ✓, quickstart.md ✓
 
-**Organization**: Phase 1 (core pipeline, complete) + Phase 2 (Kafka integration, open).
-All Phase 2 tasks are reviewed and approved individually before implementation.
+**Organization**: Phase 1 (core pipeline) + Phase 2 (Kafka integration) + Phase 3 (reflection layer).
+All Phase 2 and Phase 3 tasks are reviewed and approved individually before implementation.
 
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel (different files, no blocking dependencies)
-- **[Story]**: User story from spec.md (US1–US4 = core pipeline; US5 = Kafka integration)
+- **[Story]**: User story from spec.md (US1–US4 = core pipeline; US5 = Kafka integration; US6 = reflection)
 
 ---
 
@@ -293,7 +293,7 @@ until ratified.
 
 ### P3-A: Schema & Config (Blocking Prerequisites)
 
-- [ ] T035 Add `ReflectionCritique` to `project/schemas.py` (Teaching Agent section,
+- [x] T035 Add `ReflectionCritique` to `project/schemas.py` (Teaching Agent section,
       internal models):
       fields: `quality_score` (int, ge=1, le=10), `issues` (list of dicts with keys
       `field: str`, `issue: str`, `severity: Literal["low","medium","high"]`),
@@ -303,9 +303,9 @@ until ratified.
       **Note**: `ReflectionCritique` is internal — it MUST NOT appear in `TeachingAgentOutput`
       or `TeachingCompletionEvent`.
 
-- [ ] T036 Update `teaching_agent/config.py`:
-      - Add `reflection_model: str`, `reflection_max_tokens: int`, `max_reflection_iterations: int`
-        fields to `LLMConfig`
+- [x] T036 Update `teaching_agent/config.py`:
+      - Keep `LLMConfig` generic — NO new fields (T047-reconciled design); reflection
+        settings are produced by the helper functions below
       - Add `get_reflection_config(output_mode: str) → LLMConfig` function:
         - `model`: `TEACHING_{MODE}_REFLECTION_MODEL` → `TEACHING_REFLECTION_MODEL`
           → `TEACHING_MODEL` (required if nothing else set)
@@ -324,7 +324,7 @@ until ratified.
 
 ### P3-B: Prompt Templates
 
-- [ ] T037 [P] Add `REFLECTION_PROMPT_BY_MODE` to `teaching_agent/prompts.py`:
+- [x] T037 [P] Add `REFLECTION_PROMPT_BY_MODE` to `teaching_agent/prompts.py`:
       Three constants (`BEGINNER_REFLECTION_PROMPT`, `INTERMEDIATE_REFLECTION_PROMPT`,
       `ADVANCED_REFLECTION_PROMPT`) + `REFLECTION_PROMPT_BY_MODE` dict.
       Each template:
@@ -338,7 +338,7 @@ until ratified.
         - advanced: formal correctness, edge-case coverage, depth of internals discussion
       - Same JSON-only rules as generation prompts (no markdown fences, escape newlines)
 
-- [ ] T038 [P] Add `REVISION_PROMPT_BY_MODE` to `teaching_agent/prompts.py`:
+- [x] T038 [P] Add `REVISION_PROMPT_BY_MODE` to `teaching_agent/prompts.py`:
       Three constants (`BEGINNER_REVISION_PROMPT`, `INTERMEDIATE_REVISION_PROMPT`,
       `ADVANCED_REVISION_PROMPT`) + `REVISION_PROMPT_BY_MODE` dict.
       Each template:
@@ -357,7 +357,7 @@ until ratified.
 
 ### P3-C: Agent Logic
 
-- [ ] T039 Add `_reflect()` method to `TeachingAgent` in `teaching_agent/agent.py`:
+- [x] T039 Add `_reflect()` method to `TeachingAgent` in `teaching_agent/agent.py`:
       ```
       _reflect(
           current_content: TeachingContent,
@@ -377,7 +377,7 @@ until ratified.
       - Append `tokens_used` from this call to `tokens_accumulator`
       - Return `ReflectionCritique(**parsed)`
 
-- [ ] T040 Add `_revise()` method to `TeachingAgent` in `teaching_agent/agent.py`:
+- [x] T040 Add `_revise()` method to `TeachingAgent` in `teaching_agent/agent.py`:
       ```
       _revise(
           current_content: TeachingContent,
@@ -399,12 +399,13 @@ until ratified.
       - Append `tokens_used` from this call to `tokens_accumulator`
       - Return revised `TeachingContent`
 
-- [ ] T041 Update `TeachingAgent.run()` in `teaching_agent/agent.py` to orchestrate the
+- [x] T041 Update `TeachingAgent.run()` in `teaching_agent/agent.py` to orchestrate the
       reflection loop:
-      - After step 6 (initial diagram resolution), introduce:
+      - After step 6 (assembling the initial content), run the loop (step 7) before
+        the final assembly (step 8):
         ```python
         tokens_accumulator = [tokens_used]        # start with generation tokens
-        current_content = initial_content
+        current_content = content
         completed_iterations = 0
         max_iterations = get_max_reflection_iterations(output_mode)
         reflection_cfg = get_reflection_config(output_mode)
@@ -432,7 +433,7 @@ until ratified.
 
 ### P3-D: Tests
 
-- [ ] T042 Add reflection tests to `teaching_agent/tests/test_teaching_agent.py`:
+- [x] T042 Add reflection tests to `teaching_agent/tests/test_teaching_agent.py`:
       (monkeypatch `call_llm` as in existing tests; no real LLM required)
 
       - `test_reflection_disabled_when_iterations_zero` — set env
@@ -468,7 +469,7 @@ until ratified.
       - `test_metadata_reflection_iterations_is_zero_when_disabled` — N=0;
         verify `metadata.reflection_iterations == 0`
 
-- [ ] T043 Update `.env.local` — add reflection env var stubs (commented out) under
+- [~] T043 Update `.env.local` — add reflection env var stubs (commented out) under
       Teaching Agent section:
       `TEACHING_MAX_REFLECTION_ITERATIONS`, `TEACHING_REFLECTION_MODEL`,
       `TEACHING_REFLECTION_MAX_TOKENS`; per-mode:
@@ -477,18 +478,26 @@ until ratified.
       `TEACHING_ADVANCED_MAX_REFLECTION_ITERATIONS`,
       `TEACHING_BEGINNER_REFLECTION_MODEL`, etc.
       Active default: `TEACHING_MAX_REFLECTION_ITERATIONS=1` (uncommented)
+      NOTE: documentation-only — `.env.local` does not exist in the repo and is
+      git-ignored. Reflection resolves via code defaults (N=1, critique ceiling 512)
+      regardless. Add stubs locally only if per-mode tuning is needed (consistent
+      with T030/T033).
 
-- [ ] T044 Update `CLAUDE.md` — add Reflection section under Teaching Agent:
+- [~] T044 Update `CLAUDE.md` — add Reflection section under Teaching Agent:
       - Reflection env vars and defaults
       - How to disable: `TEACHING_MAX_REFLECTION_ITERATIONS=0`
       - `metadata.reflection_iterations` interpretation
       - Wall-clock budget table updated for reflection-on vs reflection-off
+      NOTE: deferred — the repo's `CLAUDE.md` currently has NO Teaching Agent section
+      (it is RAG-only; Teaching is still listed as "not yet implemented"). A reflection
+      subsection has nothing to attach to. Adding a full Teaching Agent section is out of
+      scope here; tracked separately as a pre-existing CLAUDE.md gap.
 
 ---
 
 ### P3-E: Validation
 
-- [ ] T045 Run full test suite: `pytest teaching_agent/tests/ -q` — all tests must pass
+- [x] T045 Run full test suite: `pytest teaching_agent/tests/ -q` — all tests must pass
       including new reflection tests (T042); existing Phase 1 and Phase 2 tests unaffected
 
 - [ ] T046 Manual quality validation (requires real LLM):
@@ -506,7 +515,7 @@ and add missing validation coverage. T047/T049/T050/T051/T053 are documentation
 reconciliations (no production code); T048 and T052 add test/validation coverage and depend
 on the T041 implementation existing.
 
-- [ ] T047 [Gap A] Reconcile reflection config design — keep `LLMConfig` generic.
+- [x] T047 [Gap A] Reconcile reflection config design — keep `LLMConfig` generic.
       `LLMConfig` retains only its existing fields (`model`, `api_base`, `api_key`,
       `temperature`, `max_tokens`, `effort`). Reflection settings are produced by helper
       functions, NOT added as `LLMConfig` fields:
@@ -533,7 +542,7 @@ on the T041 implementation existing.
         revision calls.
       Requires a reachable LLM endpoint (gated like T046).
 
-- [ ] T049 [Gap C] Update `data-model.md` and `contracts/teaching-agent-contract.md` for
+- [x] T049 [Gap C] Update `data-model.md` and `contracts/teaching-agent-contract.md` for
       Phase 3: add the internal `ReflectionCritique` entity (`quality_score`, `issues`,
       `revision_instructions`) and the new `TeachingMetadata.reflection_iterations` field.
       Note both are internal/metadata only — the external `TeachingAgentOutput` /
@@ -541,24 +550,24 @@ on the T041 implementation existing.
       NOTE: while editing, also reconcile any residual stale Kafka-event shapes in those two
       docs left over from the planner-alignment schema change (separate pre-existing drift).
 
-- [ ] T050 [Gap D] Reconcile `_reflect()` / `_revise()` signatures between plan.md and
+- [x] T050 [Gap D] Reconcile `_reflect()` / `_revise()` signatures between plan.md and
       tasks.md. T039/T040 pass an explicit `tokens_accumulator: list[int]`; plan.md's
       "Agent Changes" section omits it. Adopt the explicit `tokens_accumulator` parameter as
       the canonical signature and update plan.md's "Agent Changes" to match (one consistent
       choice across both docs).
 
-- [ ] T051 [Gap E] Fix T041's `run()` integration description: the reflection loop runs
+- [x] T051 [Gap E] Fix T041's `run()` integration description: the reflection loop runs
       AFTER diagram resolution (step 5) and BEFORE final assembly (step 6) — not "after
       step 6". Replace the `initial_content` placeholder with the actual variable name used
       in `agent.py` (`content`), and align the snippet with the real `run()` structure.
 
-- [ ] T052 [Gap F] Add an SC-014 regression test: with reflection enabled (N≥1), a single
+- [x] T052 [Gap F] Add an SC-014 regression test: with reflection enabled (N≥1), a single
       consumed `TeachingRequestEvent` results in exactly one `TeachingCompletionEvent`
       published. Add to `test_kafka_integration.py` (or T042) using the fake producer
       (assert exactly one `send()` call) with a monkeypatched multi-call `call_llm`. Confirms
       reflection — which lives inside `run()` — does not change the publish-once contract.
 
-- [ ] T053 [Gap G] Refresh stale global sections of tasks.md now that Phase 3 exists:
+- [x] T053 [Gap G] Refresh stale global sections of tasks.md now that Phase 3 exists:
       - Header **Organization** line — add Phase 3 (Reflection layer).
       - **[Story]** legend — add US6 = Reflection.
       - **Dependencies & Execution Order → Phase Dependencies** — fix "P2-F (T025–T027)" to
@@ -594,7 +603,9 @@ T039 and T040 can be developed in parallel (different methods) but both block T0
 - **P2-C (T021)**: Depends on P2-A + P2-B (needs Kafka types and event schemas)
 - **P2-D (T022)**: Depends on P2-B + P2-C (needs kafka.py and handlers.py)
 - **P2-E (T023–T024)**: Depends on P2-B + P2-C + P2-D (tests all three files)
-- **P2-F (T025–T027)**: Depends on P2-E completion
+- **P2-F (T025–T034)**: Depends on P2-E completion
+- **Phase 3 (T035–T053)**: P3-A→P3-E built per the Phase 3 Dependencies block;
+  P3-F (T047–T053) are doc-reconciliation / added-coverage tasks, mostly independent
 
 ### Within P2-A
 
@@ -610,6 +621,7 @@ T021 → [checkpoint]
 T022 → [checkpoint]
 T023 → T024 → [checkpoint]
 T025 → T026 → T027
+(Phase 3) T035 → T036 → T037/T038 → T039/T040 → T041 → T042 → T043–T053
 ```
 
 ---

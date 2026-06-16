@@ -5,9 +5,10 @@
 ### OutputMode (Enum)
 - Description: The target learner level. Determines explanation structure, vocabulary register, diagram rules, and token ceiling.
 - Allowed values:
-  - `beginner` — no prior knowledge assumed; analogies, required diagram, 512-token ceiling
-  - `intermediate` — basics known; technical terminology, optional diagram, 1024-token ceiling
-  - `advanced` — practitioner level; formal definitions, internals, optional diagram, 2048-token ceiling
+  - `beginner` — no prior knowledge assumed; analogies, required diagram
+  - `intermediate` — basics known; technical terminology, optional diagram
+  - `advanced` — practitioner level; formal definitions, internals, optional diagram
+- Token ceiling: per-mode via `TEACHING_{MODE}_MAX_TOKENS`, default 4096 each (FR-008).
 
 ### TeachingAgentInput
 - Description: Input payload received from the Planner Agent.
@@ -38,11 +39,15 @@
 - Description: Audit record for the Teaching Agent response.
 - Fields:
   - `topic`: str — mirrored from input
-  - `tokens_used`: int — actual token consumption reported by the LLM response
+  - `tokens_used`: int — total completion tokens across every LLM call in the request
+    lifecycle (generation + each critique + each revision), per SC-013
   - `model`: str — model identifier used for the generation (e.g., `claude-sonnet-4-6`)
+  - `reflection_iterations`: int — completed reflection cycles; 0 when disabled or none
+    completed; default 0 (Phase 3)
 - Validation rules:
   - `tokens_used` must be >= 0.
   - `model` must be non-empty.
+  - `reflection_iterations` must be >= 0.
 
 ### TeachingAgentOutput
 - Description: Output payload returned by the Teaching Agent to the Planner Agent.
@@ -62,39 +67,30 @@
 - Description: Inbound Kafka payload published by the Planner Agent to the `"teaching"` topic. Triggers the Teaching Agent worker.
 - Fields:
   - `request_id`: str — unique per request, assigned by Planner; non-empty
-  - `session_ctx`: dict — user/session tracking metadata (e.g. `session_id`, `user_id`, `trace_id`); may be empty `{}`
-  - `topic`: str — maps to `TeachingAgentInput.topic`
-  - `output_mode`: str — maps to `TeachingAgentInput.output_mode`
-  - `context`: str — maps to `TeachingAgentInput.context`; defaults to `""`
-  - `created_at`: str | None — optional ISO 8601 UTC timestamp of when Planner created the event
-  - `source`: str | None — optional source identifier (e.g. `"planner-agent"`)
+  - `sid`: str — session identifier for correlation
+  - `user_prompt`: str — maps to `TeachingAgentInput.topic`
+  - `user_level`: str — maps to `TeachingAgentInput.output_mode`
+  - `rag_compiled`: str — maps to `TeachingAgentInput.context`; defaults to `""`
 - Validation rules:
   - `request_id` must be non-empty.
-  - `session_ctx` must not be null (empty dict is valid).
-  - `topic`, `output_mode`, and `context` follow the same rules as `TeachingAgentInput`.
+  - the worker maps `user_prompt`/`user_level`/`rag_compiled` onto the core pipeline's
+    `topic`/`output_mode`/`context` (FR-020).
 
 ### TeachingCompletionEvent (Phase 2 — Kafka outbound)
 
 - Description: Outbound Kafka payload published by the Teaching Agent to `"teaching-complete"` after every request, including failures.
 - Fields:
   - `request_id`: str — passed through verbatim from `TeachingRequestEvent`
-  - `session_ctx`: dict — passed through verbatim from `TeachingRequestEvent`
-  - `topic`: str — from the request
-  - `output_mode`: str — from the request
-  - `status`: str — `"ok"` or `"error"`
-  - `content`: TeachingContent | None — null when `status: "error"`
-  - `tokens_used`: int — from `TeachingMetadata.tokens_used`; `0` on error
-  - `model`: str — from `TeachingMetadata.model`
-  - `started_at`: str — ISO 8601 UTC; when `TeachingAgent.run()` was invoked
-  - `completed_at`: str — ISO 8601 UTC; when the result was ready
-  - `duration_ms`: int — `max(0, completed_at - started_at)` in milliseconds
-  - `errors`: list[str] — error messages; empty list on success
-  - `source`: str — always `"teaching-agent"`
+  - `sid`: str — passed through verbatim from `TeachingRequestEvent`
+  - `user_level`: str — from the request
+  - `content`: str — serialized `TeachingContent` JSON on success; empty string `""` on error
 - Validation rules:
-  - `request_id` and `session_ctx` must match the originating `TeachingRequestEvent` exactly.
-  - `status` must be exactly `"ok"` or `"error"`.
-  - `duration_ms` must be >= 0.
-  - `tokens_used` must be >= 0.
+  - `request_id` and `sid` must match the originating `TeachingRequestEvent`.
+  - `request_id` and `user_level` must be non-empty.
+- Note: this event carries no `status`, timing, `tokens_used`, `model`, or `errors`
+  fields — an error outcome is conveyed as empty `content`. Audit detail
+  (`tokens_used`, `model`, `reflection_iterations`) lives on the internal
+  `TeachingMetadata`, not on this external event.
 
 ### TeachingTopics (Phase 2 — Kafka topic registry)
 
@@ -106,14 +102,36 @@
 - `TeachingTopics.TEACHING_COMPLETE` and `PlannerTopics.TEACHING` are both included in
   `get_all_topic_names()` so the backend service bootstraps them at startup.
 
+### ReflectionIssue (Phase 3 — internal)
+
+- Description: One weakness flagged by the critique step. Internal to the reflection
+  loop; never serialized into `TeachingAgentOutput` or `TeachingCompletionEvent`.
+- Fields:
+  - `field`: str — one of `explanation`, `diagram`, `notes`, `example`
+  - `issue`: str — the specific weakness
+  - `severity`: str — one of `low`, `medium`, `high`
+
+### ReflectionCritique (Phase 3 — internal)
+
+- Description: Structured self-critique produced between generation and revision.
+  Internal only; defined in `project/schemas.py`.
+- Fields:
+  - `quality_score`: int — holistic score, 1–10
+  - `issues`: list[ReflectionIssue] — may be empty
+  - `revision_instructions`: str — instructions passed to the revision call
+- Validation rules:
+  - `quality_score` within [1, 10].
+  - `revision_instructions` non-empty when `issues` is non-empty.
+
 ## Relationships
 
 - One `TeachingAgentInput` maps to one `TeachingAgentOutput`.
 - One `TeachingAgentOutput` contains exactly one `TeachingContent` (when `status: "ok"`) and exactly one `TeachingMetadata`.
 - `OutputMode` determines per-mode content rules applied to `TeachingContent`.
-- One `TeachingRequestEvent` produces exactly one `TeachingCompletionEvent`. `request_id` and `session_ctx` are invariant across both — the Teaching Agent never modifies them.
-- `TeachingRequestEvent` wraps the same fields as `TeachingAgentInput` (`topic`, `output_mode`, `context`) plus Kafka-level tracking fields (`request_id`, `session_ctx`).
-- `TeachingCompletionEvent` flattens `TeachingAgentOutput` (status, content) and `TeachingMetadata` (tokens_used, model) into a single event alongside timing and correlation fields.
+- One `TeachingRequestEvent` produces exactly one `TeachingCompletionEvent`. `request_id` and `sid` are invariant across both — the Teaching Agent never modifies them.
+- `TeachingRequestEvent` carries `user_prompt`/`user_level`/`rag_compiled`, which the worker maps onto `TeachingAgentInput` (`topic`/`output_mode`/`context`) plus correlation fields (`request_id`, `sid`).
+- `TeachingCompletionEvent` carries only the serialized `content` (plus `request_id`/`sid`/`user_level`); audit detail (`tokens_used`, `model`, `reflection_iterations`) stays on the internal `TeachingMetadata`.
+- Reflection (Phase 3) runs entirely inside `TeachingAgent.run()` — exactly one completion event per request regardless of the iteration count N.
 
 ## State Transitions
 
@@ -146,4 +164,4 @@
 | diagram     | Required; `graph TD` or `sequenceDiagram` | Optional; more detailed than beginner | Optional; only if prose insufficient     |
 | notes       | Jargon-free bullet list            | Structured markdown with subheadings   | Dense technical reference / cheat sheet   |
 | example     | Concrete worked example (plain English commentary) | Python snippet with inline comments | Non-trivial usage (optimization/arch pattern) |
-| max_tokens  | 512                               | 1024                                  | 2048                                       |
+| max_tokens  | 4096 (default)                    | 4096 (default)                        | 4096 (default)                             |
