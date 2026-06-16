@@ -10,7 +10,7 @@ from uuid import uuid4
 import requests
 import streamlit as st
 
-from project.schemas import AgentEvent, ConnectionLifecycleState, EventType, FrontendSession
+from project.schemas import AgentEvent, ConnectionLifecycleState, EventType, FrontendSession, QuizPhase
 from ui_frontend.config import UIConfig
 from ui_frontend.router import route_event
 from ui_frontend.socketio_client import start_socketio_client
@@ -100,6 +100,11 @@ def _on_event(event: AgentEvent) -> None:
             if not (history and history[-1]["role"] == "assistant"
                     and history[-1].get("info") and history[-1]["content"] == msg):
                 history.append({"role": "assistant", "content": msg, "info": True, "complete": True})
+
+    elif event_type in {EventType.QUIZ_STARTED, EventType.QUIZ_QUESTION, EventType.QUIZ_FEEDBACK, EventType.QUIZ_COMPLETED}:
+        # Quiz events update quiz state (routing already handled in route_event).
+        # No additional chat history updates needed — quiz UI handles rendering.
+        pass
 
 
 def _on_connection_state_change(
@@ -255,6 +260,81 @@ def _render_chat_tab(cfg: UIConfig, session: FrontendSession) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Quiz tab rendering
+# ---------------------------------------------------------------------------
+
+def _render_quiz_tab(session: FrontendSession) -> None:
+    quiz = session.quiz_state
+    phase = quiz.phase
+
+    # ── Idle state: no quiz yet ───────────────────────────────────────────
+    if phase == QuizPhase.IDLE:
+        st.info("No quiz in progress. A quiz will start when your tutor initiates one.")
+        return
+
+    # ── Quiz started: show title ──────────────────────────────────────────
+    if phase == QuizPhase.STARTED:
+        st.success(f"📋 Quiz {quiz.quiz_id} started!")
+        st.write("Get ready for the first question…")
+        return
+
+    # ── Question phase: render question + choices + submit ────────────────
+    if phase == QuizPhase.QUESTION:
+        st.subheader("Question")
+        st.write(quiz.current_question)
+
+        # Store selected answer in session state (not in FrontendSession).
+        if "quiz_selected_answer" not in st.session_state:
+            st.session_state.quiz_selected_answer = None
+
+        if quiz.choices:
+            selected = st.radio(
+                "Your answer:",
+                options=quiz.choices,
+                index=None if st.session_state.quiz_selected_answer is None else (
+                    quiz.choices.index(st.session_state.quiz_selected_answer)
+                    if st.session_state.quiz_selected_answer in quiz.choices else None
+                ),
+                key=f"quiz_radio_{quiz.quiz_id}",
+            )
+            if selected is not None:
+                st.session_state.quiz_selected_answer = selected
+
+            if st.button("Submit Answer", key=f"quiz_submit_{quiz.quiz_id}"):
+                if st.session_state.quiz_selected_answer:
+                    st.info(f"Answer submitted: {st.session_state.quiz_selected_answer}")
+                else:
+                    st.warning("Please select an answer before submitting.")
+        else:
+            st.warning("No choices available for this question.")
+        return
+
+    # ── Feedback phase: show feedback + score + next button ───────────────
+    if phase == QuizPhase.FEEDBACK:
+        st.subheader("Feedback")
+        st.write(quiz.feedback or "No feedback available.")
+        
+        if quiz.score is not None:
+            st.metric("Score", f"{quiz.score}/1.0" if isinstance(quiz.score, float) else quiz.score)
+
+        if st.button("Next Question", key=f"quiz_next_{quiz.quiz_id}"):
+            st.session_state.quiz_selected_answer = None
+            st.rerun()
+        return
+
+    # ── Completed phase: show final score + banner ────────────────────────
+    if phase == QuizPhase.COMPLETED:
+        st.balloons()
+        st.success("🎉 Quiz Complete!")
+        
+        if quiz.score is not None:
+            st.metric("Final Score", f"{quiz.score}/1.0" if isinstance(quiz.score, float) else quiz.score)
+        
+        st.info("Great job! You've finished the quiz. You can now review your results or ask your tutor another question.")
+        return
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -289,7 +369,7 @@ def main() -> None:
         _render_chat_tab(cfg, session)
 
     with quiz_tab:
-        st.info("Quiz events will appear here.")
+        _render_quiz_tab(session)
 
     with evaluation_tab:
         st.info("Evaluation results will appear here.")
