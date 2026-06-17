@@ -22,6 +22,16 @@ payloads from the `"teaching"` Kafka topic, invokes `TeachingAgent.run()` unchan
 publishes `TeachingCompletionEvent` results to `"teaching-complete"`. The core pipeline
 logic from Phase 1 is not modified.
 
+Phase 4 adds real-time token streaming. The LLM prompt switches from JSON mode to a
+markdown bold-header format (`**Explanation**`, `**Diagram**`, `**Notes**`, `**Example**`).
+A new `StreamingFieldExtractor` component processes the LiteLLM delta stream and publishes
+field-keyed `StreamTokensEventBody` events to the `"stream-tokens"` Kafka topic in real
+time. The `diagram` field is buffered and sent as one complete event; all other fields
+stream token by token. A stream-complete sentinel (`{"done": true}`) signals the end.
+`TeachingCompletionEvent.content` now carries the complete raw markdown string (not
+JSON-serialized `TeachingContent`). Phase 3 (reflection pattern, colleague-owned) is a
+separate branch and is not in scope here.
+
 ## Technical Context
 
 **Language/Version**: Python 3.11
@@ -31,7 +41,7 @@ logic from Phase 1 is not modified.
 **Target Platform**: Linux runtime (local dev and container-ready execution)
 **Project Type**: Agent module/library within a multi-agent backend
 **Performance Goals**: Beginner mode ≤ 5s wall-clock; intermediate ≤ 10s; advanced ≤ 20s on developer hardware under a fast-endpoint model
-**Constraints**: Synchronous execution only; per-mode token ceilings enforced at LiteLLM call level via `TEACHING_{MODE}_MAX_TOKENS` env vars (default 4096 each); per-mode model, API key, temperature, and effort also configurable via `TEACHING_{MODE}_MODEL` / `TEACHING_{MODE}_API_KEY` / `TEACHING_{MODE}_TEMPERATURE` / `TEACHING_{MODE}_EFFORT` with fallback to shared `TEACHING_MODEL` / `TEACHING_API_KEY` / `TEACHING_TEMPERATURE`; effort (`low | medium | high`) maps to `output_config={"effort": value}` for Claude 4.6 models only, silently skipped for all others; Mermaid validation required before returning diagram; JSON output only; no LangGraph
+**Constraints**: Synchronous execution only; per-mode token ceilings enforced at LiteLLM call level via `TEACHING_{MODE}_MAX_TOKENS` env vars (default 4096 each); per-mode model, API key, temperature, and effort also configurable via `TEACHING_{MODE}_MODEL` / `TEACHING_{MODE}_API_KEY` / `TEACHING_{MODE}_TEMPERATURE` / `TEACHING_{MODE}_EFFORT` with fallback to shared `TEACHING_MODEL` / `TEACHING_API_KEY` / `TEACHING_TEMPERATURE`; effort (`low | medium | high`) maps to `output_config={"effort": value}` for Claude 4.6 models only, silently skipped for all others; Mermaid validation required before returning diagram; LLM called without JSON mode (Phase 4) — output is markdown with bold section headers; `TeachingCompletionEvent.content` is raw markdown (Phase 4); no LangGraph
 **Scale/Scope**: One synchronous request per invocation; invoked once per user query by the Planner Agent
 
 ## Constitution Check
@@ -95,30 +105,42 @@ project/
 ├── schemas.py           # Phase 1: OutputMode, TeachingAgentInput, TeachingContent,
 │                        #           TeachingMetadata, TeachingAgentOutput
 │                        # Phase 2: TeachingRequestEvent, TeachingCompletionEvent
+│                        # Phase 4: StreamTokensEventBody (already present, no change)
 └── topics.py            # Phase 2: Add TEACHING to PlannerTopics; add TeachingTopics enum
                          #           (TEACHING_COMPLETE only); include in get_all_topic_names()
+                         # Phase 4: BackendStreamTopics.STREAM_TOKENS (already present, no change)
 
 teaching_agent/
 ├── __init__.py
-├── agent.py             # TeachingAgent class: run(), input validation, prompt dispatch,
-│                        #                      response assembly  [Phase 1 — no changes in Phase 2]
+├── agent.py             # Phase 1: TeachingAgent class: run(), input validation, prompt dispatch,
+│                        #           response assembly
+│                        # Phase 4: uses call_llm_stream(); accepts token_callback; calls
+│                        #           parse_markdown_response() on complete buffer
 ├── config.py            # LLMConfig dataclass, get_llm_config(), per-mode max_tokens map
-├── llm_client.py        # call_llm(messages, config) → (str, int); provider-agnostic via LiteLLM
-├── prompts.py           # BEGINNER_PROMPT, INTERMEDIATE_PROMPT, ADVANCED_PROMPT constants
+├── llm_client.py        # Phase 1: call_llm(messages, config) → (str, int)
+│                        # Phase 4: add call_llm_stream(messages, config) → Iterator[(str, int)];
+│                        #           remove response_format=json_object from call_llm()
+├── prompts.py           # Phase 1: BEGINNER_PROMPT, INTERMEDIATE_PROMPT, ADVANCED_PROMPT constants
+│                        # Phase 4: updated to markdown bold-header output format
 ├── validators.py        # validate_mermaid(diagram: str) → bool; regex-based structural check
-├── helpers.py           # parse_llm_response(raw: str) → dict; build_error_output()
-├── kafka.py             # Phase 2: Protocol types (KafkaConsumerProtocol, KafkaProducerProtocol)
-│                        #           factory functions (create_consumer, create_producer)
-│                        #           topic helpers (consumer_subscribe_teaching, publish_teaching_complete)
-├── handlers.py          # Phase 2: TeachingRequestEventHandler — parse event → run agent →
-│                        #           build completion event → publish; injectable dependencies
-├── worker.py            # Phase 2: TeachingWorker — lifecycle (start/stop/get_state),
-│                        #           background poll loop; process_consumer_batch() function
+├── helpers.py           # Phase 1: parse_llm_response(raw) → dict; build_error_output()
+│                        # Phase 4: parse_llm_response() replaced by parse_markdown_response()
+├── stream_parser.py     # Phase 4 (new): StreamingFieldExtractor — state machine for field-keyed
+│                        #                token extraction from markdown delta stream
+├── kafka.py             # Phase 2: Protocol types, factory functions, topic helpers
+│                        # Phase 4: add publish_stream_token(producer, StreamTokensEventBody)
+├── handlers.py          # Phase 2: TeachingRequestEventHandler
+│                        # Phase 4: builds token_callback; accumulates raw_markdown;
+│                        #           publishes stream_complete sentinel; content = raw_markdown
+├── worker.py            # Phase 2: TeachingWorker lifecycle (unchanged in Phase 4)
 └── tests/
     ├── __init__.py
     ├── test_teaching_agent.py       # Phase 1 tests (real LLM calls)
+    │                                # Phase 4: updated mocks (markdown format, call_llm_stream)
     ├── test_kafka_integration.py    # Phase 2: handler + publish tests (fake Kafka)
-    ├── test_worker_runtime.py       # Phase 2: worker lifecycle tests (fake Kafka)
+    │                                # Phase 4: updated for streaming events
+    ├── test_worker_runtime.py       # Phase 2: worker lifecycle tests (unchanged in Phase 4)
+    ├── test_stream_parser.py        # Phase 4 (new): unit tests for StreamingFieldExtractor
     ├── live_call_test.py
     ├── run_samples.py
     └── inputs/
@@ -181,6 +203,20 @@ Similarly, `TEACHING_{MODE}_MODEL` selects the model per learner level (fallback
 The mode-specific rule is enforced in `agent.py` after diagram validation; full field-level
 validation rules live in `data-model.md` and `contracts/teaching-agent-contract.md`.
 
+### Token Streaming Rules (FR-029 – FR-035, Phase 4)
+
+| Rule | Detail |
+|---|---|
+| LLM output format | Markdown with bold section headers; `response_format={"type": "json_object"}` removed |
+| Section headers | `**Explanation**`, `**Diagram**`, `**Notes**`, `**Example**` — exact bold-header strings |
+| Streaming topic | `"stream-tokens"` (`BackendStreamTopics.STREAM_TOKENS`) |
+| Token event `data` | `{"field": "<section>", "token": "<chunk>"}` |
+| Diagram handling | Buffered by `StreamingFieldExtractor`; published once as a complete event when the next section header or stream end is detected |
+| Stream-complete sentinel | `{"done": true, "tokens_used": N}` — always published last, including on error |
+| `TeachingCompletionEvent.content` | Complete raw markdown string on success; `""` on error (replaces JSON-serialized `TeachingContent`) |
+| Internal parsing | `parse_markdown_response()` used in `agent.py` for Mermaid validation and `TeachingAgentOutput`; not exposed to Kafka |
+| Diagram retry (beginner) | Retry LLM call uses `call_llm()` (non-streaming); retry tokens are not published to `"stream-tokens"` |
+
 ### Kafka Event Rules (FR-019 – FR-028)
 
 | Rule | Detail |
@@ -188,8 +224,10 @@ validation rules live in `data-model.md` and `contracts/teaching-agent-contract.
 | Inbound topic | `"teaching"` — consumed by `TeachingWorker`; published by Planner Agent |
 | Outbound topic | `"teaching-complete"` — published by `TeachingRequestEventHandler` |
 | `request_id` pass-through | Copied verbatim from `TeachingRequestEvent` to `TeachingCompletionEvent`; Teaching Agent never modifies it |
-| `session_ctx` pass-through | Copied verbatim; Teaching Agent never reads or validates its contents |
-| Always-publish rule | A `TeachingCompletionEvent` is published for every consumed message regardless of `status`; Planner is never left waiting |
+| `sid` pass-through | Copied verbatim from `TeachingRequestEvent`; used by backend to route completion event to the correct Socket.IO session; Teaching Agent never reads or validates its contents |
+| `user_level` pass-through | Copied verbatim from `TeachingRequestEvent` to `TeachingCompletionEvent`; also used as `output_mode` for the core pipeline |
+| Field mapping in handler | `user_prompt` → `topic`, `user_level` → `output_mode`, `rag_compiled` → `context` before calling `TeachingAgent.run()` |
+| Always-publish rule | A `TeachingCompletionEvent` is published for every consumed message regardless of outcome; `content` is `""` (empty string) on failure; Planner is never left waiting |
 | Malformed payload | Logged with `request_id` (or `"unknown"` if absent), skipped; poll loop continues without crashing |
 | Topic bootstrap | `PlannerTopics.TEACHING` and `TeachingTopics.TEACHING_COMPLETE` registered in `project/topics.py`; both included in `get_all_topic_names()`; backend service creates topics at startup |
 | Test isolation | All Kafka dependencies injectable via factory parameters; tests use Protocol-compatible fakes, no real Kafka required |

@@ -21,6 +21,8 @@ from quiz_agent.kafka import (
 )
 
 logger = logging.getLogger(__name__)
+logging.getLogger("kafka").setLevel(logging.WARNING)
+logging.getLogger("LiteLLM").setLevel(logging.WARNING)
 
 
 def run() -> None:

@@ -2,16 +2,26 @@ services:
   kafka:
     image: apache/kafka:4.2.1
     container_name: kafka
-    ports:
-      - "${COMPOSE_KAFKA_PORT:-9092}:9092"
+    network_mode: host
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
     environment:
       KAFKA_NODE_ID: "1"
       KAFKA_PROCESS_ROLES: "broker,controller"
-      KAFKA_LISTENERS: "CONTROLLER://localhost:9091,HOST://0.0.0.0:9092,DOCKER://0.0.0.0:9093"
-      KAFKA_ADVERTISED_LISTENERS: "HOST://localhost:9092,DOCKER://kafka:9093"
+      KAFKA_LISTENERS: "CONTROLLER://localhost:9091,HOST://0.0.0.0:9092"
+      KAFKA_ADVERTISED_LISTENERS: "HOST://localhost:9092"
       KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
-      KAFKA_INTER_BROKER_LISTENER_NAME: "DOCKER"
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,HOST:PLAINTEXT,DOCKER:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "HOST"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,HOST:PLAINTEXT"
       KAFKA_CONTROLLER_QUORUM_VOTERS: "1@localhost:9091"
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
@@ -22,11 +32,139 @@ services:
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
+    network_mode: host
+    restart: unless-stopped
     depends_on:
-      - kafka
-    ports:
-      - "${COMPOSE_KAFKA_UI_PORT:-8080}:8080"
+      kafka:
+        condition: service_healthy
     environment:
       KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9093
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: localhost:9092
       SERVER_PORT: 8080
+
+  backend-service:
+    image: deep-learn/backend-service:local
+    build:
+      context: .
+      dockerfile: backend_service/Dockerfile
+    network_mode: host
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/docs', timeout=3)\" >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    depends_on:
+      kafka:
+        condition: service_healthy
+    env_file:
+      - .env.local
+    environment:
+      BACKEND_KAFKA_BOOTSTRAP_SERVERS: ${BACKEND_KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}
+    volumes:
+      - ./uploads:/app/uploads
+
+  orchestrator-agent:
+    image: deep-learn/orchestrator-agent:local
+    build:
+      context: .
+      dockerfile: orchestrator_agent/Dockerfile
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      backend-service:
+        condition: service_healthy
+    env_file:
+      - .env.local
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}
+
+  # planner-agent:
+  #   image: deep-learn/planner-agent:local
+  #   build:
+  #     context: .
+  #     dockerfile: planner_agent/Dockerfile
+  #   network_mode: host
+  #   restart: unless-stopped
+  #   depends_on:
+  #     kafka:
+  #       condition: service_healthy
+  #     backend-service:
+  #       condition: service_healthy
+  #   env_file:
+  #     - .env.local
+  #   environment:
+  #     PLANNER_KAFKA_BOOTSTRAP_SERVERS: ${PLANNER_KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}
+
+  rag-agent:
+    image: deep-learn/rag-agent:local
+    build:
+      context: .
+      dockerfile: rag_agent/Dockerfile
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      backend-service:
+        condition: service_healthy
+    env_file:
+      - .env.local
+    environment:
+      BACKEND_KAFKA_BOOTSTRAP_SERVERS: ${BACKEND_KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}
+    volumes:
+      - ./uploads:/app/uploads
+
+  teaching-agent:
+    image: deep-learn/teaching-agent:local
+    build:
+      context: .
+      dockerfile: teaching_agent/Dockerfile
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      backend-service:
+        condition: service_healthy
+    env_file:
+      - .env.local
+    environment:
+      BACKEND_KAFKA_BOOTSTRAP_SERVERS: ${BACKEND_KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}
+
+  quiz-agent:
+    image: deep-learn/quiz-agent:local
+    build:
+      context: .
+      dockerfile: quiz_agent/Dockerfile
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      backend-service:
+        condition: service_healthy
+    env_file:
+      - .env.local
+    environment:
+      BACKEND_KAFKA_BOOTSTRAP_SERVERS: ${BACKEND_KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}
+
+  ui-frontend:
+    image: deep-learn/ui-frontend:local
+    build:
+      context: .
+      dockerfile: ui_frontend/Dockerfile
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      backend-service:
+        condition: service_healthy
+    env_file:
+      - .env.local

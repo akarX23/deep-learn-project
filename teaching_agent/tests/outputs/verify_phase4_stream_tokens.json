@@ -1,0 +1,1758 @@
+[
+  {
+    "field": "explanation",
+    "token": "\n"
+  },
+  {
+    "field": "explanation",
+    "token": "1"
+  },
+  {
+    "field": "explanation",
+    "token": "."
+  },
+  {
+    "field": "explanation",
+    "token": " A"
+  },
+  {
+    "field": "explanation",
+    "token": " Binary"
+  },
+  {
+    "field": "explanation",
+    "token": " Search"
+  },
+  {
+    "field": "explanation",
+    "token": " Tree"
+  },
+  {
+    "field": "explanation",
+    "token": " is"
+  },
+  {
+    "field": "explanation",
+    "token": " a"
+  },
+  {
+    "field": "explanation",
+    "token": " way"
+  },
+  {
+    "field": "explanation",
+    "token": " to"
+  },
+  {
+    "field": "explanation",
+    "token": " organize"
+  },
+  {
+    "field": "explanation",
+    "token": " information"
+  },
+  {
+    "field": "explanation",
+    "token": ","
+  },
+  {
+    "field": "explanation",
+    "token": " like"
+  },
+  {
+    "field": "explanation",
+    "token": " a"
+  },
+  {
+    "field": "explanation",
+    "token": " tree"
+  },
+  {
+    "field": "explanation",
+    "token": " with"
+  },
+  {
+    "field": "explanation",
+    "token": " branches"
+  },
+  {
+    "field": "explanation",
+    "token": ","
+  },
+  {
+    "field": "explanation",
+    "token": " where"
+  },
+  {
+    "field": "explanation",
+    "token": " each"
+  },
+  {
+    "field": "explanation",
+    "token": " branch"
+  },
+  {
+    "field": "explanation",
+    "token": " splits"
+  },
+  {
+    "field": "explanation",
+    "token": " into"
+  },
+  {
+    "field": "explanation",
+    "token": " two"
+  },
+  {
+    "field": "explanation",
+    "token": " smaller"
+  },
+  {
+    "field": "explanation",
+    "token": " branches"
+  },
+  {
+    "field": "explanation",
+    "token": " to"
+  },
+  {
+    "field": "explanation",
+    "token": " help"
+  },
+  {
+    "field": "explanation",
+    "token": " find"
+  },
+  {
+    "field": "explanation",
+    "token": " things"
+  },
+  {
+    "field": "explanation",
+    "token": " quickly"
+  },
+  {
+    "field": "explanation",
+    "token": ".\n"
+  },
+  {
+    "field": "explanation",
+    "token": "2"
+  },
+  {
+    "field": "explanation",
+    "token": "."
+  },
+  {
+    "field": "explanation",
+    "token": " Imagine"
+  },
+  {
+    "field": "explanation",
+    "token": " a"
+  },
+  {
+    "field": "explanation",
+    "token": " library"
+  },
+  {
+    "field": "explanation",
+    "token": " with"
+  },
+  {
+    "field": "explanation",
+    "token": " millions"
+  },
+  {
+    "field": "explanation",
+    "token": " of"
+  },
+  {
+    "field": "explanation",
+    "token": " books"
+  },
+  {
+    "field": "explanation",
+    "token": ","
+  },
+  {
+    "field": "explanation",
+    "token": " and"
+  },
+  {
+    "field": "explanation",
+    "token": " you"
+  },
+  {
+    "field": "explanation",
+    "token": " want"
+  },
+  {
+    "field": "explanation",
+    "token": " to"
+  },
+  {
+    "field": "explanation",
+    "token": " find"
+  },
+  {
+    "field": "explanation",
+    "token": " a"
+  },
+  {
+    "field": "explanation",
+    "token": " specific"
+  },
+  {
+    "field": "explanation",
+    "token": " book"
+  },
+  {
+    "field": "explanation",
+    "token": " -"
+  },
+  {
+    "field": "explanation",
+    "token": " a"
+  },
+  {
+    "field": "explanation",
+    "token": " Binary"
+  },
+  {
+    "field": "explanation",
+    "token": " Search"
+  },
+  {
+    "field": "explanation",
+    "token": " Tree"
+  },
+  {
+    "field": "explanation",
+    "token": " is"
+  },
+  {
+    "field": "explanation",
+    "token": " like"
+  },
+  {
+    "field": "explanation",
+    "token": " a"
+  },
+  {
+    "field": "explanation",
+    "token": " super"
+  },
+  {
+    "field": "explanation",
+    "token": "-efficient"
+  },
+  {
+    "field": "explanation",
+    "token": " librarian"
+  },
+  {
+    "field": "explanation",
+    "token": " who"
+  },
+  {
+    "field": "explanation",
+    "token": " helps"
+  },
+  {
+    "field": "explanation",
+    "token": " you"
+  },
+  {
+    "field": "explanation",
+    "token": " find"
+  },
+  {
+    "field": "explanation",
+    "token": " the"
+  },
+  {
+    "field": "explanation",
+    "token": " book"
+  },
+  {
+    "field": "explanation",
+    "token": " by"
+  },
+  {
+    "field": "explanation",
+    "token": " constantly"
+  },
+  {
+    "field": "explanation",
+    "token": " dividing"
+  },
+  {
+    "field": "explanation",
+    "token": " the"
+  },
+  {
+    "field": "explanation",
+    "token": " search"
+  },
+  {
+    "field": "explanation",
+    "token": " area"
+  },
+  {
+    "field": "explanation",
+    "token": " in"
+  },
+  {
+    "field": "explanation",
+    "token": " half"
+  },
+  {
+    "field": "explanation",
+    "token": ".\n"
+  },
+  {
+    "field": "explanation",
+    "token": "3"
+  },
+  {
+    "field": "explanation",
+    "token": "."
+  },
+  {
+    "field": "explanation",
+    "token": " It"
+  },
+  {
+    "field": "explanation",
+    "token": " matters"
+  },
+  {
+    "field": "explanation",
+    "token": " because"
+  },
+  {
+    "field": "explanation",
+    "token": " it"
+  },
+  {
+    "field": "explanation",
+    "token": " allows"
+  },
+  {
+    "field": "explanation",
+    "token": " us"
+  },
+  {
+    "field": "explanation",
+    "token": " to"
+  },
+  {
+    "field": "explanation",
+    "token": " find"
+  },
+  {
+    "field": "explanation",
+    "token": " information"
+  },
+  {
+    "field": "explanation",
+    "token": " quickly"
+  },
+  {
+    "field": "explanation",
+    "token": ","
+  },
+  {
+    "field": "explanation",
+    "token": " even"
+  },
+  {
+    "field": "explanation",
+    "token": " when"
+  },
+  {
+    "field": "explanation",
+    "token": " there"
+  },
+  {
+    "field": "explanation",
+    "token": "'s"
+  },
+  {
+    "field": "explanation",
+    "token": " a"
+  },
+  {
+    "field": "explanation",
+    "token": " huge"
+  },
+  {
+    "field": "explanation",
+    "token": " amount"
+  },
+  {
+    "field": "explanation",
+    "token": " of"
+  },
+  {
+    "field": "explanation",
+    "token": " data"
+  },
+  {
+    "field": "explanation",
+    "token": ","
+  },
+  {
+    "field": "explanation",
+    "token": " which"
+  },
+  {
+    "field": "explanation",
+    "token": " is"
+  },
+  {
+    "field": "explanation",
+    "token": " really"
+  },
+  {
+    "field": "explanation",
+    "token": " important"
+  },
+  {
+    "field": "explanation",
+    "token": " for"
+  },
+  {
+    "field": "explanation",
+    "token": " things"
+  },
+  {
+    "field": "explanation",
+    "token": " like"
+  },
+  {
+    "field": "explanation",
+    "token": " computers"
+  },
+  {
+    "field": "explanation",
+    "token": " and"
+  },
+  {
+    "field": "explanation",
+    "token": " websites"
+  },
+  {
+    "field": "explanation",
+    "token": ".\n"
+  },
+  {
+    "field": "explanation",
+    "token": "4"
+  },
+  {
+    "field": "explanation",
+    "token": "."
+  },
+  {
+    "field": "explanation",
+    "token": " Here"
+  },
+  {
+    "field": "explanation",
+    "token": "'s"
+  },
+  {
+    "field": "explanation",
+    "token": " how"
+  },
+  {
+    "field": "explanation",
+    "token": " it"
+  },
+  {
+    "field": "explanation",
+    "token": " works"
+  },
+  {
+    "field": "explanation",
+    "token": ":"
+  },
+  {
+    "field": "explanation",
+    "token": " first"
+  },
+  {
+    "field": "explanation",
+    "token": ","
+  },
+  {
+    "field": "explanation",
+    "token": " you"
+  },
+  {
+    "field": "explanation",
+    "token": " start"
+  },
+  {
+    "field": "explanation",
+    "token": " with"
+  },
+  {
+    "field": "explanation",
+    "token": " a"
+  },
+  {
+    "field": "explanation",
+    "token": " \""
+  },
+  {
+    "field": "explanation",
+    "token": "root"
+  },
+  {
+    "field": "explanation",
+    "token": "\""
+  },
+  {
+    "field": "explanation",
+    "token": " ("
+  },
+  {
+    "field": "explanation",
+    "token": "the"
+  },
+  {
+    "field": "explanation",
+    "token": " top"
+  },
+  {
+    "field": "explanation",
+    "token": " of"
+  },
+  {
+    "field": "explanation",
+    "token": " the"
+  },
+  {
+    "field": "explanation",
+    "token": " tree"
+  },
+  {
+    "field": "explanation",
+    "token": "),"
+  },
+  {
+    "field": "explanation",
+    "token": " then"
+  },
+  {
+    "field": "explanation",
+    "token": " you"
+  },
+  {
+    "field": "explanation",
+    "token": " look"
+  },
+  {
+    "field": "explanation",
+    "token": " at"
+  },
+  {
+    "field": "explanation",
+    "token": " the"
+  },
+  {
+    "field": "explanation",
+    "token": " information"
+  },
+  {
+    "field": "explanation",
+    "token": " you"
+  },
+  {
+    "field": "explanation",
+    "token": "'re"
+  },
+  {
+    "field": "explanation",
+    "token": " searching"
+  },
+  {
+    "field": "explanation",
+    "token": " for"
+  },
+  {
+    "field": "explanation",
+    "token": " and"
+  },
+  {
+    "field": "explanation",
+    "token": " decide"
+  },
+  {
+    "field": "explanation",
+    "token": " whether"
+  },
+  {
+    "field": "explanation",
+    "token": " it"
+  },
+  {
+    "field": "explanation",
+    "token": "'s"
+  },
+  {
+    "field": "explanation",
+    "token": " \""
+  },
+  {
+    "field": "explanation",
+    "token": "less"
+  },
+  {
+    "field": "explanation",
+    "token": " than"
+  },
+  {
+    "field": "explanation",
+    "token": "\""
+  },
+  {
+    "field": "explanation",
+    "token": " or"
+  },
+  {
+    "field": "explanation",
+    "token": " \""
+  },
+  {
+    "field": "explanation",
+    "token": "greater"
+  },
+  {
+    "field": "explanation",
+    "token": " than"
+  },
+  {
+    "field": "explanation",
+    "token": "\""
+  },
+  {
+    "field": "explanation",
+    "token": " the"
+  },
+  {
+    "field": "explanation",
+    "token": " root"
+  },
+  {
+    "field": "explanation",
+    "token": ","
+  },
+  {
+    "field": "explanation",
+    "token": " then"
+  },
+  {
+    "field": "explanation",
+    "token": " you"
+  },
+  {
+    "field": "explanation",
+    "token": " move"
+  },
+  {
+    "field": "explanation",
+    "token": " to"
+  },
+  {
+    "field": "explanation",
+    "token": " the"
+  },
+  {
+    "field": "explanation",
+    "token": " left"
+  },
+  {
+    "field": "explanation",
+    "token": " or"
+  },
+  {
+    "field": "explanation",
+    "token": " right"
+  },
+  {
+    "field": "explanation",
+    "token": " branch"
+  },
+  {
+    "field": "explanation",
+    "token": ","
+  },
+  {
+    "field": "explanation",
+    "token": " and"
+  },
+  {
+    "field": "explanation",
+    "token": " keep"
+  },
+  {
+    "field": "explanation",
+    "token": " repeating"
+  },
+  {
+    "field": "explanation",
+    "token": " this"
+  },
+  {
+    "field": "explanation",
+    "token": " process"
+  },
+  {
+    "field": "explanation",
+    "token": " until"
+  },
+  {
+    "field": "explanation",
+    "token": " you"
+  },
+  {
+    "field": "explanation",
+    "token": " find"
+  },
+  {
+    "field": "explanation",
+    "token": " what"
+  },
+  {
+    "field": "explanation",
+    "token": " you"
+  },
+  {
+    "field": "explanation",
+    "token": "'re"
+  },
+  {
+    "field": "explanation",
+    "token": " looking"
+  },
+  {
+    "field": "explanation",
+    "token": " for"
+  },
+  {
+    "field": "explanation",
+    "token": ".\n"
+  },
+  {
+    "field": "explanation",
+    "token": "5"
+  },
+  {
+    "field": "explanation",
+    "token": "."
+  },
+  {
+    "field": "explanation",
+    "token": " A"
+  },
+  {
+    "field": "explanation",
+    "token": " common"
+  },
+  {
+    "field": "explanation",
+    "token": " mistake"
+  },
+  {
+    "field": "explanation",
+    "token": " beginners"
+  },
+  {
+    "field": "explanation",
+    "token": " make"
+  },
+  {
+    "field": "explanation",
+    "token": " is"
+  },
+  {
+    "field": "explanation",
+    "token": " thinking"
+  },
+  {
+    "field": "explanation",
+    "token": " that"
+  },
+  {
+    "field": "explanation",
+    "token": " a"
+  },
+  {
+    "field": "explanation",
+    "token": " Binary"
+  },
+  {
+    "field": "explanation",
+    "token": " Search"
+  },
+  {
+    "field": "explanation",
+    "token": " Tree"
+  },
+  {
+    "field": "explanation",
+    "token": " is"
+  },
+  {
+    "field": "explanation",
+    "token": " just"
+  },
+  {
+    "field": "explanation",
+    "token": " a"
+  },
+  {
+    "field": "explanation",
+    "token": " random"
+  },
+  {
+    "field": "explanation",
+    "token": " collection"
+  },
+  {
+    "field": "explanation",
+    "token": " of"
+  },
+  {
+    "field": "explanation",
+    "token": " branches"
+  },
+  {
+    "field": "explanation",
+    "token": " -"
+  },
+  {
+    "field": "explanation",
+    "token": " but"
+  },
+  {
+    "field": "explanation",
+    "token": " it"
+  },
+  {
+    "field": "explanation",
+    "token": "'s"
+  },
+  {
+    "field": "explanation",
+    "token": " actually"
+  },
+  {
+    "field": "explanation",
+    "token": " a"
+  },
+  {
+    "field": "explanation",
+    "token": " very"
+  },
+  {
+    "field": "explanation",
+    "token": " organized"
+  },
+  {
+    "field": "explanation",
+    "token": " system"
+  },
+  {
+    "field": "explanation",
+    "token": " where"
+  },
+  {
+    "field": "explanation",
+    "token": " each"
+  },
+  {
+    "field": "explanation",
+    "token": " branch"
+  },
+  {
+    "field": "explanation",
+    "token": " is"
+  },
+  {
+    "field": "explanation",
+    "token": " carefully"
+  },
+  {
+    "field": "explanation",
+    "token": " arranged"
+  },
+  {
+    "field": "explanation",
+    "token": " to"
+  },
+  {
+    "field": "explanation",
+    "token": " make"
+  },
+  {
+    "field": "explanation",
+    "token": " searching"
+  },
+  {
+    "field": "explanation",
+    "token": " efficient"
+  },
+  {
+    "field": "explanation",
+    "token": ".\n\n"
+  },
+  {
+    "field": "diagram",
+    "token": "graph TD\n    A[Root] -->|less than|> B[Left Branch]\n    A -->|greater than|> C[Right Branch]\n    B -->|less than|> D[Left Sub-Branch]\n    B -->|greater than|> E[Right Sub-Branch]\n    C -->|less than|> F[Left Sub-Branch]\n    C -->|greater than|> G[Right Sub-Branch]"
+  },
+  {
+    "field": "notes",
+    "token": "\n"
+  },
+  {
+    "field": "notes",
+    "token": "* A"
+  },
+  {
+    "field": "notes",
+    "token": " Binary"
+  },
+  {
+    "field": "notes",
+    "token": " Search"
+  },
+  {
+    "field": "notes",
+    "token": " Tree"
+  },
+  {
+    "field": "notes",
+    "token": " is"
+  },
+  {
+    "field": "notes",
+    "token": " a"
+  },
+  {
+    "field": "notes",
+    "token": " way"
+  },
+  {
+    "field": "notes",
+    "token": " to"
+  },
+  {
+    "field": "notes",
+    "token": " organize"
+  },
+  {
+    "field": "notes",
+    "token": " information"
+  },
+  {
+    "field": "notes",
+    "token": " to"
+  },
+  {
+    "field": "notes",
+    "token": " find"
+  },
+  {
+    "field": "notes",
+    "token": " things"
+  },
+  {
+    "field": "notes",
+    "token": " quickly"
+  },
+  {
+    "field": "notes",
+    "token": ".\n"
+  },
+  {
+    "field": "notes",
+    "token": "* Each"
+  },
+  {
+    "field": "notes",
+    "token": " branch"
+  },
+  {
+    "field": "notes",
+    "token": " splits"
+  },
+  {
+    "field": "notes",
+    "token": " into"
+  },
+  {
+    "field": "notes",
+    "token": " two"
+  },
+  {
+    "field": "notes",
+    "token": " smaller"
+  },
+  {
+    "field": "notes",
+    "token": " branches"
+  },
+  {
+    "field": "notes",
+    "token": ".\n"
+  },
+  {
+    "field": "notes",
+    "token": "* The"
+  },
+  {
+    "field": "notes",
+    "token": " tree"
+  },
+  {
+    "field": "notes",
+    "token": " is"
+  },
+  {
+    "field": "notes",
+    "token": " organized"
+  },
+  {
+    "field": "notes",
+    "token": " so"
+  },
+  {
+    "field": "notes",
+    "token": " that"
+  },
+  {
+    "field": "notes",
+    "token": " all"
+  },
+  {
+    "field": "notes",
+    "token": " the"
+  },
+  {
+    "field": "notes",
+    "token": " information"
+  },
+  {
+    "field": "notes",
+    "token": " on"
+  },
+  {
+    "field": "notes",
+    "token": " the"
+  },
+  {
+    "field": "notes",
+    "token": " left"
+  },
+  {
+    "field": "notes",
+    "token": " branch"
+  },
+  {
+    "field": "notes",
+    "token": " is"
+  },
+  {
+    "field": "notes",
+    "token": " \""
+  },
+  {
+    "field": "notes",
+    "token": "less"
+  },
+  {
+    "field": "notes",
+    "token": " than"
+  },
+  {
+    "field": "notes",
+    "token": "\""
+  },
+  {
+    "field": "notes",
+    "token": " the"
+  },
+  {
+    "field": "notes",
+    "token": " root"
+  },
+  {
+    "field": "notes",
+    "token": ","
+  },
+  {
+    "field": "notes",
+    "token": " and"
+  },
+  {
+    "field": "notes",
+    "token": " all"
+  },
+  {
+    "field": "notes",
+    "token": " the"
+  },
+  {
+    "field": "notes",
+    "token": " information"
+  },
+  {
+    "field": "notes",
+    "token": " on"
+  },
+  {
+    "field": "notes",
+    "token": " the"
+  },
+  {
+    "field": "notes",
+    "token": " right"
+  },
+  {
+    "field": "notes",
+    "token": " branch"
+  },
+  {
+    "field": "notes",
+    "token": " is"
+  },
+  {
+    "field": "notes",
+    "token": " \""
+  },
+  {
+    "field": "notes",
+    "token": "greater"
+  },
+  {
+    "field": "notes",
+    "token": " than"
+  },
+  {
+    "field": "notes",
+    "token": "\""
+  },
+  {
+    "field": "notes",
+    "token": " the"
+  },
+  {
+    "field": "notes",
+    "token": " root"
+  },
+  {
+    "field": "notes",
+    "token": ".\n\n"
+  },
+  {
+    "field": "example",
+    "token": "\n"
+  },
+  {
+    "field": "example",
+    "token": "Let"
+  },
+  {
+    "field": "example",
+    "token": "'s"
+  },
+  {
+    "field": "example",
+    "token": " say"
+  },
+  {
+    "field": "example",
+    "token": " we"
+  },
+  {
+    "field": "example",
+    "token": " have"
+  },
+  {
+    "field": "example",
+    "token": " a"
+  },
+  {
+    "field": "example",
+    "token": " Binary"
+  },
+  {
+    "field": "example",
+    "token": " Search"
+  },
+  {
+    "field": "example",
+    "token": " Tree"
+  },
+  {
+    "field": "example",
+    "token": " with"
+  },
+  {
+    "field": "example",
+    "token": " the"
+  },
+  {
+    "field": "example",
+    "token": " following"
+  },
+  {
+    "field": "example",
+    "token": " information"
+  },
+  {
+    "field": "example",
+    "token": ":"
+  },
+  {
+    "field": "example",
+    "token": " "
+  },
+  {
+    "field": "example",
+    "token": "5"
+  },
+  {
+    "field": "example",
+    "token": " ("
+  },
+  {
+    "field": "example",
+    "token": "the"
+  },
+  {
+    "field": "example",
+    "token": " root"
+  },
+  {
+    "field": "example",
+    "token": "),"
+  },
+  {
+    "field": "example",
+    "token": " "
+  },
+  {
+    "field": "example",
+    "token": "2"
+  },
+  {
+    "field": "example",
+    "token": " ("
+  },
+  {
+    "field": "example",
+    "token": "left"
+  },
+  {
+    "field": "example",
+    "token": " branch"
+  },
+  {
+    "field": "example",
+    "token": "),"
+  },
+  {
+    "field": "example",
+    "token": " "
+  },
+  {
+    "field": "example",
+    "token": "8"
+  },
+  {
+    "field": "example",
+    "token": " ("
+  },
+  {
+    "field": "example",
+    "token": "right"
+  },
+  {
+    "field": "example",
+    "token": " branch"
+  },
+  {
+    "field": "example",
+    "token": "),"
+  },
+  {
+    "field": "example",
+    "token": " "
+  },
+  {
+    "field": "example",
+    "token": "1"
+  },
+  {
+    "field": "example",
+    "token": " ("
+  },
+  {
+    "field": "example",
+    "token": "left"
+  },
+  {
+    "field": "example",
+    "token": " sub"
+  },
+  {
+    "field": "example",
+    "token": "-"
+  },
+  {
+    "field": "example",
+    "token": "branch"
+  },
+  {
+    "field": "example",
+    "token": " of"
+  },
+  {
+    "field": "example",
+    "token": " "
+  },
+  {
+    "field": "example",
+    "token": "2"
+  },
+  {
+    "field": "example",
+    "token": "),"
+  },
+  {
+    "field": "example",
+    "token": " "
+  },
+  {
+    "field": "example",
+    "token": "3"
+  },
+  {
+    "field": "example",
+    "token": " ("
+  },
+  {
+    "field": "example",
+    "token": "right"
+  },
+  {
+    "field": "example",
+    "token": " sub"
+  },
+  {
+    "field": "example",
+    "token": "-"
+  },
+  {
+    "field": "example",
+    "token": "branch"
+  },
+  {
+    "field": "example",
+    "token": " of"
+  },
+  {
+    "field": "example",
+    "token": " "
+  },
+  {
+    "field": "example",
+    "token": "2"
+  },
+  {
+    "field": "example",
+    "token": "),"
+  },
+  {
+    "field": "example",
+    "token": " "
+  },
+  {
+    "field": "example",
+    "token": "6"
+  },
+  {
+    "field": "example",
+    "token": " ("
+  },
+  {
+    "field": "example",
+    "token": "left"
+  },
+  {
+    "field": "example",
+    "token": " sub"
+  },
+  {
+    "field": "example",
+    "token": "-"
+  },
+  {
+    "field": "example",
+    "token": "branch"
+  },
+  {
+    "field": "example",
+    "token": " of"
+  },
+  {
+    "field": "example",
+    "token": " "
+  },
+  {
+    "field": "example",
+    "token": "8"
+  },
+  {
+    "field": "example",
+    "token": "),"
+  },
+  {
+    "field": "example",
+    "token": " "
+  },
+  {
+    "field": "example",
+    "token": "9"
+  },
+  {
+    "field": "example",
+    "token": " ("
+  },
+  {
+    "field": "example",
+    "token": "right"
+  },
+  {
+    "field": "example",
+    "token": " sub"
+  },
+  {
+    "field": "example",
+    "token": "-"
+  },
+  {
+    "field": "example",
+    "token": "branch"
+  },
+  {
+    "field": "example",
+    "token": " of"
+  },
+  {
+    "field": "example",
+    "token": " "
+  },
+  {
+    "field": "example",
+    "token": "8"
+  },
+  {
+    "field": "example",
+    "token": ")."
+  },
+  {
+    "field": "example",
+    "token": " If"
+  },
+  {
+    "field": "example",
+    "token": " we"
+  },
+  {
+    "field": "example",
+    "token": " want"
+  },
+  {
+    "field": "example",
+    "token": " to"
+  },
+  {
+    "field": "example",
+    "token": " find"
+  },
+  {
+    "field": "example",
+    "token": " the"
+  },
+  {
+    "field": "example",
+    "token": " number"
+  },
+  {
+    "field": "example",
+    "token": " "
+  },
+  {
+    "field": "example",
+    "token": "3"
+  },
+  {
+    "field": "example",
+    "token": ","
+  },
+  {
+    "field": "example",
+    "token": " we"
+  },
+  {
+    "field": "example",
+    "token": " would"
+  },
+  {
+    "field": "example",
+    "token": " start"
+  },
+  {
+    "field": "example",
+    "token": " at"
+  },
+  {
+    "field": "example",
+    "token": " the"
+  },
+  {
+    "field": "example",
+    "token": " root"
+  },
+  {
+    "field": "example",
+    "token": " ("
+  },
+  {
+    "field": "example",
+    "token": "5"
+  },
+  {
+    "field": "example",
+    "token": "),"
+  },
+  {
+    "field": "example",
+    "token": " see"
+  },
+  {
+    "field": "example",
+    "token": " that"
+  },
+  {
+    "field": "example",
+    "token": " "
+  },
+  {
+    "field": "example",
+    "token": "3"
+  },
+  {
+    "field": "example",
+    "token": " is"
+  },
+  {
+    "field": "example",
+    "token": " less"
+  },
+  {
+    "field": "example",
+    "token": " than"
+  },
+  {
+    "field": "example",
+    "token": " "
+  },
+  {
+    "field": "example",
+    "token": "5"
+  },
+  {
+    "field": "example",
+    "token": ","
+  },
+  {
+    "field": "example",
+    "token": " so"
+  },
+  {
+    "field": "example",
+    "token": " we"
+  },
+  {
+    "field": "example",
+    "token": " move"
+  },
+  {
+    "field": "example",
+    "token": " to"
+  },
+  {
+    "field": "example",
+    "token": " the"
+  },
+  {
+    "field": "example",
+    "token": " left"
+  },
+  {
+    "field": "example",
+    "token": " branch"
+  },
+  {
+    "field": "example",
+    "token": " ("
+  },
+  {
+    "field": "example",
+    "token": "2"
+  },
+  {
+    "field": "example",
+    "token": "),"
+  },
+  {
+    "field": "example",
+    "token": " then"
+  },
+  {
+    "field": "example",
+    "token": " see"
+  },
+  {
+    "field": "example",
+    "token": " that"
+  },
+  {
+    "field": "example",
+    "token": " "
+  },
+  {
+    "field": "example",
+    "token": "3"
+  },
+  {
+    "field": "example",
+    "token": " is"
+  },
+  {
+    "field": "example",
+    "token": " greater"
+  },
+  {
+    "field": "example",
+    "token": " than"
+  },
+  {
+    "field": "example",
+    "token": " "
+  },
+  {
+    "field": "example",
+    "token": "2"
+  },
+  {
+    "field": "example",
+    "token": ","
+  },
+  {
+    "field": "example",
+    "token": " so"
+  },
+  {
+    "field": "example",
+    "token": " we"
+  },
+  {
+    "field": "example",
+    "token": " move"
+  },
+  {
+    "field": "example",
+    "token": " to"
+  },
+  {
+    "field": "example",
+    "token": " the"
+  },
+  {
+    "field": "example",
+    "token": " right"
+  },
+  {
+    "field": "example",
+    "token": " sub"
+  },
+  {
+    "field": "example",
+    "token": "-"
+  },
+  {
+    "field": "example",
+    "token": "branch"
+  },
+  {
+    "field": "example",
+    "token": " of"
+  },
+  {
+    "field": "example",
+    "token": " "
+  },
+  {
+    "field": "example",
+    "token": "2"
+  },
+  {
+    "field": "example",
+    "token": " -"
+  },
+  {
+    "field": "example",
+    "token": " and"
+  },
+  {
+    "field": "example",
+    "token": " there"
+  },
+  {
+    "field": "example",
+    "token": " we"
+  },
+  {
+    "field": "example",
+    "token": " find"
+  },
+  {
+    "field": "example",
+    "token": " the"
+  },
+  {
+    "field": "example",
+    "token": " number"
+  },
+  {
+    "field": "example",
+    "token": " "
+  },
+  {
+    "field": "example",
+    "token": "3"
+  },
+  {
+    "field": "example",
+    "token": "."
+  }
+]

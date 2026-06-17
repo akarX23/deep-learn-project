@@ -42,8 +42,23 @@ Kafka integration requirements FR-019 – FR-028 and success criteria SC-008 –
 - [x] Kafka topic names registered in `project/topics.py`: `"teaching"` under `PlannerTopics.TEACHING`; `"teaching-complete"` under `TeachingTopics.TEACHING_COMPLETE`
 - [x] `TeachingRequestEvent` and `TeachingCompletionEvent` schemas defined in `data-model.md` and `contracts/teaching-agent-contract.md`
 - [x] Always-publish rule documented (SC-009): completion event published on both success and error
-- [x] `request_id` and `session_ctx` pass-through rules documented (FR-022, FR-023, SC-008)
+- [x] `request_id`, `sid`, and `user_level` pass-through rules documented (FR-022, FR-023, SC-008)
 - [x] Malformed payload handling documented (FR-028, SC-010)
 - [x] Three-file Kafka structure mandated (FR-027) consistent with RAG agent pattern
 - [x] Test isolation requirement documented: injectable factories, no real Kafka in tests
-- [ ] Downstream consumer (Quiz Agent, Planner) contract for `TeachingCompletionEvent` confirmed before schema is frozen
+- [x] Downstream consumer (Quiz Agent, Planner) contract for `TeachingCompletionEvent` confirmed: Phase 4 changes `content` from JSON-serialized `TeachingContent` to raw markdown string — downstream agents updated accordingly
+
+## Phase 4 — Token Streaming (added 2026-06-16)
+
+Token streaming requirements FR-029 – FR-035 and success criteria SC-011 – SC-013 have been added to `spec.md`. The items below should be validated before Phase 4 implementation begins.
+
+- [x] `"stream-tokens"` Kafka topic registered in `project/topics.py` as `BackendStreamTopics.STREAM_TOKENS`
+- [x] `StreamTokensEventBody` schema defined in `project/schemas.py`
+- [x] Markdown output format and bold section headers documented in `spec.md` (FR-029) and `contracts/teaching-agent-contract.md`
+- [x] Field streaming rules documented: explanation/notes/example streamed per chunk; diagram buffered and sent complete (FR-031, SC-013)
+- [x] Stream-complete sentinel design documented (FR-032, Decision 16 in `research.md`)
+- [x] `TeachingCompletionEvent.content` format change documented (FR-034, Decision 17 in `research.md`)
+- [x] `StreamingFieldExtractor` design documented (Decision 15 in `research.md`)
+- [x] Diagram retry path (beginner mode) confirmed non-streaming — retry tokens not published to `"stream-tokens"`
+- [ ] `StreamingFieldExtractor` unit tests written and passing before agent.py wiring begins (T042 before T039)
+- [ ] Full test suite passes after all Phase 4 implementation tasks complete (T046)
