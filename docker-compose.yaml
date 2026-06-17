@@ -156,15 +156,15 @@ services:
     environment:
       BACKEND_KAFKA_BOOTSTRAP_SERVERS: ${BACKEND_KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}
 
-  ui-frontend:
-    image: deep-learn/ui-frontend:local
-    build:
-      context: .
-      dockerfile: ui_frontend/Dockerfile
-    network_mode: host
-    restart: unless-stopped
-    depends_on:
-      backend-service:
-        condition: service_healthy
-    env_file:
-      - .env.local
+  # ui-frontend:
+  #   image: deep-learn/ui-frontend:local
+  #   build:
+  #     context: .
+  #     dockerfile: ui_frontend/Dockerfile
+  #   network_mode: host
+  #   restart: unless-stopped
+  #   depends_on:
+  #     backend-service:
+  #       condition: service_healthy
+  #   env_file:
+  #     - .env.local

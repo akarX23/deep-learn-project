@@ -754,6 +754,7 @@ class QuizEventPayload(BaseModel):
     choices: List[str] = Field(default_factory=list)
     feedback: Optional[str] = None
     score: Optional[float] = None
+    questions: List[dict] = Field(default_factory=list)
 
     @field_validator("quiz_id")
     @classmethod
@@ -860,6 +861,8 @@ class QuizState(BaseModel):
     choices: List[str] = Field(default_factory=list)
     feedback: Optional[str] = None
     score: Optional[float] = None
+    questions: List[dict] = Field(default_factory=list)
+    current_question_index: int = 0
 
 
 class EvaluationState(BaseModel):
