@@ -10,7 +10,7 @@ from uuid import uuid4
 import requests
 import streamlit as st
 
-from project.schemas import AgentEvent, ConnectionLifecycleState, EventType, FrontendSession
+from project.schemas import AgentEvent, ConnectionLifecycleState, EventType, FrontendSession, QuizPhase
 from ui_frontend.config import UIConfig
 from ui_frontend.router import route_event
 from ui_frontend.socketio_client import start_socketio_client
@@ -100,6 +100,11 @@ def _on_event(event: AgentEvent) -> None:
             if not (history and history[-1]["role"] == "assistant"
                     and history[-1].get("info") and history[-1]["content"] == msg):
                 history.append({"role": "assistant", "content": msg, "info": True, "complete": True})
+
+    elif event_type in {EventType.QUIZ_STARTED, EventType.QUIZ_QUESTION, EventType.QUIZ_FEEDBACK, EventType.QUIZ_COMPLETED}:
+        # Quiz events update quiz state (routing already handled in route_event).
+        # No additional chat history updates needed — quiz UI handles rendering.
+        pass
 
 
 def _on_connection_state_change(
@@ -219,7 +224,9 @@ def _render_chat_tab(cfg: UIConfig, session: FrontendSession) -> None:
                 st.info(content)
             elif role == "assistant" and not msg.get("complete"):
                 # In-progress stream: render with a blinking cursor feel.
-                st.write(content + " ▌")
+                st.markdown(content + " ▌")
+            elif role == "assistant":
+                st.markdown(content)
             else:
                 st.write(content)
 
@@ -228,6 +235,41 @@ def _render_chat_tab(cfg: UIConfig, session: FrontendSession) -> None:
         st.warning("Reconnecting to server…")
     elif conn_state == ConnectionLifecycleState.FAILED:
         st.error("Connection failed. Refresh the page to retry.")
+
+    # ── File uploader ────────────────────────────────────────────────────
+    MAX_UPLOAD_FILES = 3
+    
+    # Initialize uploaded_files state if not present
+    if "uploaded_files" not in st.session_state:
+        st.session_state.uploaded_files = []
+    
+    # Track widget reset counter to force widget recreation after submission
+    if "file_uploader_reset_count" not in st.session_state:
+        st.session_state.file_uploader_reset_count = 0
+    
+    # File uploader widget (accepts up to 3 files as per backend MAX_FILES)
+    # Using reset_count in key ensures widget is recreated when counter increments
+    uploaded_files = st.file_uploader(
+        "📎 Attach files (PDF, images, etc.) — up to 3 files",
+        accept_multiple_files=True,
+        key=f"file_uploader_widget_{st.session_state.file_uploader_reset_count}",
+        disabled=not (conn_state == ConnectionLifecycleState.CONNECTED and sid is not None),
+    )
+    
+    # Preserve the uploaded files across reruns
+    if uploaded_files:
+        st.session_state.uploaded_files = uploaded_files
+    
+    # Frontend validation: check file count
+    if st.session_state.uploaded_files and len(st.session_state.uploaded_files) > MAX_UPLOAD_FILES:
+        st.error(f"⚠️ Too many files! Maximum {MAX_UPLOAD_FILES} files allowed. Please remove {len(st.session_state.uploaded_files) - MAX_UPLOAD_FILES} file(s).")
+        st.session_state.uploaded_files = st.session_state.uploaded_files[:MAX_UPLOAD_FILES]
+    
+    # Display selected filenames
+    if st.session_state.uploaded_files:
+        file_names = [f.name for f in st.session_state.uploaded_files]
+        file_count = len(st.session_state.uploaded_files)
+        st.caption(f"✓ Selected: {', '.join(file_names)} ({file_count}/{MAX_UPLOAD_FILES})")
 
     # ── Input bar ────────────────────────────────────────────────────────
     connected = conn_state == ConnectionLifecycleState.CONNECTED and sid is not None
@@ -238,20 +280,109 @@ def _render_chat_tab(cfg: UIConfig, session: FrontendSession) -> None:
         history.append({"role": "user", "content": prompt, "complete": True})
         # 2. Reserve an in-progress assistant slot (stream_id filled on first token).
         history.append({"role": "assistant", "content": "", "complete": False, "stream_id": None})
-        # 3. POST to backend.
+        # 3. Prepare request data and files.
+        data = {"user_prompt": prompt, "sid": sid, "user_level": []}
+        files_to_send = None
+        if st.session_state.uploaded_files:
+            # Build files list in format expected by requests library for multipart/form-data.
+            files_to_send = [
+                ("files", (file.name, file.getbuffer(), file.type))
+                for file in st.session_state.uploaded_files
+            ]
+        # 4. POST to backend.
         try:
             resp = requests.post(
                 f"{cfg.backend_url}/api/chat/request",
-                data={"user_prompt": prompt, "sid": sid, "user_level": []},
+                data=data,
+                files=files_to_send,
                 timeout=10,
             )
             if resp.status_code != 200:
                 history[-1]["content"] = f"⚠️ Request failed ({resp.status_code}): {resp.text}"
                 history[-1]["complete"] = True
+            else:
+                # Clear uploaded files and reset widget after successful submission
+                st.session_state.uploaded_files = []
+                st.session_state.file_uploader_reset_count += 1
         except requests.RequestException as exc:
             history[-1]["content"] = f"⚠️ Could not reach the server: {exc}"
             history[-1]["complete"] = True
         st.rerun()
+
+
+# ---------------------------------------------------------------------------
+# Quiz tab rendering
+# ---------------------------------------------------------------------------
+
+def _render_quiz_tab(session: FrontendSession) -> None:
+    quiz = session.quiz_state
+    phase = quiz.phase
+
+    # ── Idle state: no quiz yet ───────────────────────────────────────────
+    if phase == QuizPhase.IDLE:
+        st.info("No quiz in progress. A quiz will start when your tutor initiates one.")
+        return
+
+    # ── Quiz started: show title ──────────────────────────────────────────
+    if phase == QuizPhase.STARTED:
+        st.success(f"📋 Quiz {quiz.quiz_id} started!")
+        st.write("Get ready for the first question…")
+        return
+
+    # ── Question phase: render question + choices + submit ────────────────
+    if phase == QuizPhase.QUESTION:
+        st.subheader("Question")
+        st.write(quiz.current_question)
+
+        # Store selected answer in session state (not in FrontendSession).
+        if "quiz_selected_answer" not in st.session_state:
+            st.session_state.quiz_selected_answer = None
+
+        if quiz.choices:
+            selected = st.radio(
+                "Your answer:",
+                options=quiz.choices,
+                index=None if st.session_state.quiz_selected_answer is None else (
+                    quiz.choices.index(st.session_state.quiz_selected_answer)
+                    if st.session_state.quiz_selected_answer in quiz.choices else None
+                ),
+                key=f"quiz_radio_{quiz.quiz_id}",
+            )
+            if selected is not None:
+                st.session_state.quiz_selected_answer = selected
+
+            if st.button("Submit Answer", key=f"quiz_submit_{quiz.quiz_id}"):
+                if st.session_state.quiz_selected_answer:
+                    st.info(f"Answer submitted: {st.session_state.quiz_selected_answer}")
+                else:
+                    st.warning("Please select an answer before submitting.")
+        else:
+            st.warning("No choices available for this question.")
+        return
+
+    # ── Feedback phase: show feedback + score + next button ───────────────
+    if phase == QuizPhase.FEEDBACK:
+        st.subheader("Feedback")
+        st.write(quiz.feedback or "No feedback available.")
+        
+        if quiz.score is not None:
+            st.metric("Score", f"{quiz.score}/1.0" if isinstance(quiz.score, float) else quiz.score)
+
+        if st.button("Next Question", key=f"quiz_next_{quiz.quiz_id}"):
+            st.session_state.quiz_selected_answer = None
+            st.rerun()
+        return
+
+    # ── Completed phase: show final score + banner ────────────────────────
+    if phase == QuizPhase.COMPLETED:
+        st.balloons()
+        st.success("🎉 Quiz Complete!")
+        
+        if quiz.score is not None:
+            st.metric("Final Score", f"{quiz.score}/1.0" if isinstance(quiz.score, float) else quiz.score)
+        
+        st.info("Great job! You've finished the quiz. You can now review your results or ask your tutor another question.")
+        return
 
 
 # ---------------------------------------------------------------------------
@@ -289,7 +420,7 @@ def main() -> None:
         _render_chat_tab(cfg, session)
 
     with quiz_tab:
-        st.info("Quiz events will appear here.")
+        _render_quiz_tab(session)
 
     with evaluation_tab:
         st.info("Evaluation results will appear here.")
