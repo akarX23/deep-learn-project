@@ -7,8 +7,8 @@ import logging
 from collections.abc import Iterable
 from typing import Protocol
 
-from project.schemas import TeachingCompletionEvent, TopicPresenceCheckResult
-from project.topics import PlannerTopics, TeachingTopics
+from project.schemas import StreamTokensEventBody, TeachingCompletionEvent, TopicPresenceCheckResult
+from project.topics import BackendStreamTopics, PlannerTopics, TeachingTopics
 from teaching_agent.config import KafkaRuntimeConfig
 
 logger = logging.getLogger(__name__)
@@ -91,6 +91,18 @@ def publish_teaching_complete(
 
     producer.send(TeachingTopics.TEACHING_COMPLETE.value, event.model_dump())
     producer.flush()
+
+
+def publish_stream_token(
+    producer: KafkaProducerProtocol,
+    event: StreamTokensEventBody,
+) -> None:
+    """Publish a single stream token event to the stream-tokens topic.
+
+    Does not flush — tokens are high-frequency. Caller flushes once after
+    the stream-complete sentinel is published.
+    """
+    producer.send(BackendStreamTopics.STREAM_TOKENS.value, event.model_dump())
 
 
 def check_required_topics(

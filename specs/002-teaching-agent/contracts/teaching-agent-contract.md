@@ -18,16 +18,10 @@ Published by the Planner Agent to topic `"teaching"`.
 ```json
 {
   "request_id": "550e8400-e29b-41d4-a716-446655440000",
-  "session_ctx": {
-    "session_id": "sess-abc-123",
-    "user_id": "user-456",
-    "trace_id": "trace-789"
-  },
-  "topic": "Binary Search Tree",
-  "output_mode": "intermediate",
-  "context": "User previously studied arrays and linked lists in this session.",
-  "created_at": "2026-06-13T10:00:00Z",
-  "source": "planner-agent"
+  "sid": "abc123xyz",
+  "user_prompt": "Binary Search Tree",
+  "user_level": "intermediate",
+  "rag_compiled": "User previously studied arrays and linked lists in this session."
 }
 ```
 
@@ -36,12 +30,10 @@ Published by the Planner Agent to topic `"teaching"`.
 | Field | Type | Required | Constraints |
 |---|---|---|---|
 | request_id | string | Yes | Non-empty; unique per request; assigned by Planner |
-| session_ctx | object | Yes | May be empty `{}`; never null |
-| topic | string | Yes | Non-empty after whitespace strip |
-| output_mode | string | Yes | One of: `"beginner"`, `"intermediate"`, `"advanced"` |
-| context | string | Yes | May be empty string; never null |
-| created_at | string or null | No | ISO 8601 UTC timestamp |
-| source | string or null | No | Source identifier |
+| sid | string | Yes | Non-empty; Socket.IO session ID for frontend WebSocket routing |
+| user_prompt | string | Yes | Non-empty; the question or topic to explain |
+| user_level | string | Yes | One of: `"beginner"`, `"intermediate"`, `"advanced"` |
+| rag_compiled | string | No | RAG output to use as context; defaults to `""` |
 
 ---
 
@@ -54,27 +46,9 @@ Published by the Teaching Agent to topic `"teaching-complete"` after every reque
 ```json
 {
   "request_id": "550e8400-e29b-41d4-a716-446655440000",
-  "session_ctx": {
-    "session_id": "sess-abc-123",
-    "user_id": "user-456",
-    "trace_id": "trace-789"
-  },
-  "topic": "Binary Search Tree",
-  "output_mode": "intermediate",
-  "status": "ok",
-  "content": {
-    "explanation": "## Binary Search Tree\n\nA BST is a node-based data structure...",
-    "diagram": "graph TD\n  A[Root: 8] --> B[Left: 3]\n  A --> C[Right: 10]",
-    "notes": "## Key Properties\n\n- BST property: left < node < right\n- Average search: O(log n)",
-    "example": "```python\nclass Node:\n    def __init__(self, val):\n        self.val = val\n```"
-  },
-  "tokens_used": 847,
-  "model": "groq/llama-3.3-70b-versatile",
-  "started_at": "2026-06-13T10:00:00Z",
-  "completed_at": "2026-06-13T10:00:03Z",
-  "duration_ms": 3012,
-  "errors": [],
-  "source": "teaching-agent"
+  "sid": "abc123xyz",
+  "user_level": "intermediate",
+  "content": "**Explanation**\nA Binary Search Tree (BST) is a node-based data structure...\n\n**Diagram**\ngraph TD\n  A[Root: 8] --> B[Left: 3]\n  A --> C[Right: 10]\n\n**Notes**\n- BST property: left < node < right\n\n**Example**\n```python\nclass Node:\n    def __init__(self, val):\n        self.val = val\n```"
 }
 ```
 
@@ -83,21 +57,9 @@ Published by the Teaching Agent to topic `"teaching-complete"` after every reque
 ```json
 {
   "request_id": "550e8400-e29b-41d4-a716-446655440000",
-  "session_ctx": {
-    "session_id": "sess-abc-123",
-    "user_id": "user-456"
-  },
-  "topic": "",
-  "output_mode": "beginner",
-  "status": "error",
-  "content": null,
-  "tokens_used": 0,
-  "model": "groq/llama-3.3-70b-versatile",
-  "started_at": "2026-06-13T10:00:00Z",
-  "completed_at": "2026-06-13T10:00:00Z",
-  "duration_ms": 0,
-  "errors": ["topic cannot be empty"],
-  "source": "teaching-agent"
+  "sid": "abc123xyz",
+  "user_level": "beginner",
+  "content": ""
 }
 ```
 
@@ -106,18 +68,9 @@ Published by the Teaching Agent to topic `"teaching-complete"` after every reque
 | Field | Type | Constraints |
 |---|---|---|
 | request_id | string | Verbatim from `TeachingRequestEvent`; never modified |
-| session_ctx | object | Verbatim from `TeachingRequestEvent`; never modified |
-| topic | string | From request |
-| output_mode | string | From request |
-| status | string | Exactly `"ok"` or `"error"` |
-| content | object or null | Non-null when `status: "ok"`; null when `status: "error"` |
-| tokens_used | integer | >= 0; `0` on error |
-| model | string | Non-empty model identifier |
-| started_at | string | ISO 8601 UTC |
-| completed_at | string | ISO 8601 UTC |
-| duration_ms | integer | >= 0 |
-| errors | array | Empty on success; one or more messages on error |
-| source | string | Always `"teaching-agent"` |
+| sid | string | Verbatim from `TeachingRequestEvent`; used for WebSocket routing |
+| user_level | string | Verbatim from `TeachingRequestEvent`; non-empty |
+| content | string | Complete raw markdown string (all four sections); empty string `""` on error. Phase 4 change: previously carried JSON-serialized `TeachingContent`. |
 
 ---
 
@@ -209,9 +162,9 @@ Published by the Teaching Agent to topic `"teaching-complete"` after every reque
 
 | output_mode  | max tokens |
 |--------------|------------|
-| beginner     | 512        |
-| intermediate | 1024       |
-| advanced     | 2048       |
+| beginner     | 4096 (default; configurable via `TEACHING_BEGINNER_MAX_TOKENS`) |
+| intermediate | 4096 (default; configurable via `TEACHING_INTERMEDIATE_MAX_TOKENS`) |
+| advanced     | 4096 (default; configurable via `TEACHING_ADVANCED_MAX_TOKENS`) |
 
 `metadata.tokens_used` MUST NOT exceed the ceiling for the given mode.
 
@@ -227,11 +180,70 @@ Published by the Teaching Agent to topic `"teaching-complete"` after every reque
 
 ---
 
+---
+
+## Streaming Contract (Phase 4)
+
+The Teaching Agent publishes real-time token events to the `"stream-tokens"` Kafka topic
+using `StreamTokensEventBody`. These events are consumed by the backend service and forwarded
+to the frontend via Socket.IO. Streaming events are published **before** `TeachingCompletionEvent`.
+
+### Token event (explanation, notes, example — one per LLM chunk)
+
+```json
+{
+  "from_service": "teaching-agent",
+  "sid": "abc123xyz",
+  "data": { "field": "explanation", "token": "A Binary Search Tree is" }
+}
+```
+
+### Diagram event (one complete event per request, when diagram is non-null)
+
+```json
+{
+  "from_service": "teaching-agent",
+  "sid": "abc123xyz",
+  "data": { "field": "diagram", "token": "graph TD\n  A[Root: 8] --> B[Left: 3]\n  A --> C[Right: 10]" }
+}
+```
+
+### Stream-complete sentinel (always last, including on error)
+
+```json
+{
+  "from_service": "teaching-agent",
+  "sid": "abc123xyz",
+  "data": { "done": true, "tokens_used": 847 }
+}
+```
+
+### Streaming field constraints
+
+| Event type | `data` keys | Notes |
+|---|---|---|
+| Token event | `field`, `token` | `field` is one of: `explanation`, `diagram`, `notes`, `example` |
+| Diagram event | `field`, `token` | `field` is always `"diagram"`; `token` is the complete Mermaid string |
+| Stream-complete | `done`, `tokens_used` | `done` is always `true`; `tokens_used` is the final LLM completion token count |
+
+### Ordering guarantee
+
+For every `TeachingRequestEvent`, the event order on `"stream-tokens"` is:
+1. Zero or more token events with `field: "explanation"`
+2. Zero or one event with `field: "diagram"` (absent if diagram is null)
+3. Zero or more token events with `field: "notes"`
+4. Zero or more token events with `field: "example"`
+5. Exactly one stream-complete sentinel
+
+The `TeachingCompletionEvent` on `"teaching-complete"` is published after the sentinel.
+
+---
+
 ## Caller assumptions
 
-- The Planner Agent always provides `request_id`, `session_ctx`, `topic`, `output_mode`, and `context` in the `TeachingRequestEvent`; the Teaching Agent never falls back to defaults for missing fields.
+- The Planner Agent always provides `request_id`, `sid`, `user_prompt`, `user_level`, and `rag_compiled` in the `TeachingRequestEvent`; the Teaching Agent never falls back to defaults for missing fields.
 - `request_id` is assigned by the Planner before publishing; it is opaque to the Teaching Agent and passed through unchanged.
-- `session_ctx` is assembled by the Planner from session state; the Teaching Agent never reads or validates its contents — it is passed through unchanged.
-- The `context` field is assembled by the Planner Agent from Memory Agent output; the Teaching Agent treats it as opaque text.
+- `sid` is the Socket.IO session ID assigned by the backend when the user's browser connects. The Teaching Agent never reads or validates its contents — it is passed through unchanged to `TeachingCompletionEvent` so the backend can route the result to the correct WebSocket session.
+- The `rag_compiled` field is assembled by the Planner Agent from RAG Agent output; the Teaching Agent treats it as opaque text passed as `context` to the core pipeline.
 - The Planner Agent validates `output_mode` before publishing; the Teaching Agent re-validates and returns `status: "error"` (and still publishes a `TeachingCompletionEvent`) if the value is invalid.
 - The `"teaching"` and `"teaching-complete"` topics exist before the worker starts — they are bootstrapped by the backend service at startup. `"teaching"` is registered under `PlannerTopics.TEACHING` in `project/topics.py`; `"teaching-complete"` is registered under `TeachingTopics.TEACHING_COMPLETE`.
