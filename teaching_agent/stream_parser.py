@@ -25,6 +25,7 @@ class StreamingFieldExtractor:
         self._callback = token_callback
         self._current_field: str | None = None
         self._diagram_buffer: str = ""
+        self._final_diagram: str | None = None
         self._raw_buffer: str = ""
         self._chunk_buffer: str = ""  # lookahead for split headers
 
@@ -55,16 +56,20 @@ class StreamingFieldExtractor:
             elif before.strip() and self._current_field == "diagram":
                 self._diagram_buffer += before
 
-            # Emit completed diagram before switching to a new field
+            # Store completed diagram before switching to a new field
             if self._current_field == "diagram" and self._diagram_buffer.strip():
-                self._callback("diagram", self._diagram_buffer.strip())
+                self._final_diagram = self._diagram_buffer.strip()
                 self._diagram_buffer = ""
 
             if field_name in _ALL_FIELDS:
                 self._current_field = field_name
 
-    def finalize(self) -> str:
-        """Flush remaining buffer content and return the complete raw markdown string."""
+    def finalize(self) -> tuple[str, str | None]:
+        """Flush remaining buffer content and return (raw_markdown, diagram_text | None).
+
+        The diagram is not emitted via token_callback — it is returned here so the
+        caller can validate it before deciding whether and what to send.
+        """
         remaining = self._chunk_buffer
         if remaining.strip():
             if self._current_field in _STREAMABLE_FIELDS:
@@ -72,13 +77,13 @@ class StreamingFieldExtractor:
             elif self._current_field == "diagram":
                 self._diagram_buffer += remaining
 
-        # Flush any diagram that had no following header
+        # Capture any diagram that had no following header
         if self._diagram_buffer.strip():
-            self._callback("diagram", self._diagram_buffer.strip())
+            self._final_diagram = self._diagram_buffer.strip()
             self._diagram_buffer = ""
 
         self._chunk_buffer = ""
-        return self._raw_buffer
+        return self._raw_buffer, self._final_diagram
 
 
 def _split_at_possible_partial_header(text: str) -> tuple[str, str]:

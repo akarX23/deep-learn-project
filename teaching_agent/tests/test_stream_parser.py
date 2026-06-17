@@ -25,23 +25,23 @@ def test_explanation_tokens_emitted_immediately():
     extractor.finalize()
 
 
-def test_diagram_buffered_and_emitted_complete():
+def test_diagram_buffered_not_emitted_via_callback():
     extractor, events = _make_extractor()
 
     extractor.feed("**Explanation**\nSome explanation.\n\n")
     extractor.feed("**Diagram**\n")
     extractor.feed("graph TD\n")
     extractor.feed("  A --> B")
-    # No diagram events yet — still buffering
     assert not any(f == "diagram" for f, t in events)
 
-    # Next section header triggers diagram flush
+    # Next section header: diagram still NOT emitted via callback
     extractor.feed("\n\n**Notes**\nKey points here.")
-    diagram_events = [(f, t) for f, t in events if f == "diagram"]
-    assert len(diagram_events) == 1
-    assert "graph TD" in diagram_events[0][1]
-    assert "A --> B" in diagram_events[0][1]
-    extractor.finalize()
+    assert not any(f == "diagram" for f, t in events)
+
+    raw, diagram = extractor.finalize()
+    assert diagram is not None
+    assert "graph TD" in diagram
+    assert "A --> B" in diagram
 
 
 def test_header_split_across_chunks():
@@ -58,19 +58,18 @@ def test_header_split_across_chunks():
     assert "This is the explanation." in explanation_text
 
 
-def test_finalize_flushes_trailing_diagram():
+def test_finalize_returns_trailing_diagram():
     extractor, events = _make_extractor()
 
     extractor.feed("**Explanation**\nSome explanation.\n\n")
     extractor.feed("**Diagram**\n")
     extractor.feed("graph TD\n  A --> B")
-    # No following header — diagram is still buffered
     assert not any(f == "diagram" for f, t in events)
 
-    extractor.finalize()
-    diagram_events = [(f, t) for f, t in events if f == "diagram"]
-    assert len(diagram_events) == 1
-    assert "graph TD" in diagram_events[0][1]
+    raw, diagram = extractor.finalize()
+    assert not any(f == "diagram" for f, t in events)  # callback never called for diagram
+    assert diagram is not None
+    assert "graph TD" in diagram
 
 
 def test_notes_and_example_stream_immediately():
@@ -96,7 +95,7 @@ def test_finalize_returns_complete_raw_markdown():
     ]
     for chunk in chunks:
         extractor.feed(chunk)
-    raw = extractor.finalize()
+    raw, _ = extractor.finalize()
 
     assert raw == "".join(chunks)
     assert "**Explanation**" in raw
@@ -110,6 +109,7 @@ def test_empty_stream_no_callback():
 
     extractor.feed("")
     extractor.feed("   ")
-    extractor.finalize()
+    _, diagram = extractor.finalize()
 
     assert events == []
+    assert diagram is None
