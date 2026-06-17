@@ -234,6 +234,41 @@ def _render_chat_tab(cfg: UIConfig, session: FrontendSession) -> None:
     elif conn_state == ConnectionLifecycleState.FAILED:
         st.error("Connection failed. Refresh the page to retry.")
 
+    # ── File uploader ────────────────────────────────────────────────────
+    MAX_UPLOAD_FILES = 3
+    
+    # Initialize uploaded_files state if not present
+    if "uploaded_files" not in st.session_state:
+        st.session_state.uploaded_files = []
+    
+    # Track widget reset counter to force widget recreation after submission
+    if "file_uploader_reset_count" not in st.session_state:
+        st.session_state.file_uploader_reset_count = 0
+    
+    # File uploader widget (accepts up to 3 files as per backend MAX_FILES)
+    # Using reset_count in key ensures widget is recreated when counter increments
+    uploaded_files = st.file_uploader(
+        "📎 Attach files (PDF, images, etc.) — up to 3 files",
+        accept_multiple_files=True,
+        key=f"file_uploader_widget_{st.session_state.file_uploader_reset_count}",
+        disabled=not (conn_state == ConnectionLifecycleState.CONNECTED and sid is not None),
+    )
+    
+    # Preserve the uploaded files across reruns
+    if uploaded_files:
+        st.session_state.uploaded_files = uploaded_files
+    
+    # Frontend validation: check file count
+    if st.session_state.uploaded_files and len(st.session_state.uploaded_files) > MAX_UPLOAD_FILES:
+        st.error(f"⚠️ Too many files! Maximum {MAX_UPLOAD_FILES} files allowed. Please remove {len(st.session_state.uploaded_files) - MAX_UPLOAD_FILES} file(s).")
+        st.session_state.uploaded_files = st.session_state.uploaded_files[:MAX_UPLOAD_FILES]
+    
+    # Display selected filenames
+    if st.session_state.uploaded_files:
+        file_names = [f.name for f in st.session_state.uploaded_files]
+        file_count = len(st.session_state.uploaded_files)
+        st.caption(f"✓ Selected: {', '.join(file_names)} ({file_count}/{MAX_UPLOAD_FILES})")
+
     # ── Input bar ────────────────────────────────────────────────────────
     connected = conn_state == ConnectionLifecycleState.CONNECTED and sid is not None
     placeholder = "Ask your tutor…" if connected else "Connecting to server…"
@@ -243,16 +278,30 @@ def _render_chat_tab(cfg: UIConfig, session: FrontendSession) -> None:
         history.append({"role": "user", "content": prompt, "complete": True})
         # 2. Reserve an in-progress assistant slot (stream_id filled on first token).
         history.append({"role": "assistant", "content": "", "complete": False, "stream_id": None})
-        # 3. POST to backend.
+        # 3. Prepare request data and files.
+        data = {"user_prompt": prompt, "sid": sid, "user_level": []}
+        files_to_send = None
+        if st.session_state.uploaded_files:
+            # Build files list in format expected by requests library for multipart/form-data.
+            files_to_send = [
+                ("files", (file.name, file.getbuffer(), file.type))
+                for file in st.session_state.uploaded_files
+            ]
+        # 4. POST to backend.
         try:
             resp = requests.post(
                 f"{cfg.backend_url}/api/chat/request",
-                data={"user_prompt": prompt, "sid": sid, "user_level": []},
+                data=data,
+                files=files_to_send,
                 timeout=10,
             )
             if resp.status_code != 200:
                 history[-1]["content"] = f"⚠️ Request failed ({resp.status_code}): {resp.text}"
                 history[-1]["complete"] = True
+            else:
+                # Clear uploaded files and reset widget after successful submission
+                st.session_state.uploaded_files = []
+                st.session_state.file_uploader_reset_count += 1
         except requests.RequestException as exc:
             history[-1]["content"] = f"⚠️ Could not reach the server: {exc}"
             history[-1]["complete"] = True
