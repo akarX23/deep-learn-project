@@ -31,8 +31,7 @@ def call_llm(messages: list[dict[str, Any]], config: LLMConfig) -> tuple[str, in
         "model": config.model,
         "messages": messages,
         "temperature": config.temperature,
-        "max_tokens": config.max_tokens,
-        "response_format": {"type": "json_object"},
+        "max_tokens": config.max_tokens
     }
     if config.api_base:
         kwargs["api_base"] = config.api_base
