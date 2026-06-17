@@ -46,6 +46,12 @@ class TeachingTopics(str, Enum):
     TEACHING_COMPLETE = "teaching-complete"
 
 
+class QuizAgentTopics(str, Enum):
+    """Topics consumed by the Quiz Agent."""
+
+    QUIZ_EVALUATE = "quiz-evaluate"
+
+
 def get_rag_topic_names() -> list[str]:
     """Return the full set of topics required by the RAG Kafka service."""
 

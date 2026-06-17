@@ -44,6 +44,7 @@ from project.schemas import (
     QuizAgentOutput,
     QuizResult,
     SubmittedAnswer,
+    SWOTAnalysis,
 )
 from quiz_agent.config import get_generation_config, get_grading_config
 from quiz_agent.helpers import (
@@ -52,11 +53,12 @@ from quiz_agent.helpers import (
     build_result,
     parse_generated_quiz,
     parse_grading_response,
+    parse_swot_response,
     score_mcq_multi,
     score_mcq_single,
 )
 from quiz_agent.llm_client import call_llm
-from quiz_agent.prompts import DESCRIPTIVE_GRADING_PROMPT, QUESTION_GENERATION_PROMPT
+from quiz_agent.prompts import DESCRIPTIVE_GRADING_PROMPT, QUESTION_GENERATION_PROMPT, SWOT_ANALYSIS_PROMPT
 from quiz_agent.validators import validate_question_set
 
 # Teaching content is truncated to this character limit before being sent to the LLM
@@ -399,6 +401,7 @@ class QuizAgent:
                         max_score=question.max_points,
                         model_answer=grade.get("model_answer"),
                         feedback=grade.get("feedback"),
+                        confidence_score=grade.get("confidence_score"),
                     )
                 )
             logger.info("[STEP 3] Descriptive grading done — descriptive_subtotal=%.2f", descriptive_subtotal)
@@ -454,6 +457,61 @@ class QuizAgent:
                     overall_score, max_score, quiz_result.overall_percentage)
         logger.info("================================================================")
         return eval_output
+
+    # ------------------------------------------------------------------
+    # Phase 3: generate_swot
+    # ------------------------------------------------------------------
+
+    def generate_swot(self, quiz_result: QuizResult, topic: str) -> SWOTAnalysis:
+        """Generate a SWOT analysis from a completed QuizResult via one LLM call.
+
+        Falls back to a minimal derived SWOT if the LLM call fails.
+        """
+        logger.info("================================================================")
+        logger.info("PHASE 3 — generate_swot() START")
+        logger.info("================================================================")
+
+        strong_concepts = [
+            qr.question_id
+            for qr in quiz_result.question_results
+            if qr.max_score > 0 and (qr.score / qr.max_score) >= 0.5
+        ]
+        weak_concepts = quiz_result.weak_sub_concepts
+
+        try:
+            config = get_grading_config()
+        except RuntimeError as exc:
+            logger.error("[SWOT] Config load FAILED — returning fallback: %s", exc)
+            return SWOTAnalysis(
+                strengths=["Completed the quiz"],
+                weaknesses=weak_concepts or ["Areas need review"],
+                opportunities=["Review weak sub-concepts"],
+                threats=["Risk of knowledge gaps without targeted review"],
+            )
+
+        prompt = SWOT_ANALYSIS_PROMPT.format(
+            topic=topic,
+            overall_score=quiz_result.overall_score,
+            max_score=quiz_result.max_score,
+            overall_percentage=quiz_result.overall_percentage,
+            strong_concepts=", ".join(strong_concepts) or "none",
+            weak_concepts=", ".join(weak_concepts) or "none",
+            recommended_action=quiz_result.recommended_action,
+        )
+
+        try:
+            raw, _ = call_llm([{"role": "user", "content": prompt}], config)
+            swot_data = parse_swot_response(raw)
+            logger.info("[SWOT] SWOT analysis generated OK")
+            return SWOTAnalysis(**swot_data)
+        except Exception as exc:
+            logger.warning("[SWOT] LLM SWOT generation failed — returning fallback: %s", exc)
+            return SWOTAnalysis(
+                strengths=["Completed the quiz"],
+                weaknesses=weak_concepts or ["Areas need review"],
+                opportunities=["Review weak sub-concepts"],
+                threats=["Risk of knowledge gaps without targeted review"],
+            )
 
     # ------------------------------------------------------------------
     # Internal helpers

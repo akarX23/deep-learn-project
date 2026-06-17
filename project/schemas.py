@@ -550,6 +550,7 @@ class QuestionResult(BaseModel):
     # Descriptive
     model_answer: Optional[str] = None
     feedback: Optional[str] = None
+    confidence_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)  # descriptive only
 
 
 class QuizResult(BaseModel):
@@ -613,3 +614,33 @@ class QuizAgentOutput(BaseModel):
         if value not in {"generated", "evaluated", "error"}:
             raise ValueError("status must be one of: generated, evaluated, error")
         return value
+
+
+class SWOTAnalysis(BaseModel):
+    """Learner-level learning insight SWOT derived from quiz evaluation."""
+
+    strengths: List[str] = Field(default_factory=list)
+    weaknesses: List[str] = Field(default_factory=list)
+    opportunities: List[str] = Field(default_factory=list)
+    threats: List[str] = Field(default_factory=list)
+
+
+class QuizEvaluateRequestEvent(BaseModel):
+    """Backend API -> quiz agent Kafka event to trigger answer evaluation."""
+
+    request_id: str
+    sid: str
+    quiz: dict  # serialized Quiz object
+    answers: List[dict]  # serialized List[SubmittedAnswer]
+
+
+class QuizEvaluationStreamPayload(BaseModel):
+    """Payload placed inside StreamTokensEventBody.data for evaluation results.
+
+    Carries the full QuizResult plus the learner SWOT insight so the UI can
+    render per-question feedback, scores, and the learning insight panel in
+    one event.
+    """
+
+    result: dict  # serialized QuizResult
+    swot: SWOTAnalysis

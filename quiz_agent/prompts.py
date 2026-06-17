@@ -77,6 +77,7 @@ ANSWERS TO GRADE:
 
 For each answer:
 - Score it against its rubric (0 to max_score)
+- Provide a confidence_score between 0.0 and 1.0 representing how confidently the learner demonstrated understanding
 - Provide a model_answer: the ideal complete response
 - Provide feedback: brief qualitative comment referencing what the learner covered and what they missed
 
@@ -87,9 +88,37 @@ RESPONSE FORMAT — return ONLY valid JSON, no markdown fences:
       "question_id": "...",
       "score": <integer>,
       "max_score": <integer>,
+      "confidence_score": <float 0.0-1.0>,
       "model_answer": "...",
       "feedback": "..."
     }}
   ]
+}}
+"""
+
+
+SWOT_ANALYSIS_PROMPT = """You are an expert educational psychologist for an AI Tutor application.
+
+Based on the learner's quiz performance data below, generate a concise SWOT analysis of their learning.
+
+TOPIC: {topic}
+OVERALL SCORE: {overall_score}/{max_score} ({overall_percentage:.1f}%)
+STRONG SUB-CONCEPTS (scored >= 50%): {strong_concepts}
+WEAK SUB-CONCEPTS (scored < 50%): {weak_concepts}
+RECOMMENDED ACTION: {recommended_action}
+
+Generate a SWOT analysis with 2-4 bullet points per quadrant, grounded in the quiz data above.
+
+- Strengths: what the learner clearly understands
+- Weaknesses: specific gaps or misconceptions revealed
+- Opportunities: areas where targeted review could quickly improve understanding
+- Threats: risks to long-term retention if weaknesses are not addressed
+
+RESPONSE FORMAT — return ONLY valid JSON, no markdown fences:
+{{
+  "strengths": ["...", "..."],
+  "weaknesses": ["...", "..."],
+  "opportunities": ["...", "..."],
+  "threats": ["...", "..."]
 }}
 """

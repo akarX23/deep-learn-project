@@ -9,7 +9,7 @@ import os
 from kafka import KafkaConsumer, KafkaProducer
 
 from project.schemas import QuizCompletionEvent, StreamTokensEventBody
-from project.topics import AgentCompletionTopics, BackendStreamTopics, PlannerAgentTopics
+from project.topics import AgentCompletionTopics, BackendStreamTopics, PlannerAgentTopics, QuizAgentTopics
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,18 @@ def create_consumer() -> KafkaConsumer:
         client_id="quiz-service-consumer",
     )
     consumer.subscribe([PlannerAgentTopics.QUIZ_REQUEST.value])
+    return consumer
+
+
+def create_evaluation_consumer() -> KafkaConsumer:
+    consumer = KafkaConsumer(
+        bootstrap_servers=_bootstrap_servers(),
+        value_deserializer=lambda v: json.loads(v.decode("utf-8")),
+        auto_offset_reset="earliest",
+        group_id="quiz-eval-consumer",
+        client_id="quiz-eval-consumer",
+    )
+    consumer.subscribe([QuizAgentTopics.QUIZ_EVALUATE.value])
     return consumer
 
 
