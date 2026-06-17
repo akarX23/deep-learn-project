@@ -224,7 +224,9 @@ def _render_chat_tab(cfg: UIConfig, session: FrontendSession) -> None:
                 st.info(content)
             elif role == "assistant" and not msg.get("complete"):
                 # In-progress stream: render with a blinking cursor feel.
-                st.write(content + " ▌")
+                st.markdown(content + " ▌")
+            elif role == "assistant":
+                st.markdown(content)
             else:
                 st.write(content)
 
