@@ -57,6 +57,7 @@ class PlannerInboundTopics(str, Enum):
     RAG_COMPLETE = "rag-complete"
     MATERIAL_COMPILED = "material-compiled"
     QUIZ_COMPLETE = "quiz-complete"
+    TEACHING_COMPLETE = "teaching-complete"
 
 
 def get_rag_topic_names() -> list[str]:

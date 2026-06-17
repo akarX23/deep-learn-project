@@ -58,6 +58,7 @@ def run() -> None:
             QuizCompletionEvent(
                 request_id=event.request_id,
                 sid=event.sid,
+                content=result.model_dump(),
             ),
         )
 
