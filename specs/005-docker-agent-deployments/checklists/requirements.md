@@ -2,6 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-06-15
+**Updated**: 2026-06-17
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -31,5 +32,7 @@
 
 ## Notes
 
-- Validation pass 1 complete: all checklist items satisfied.
-- In-scope components are defined as agents and backend services in this repository; production deployment concerns remain out of scope.
+- Validation pass 1 complete (2026-06-15): all checklist items satisfied for original agent/service scope.
+- Validation pass 2 complete (2026-06-17): UI frontend added as User Story 4, FR-015 through FR-020, SC-011, and additional edge cases. All items remain satisfied.
+- In-scope components: orchestrator agent, planner agent, RAG agent, teaching agent, quiz agent, backend service, and UI frontend. Production deployment concerns remain out of scope.
+- `.env.local.example` file is referenced in the spec but does not yet exist; developers use `.env.local` directly. The spec assumption captures this.

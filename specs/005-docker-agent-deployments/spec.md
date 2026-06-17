@@ -1,9 +1,10 @@
 # Feature Specification: Docker Agent Deployments
 
-**Feature Branch**: `007-create-feature-branch`  
+**Feature Branch**: `005-docker-agent-deployments`  
 **Created**: 2026-06-15  
+**Updated**: 2026-06-17  
 **Status**: Draft  
-**Input**: User description: "I want to create docker deployments for each of the agents and services. Create Dockerfiles in each agent and service directory, add them as services and buildable images in the docker compose. No need for any healthchecks, but mke them restartable."
+**Input**: User description: "I want to create docker deployments for each of the agents and services. Create Dockerfiles in each agent and service directory, add them as services and buildable images in the docker compose. No need for any healthchecks, but make them restartable. The UI Frontend should also have a Dockerfile and be integrated into docker-compose. Use the corresponding environment variables from .env.local.example."
 
 ## Clarifications
 
@@ -57,6 +58,24 @@ As a maintainer, I can rely on a consistent containerization pattern for every a
 
 1. **Given** a new contributor reviews deployment assets, **When** they inspect target component directories and compose services, **Then** they find a consistent containerization approach and restart settings.
 
+---
+
+### User Story 4 - Run UI Frontend via compose (Priority: P2)
+
+As a developer, I can start the UI frontend as a containerized service alongside backend agents in the compose stack so the full application — from backend to browser — is available through a single startup command.
+
+**Why this priority**: The UI frontend is the user-facing surface of the system; containerizing it alongside agents completes the deployment picture and enables end-to-end validation without running Streamlit manually.
+
+**Independent Test**: Can be fully tested by starting the compose stack and opening the UI frontend URL in a browser to verify the Streamlit application loads and connects to the backend.
+
+**Acceptance Scenarios**:
+
+1. **Given** the compose stack is started with the required UI environment variables set, **When** a developer navigates to the UI frontend port in a browser, **Then** the Streamlit application loads without errors.
+2. **Given** the UI container exits unexpectedly, **When** restart policy conditions are met, **Then** the container is automatically restarted without manual intervention.
+3. **Given** required environment variables (`UI_WEBSOCKET_URL`, `UI_BACKEND_URL`) are missing, **When** the container starts, **Then** the application fails with a clear configuration error rather than starting silently misconfigured.
+
+---
+
 ### Edge Cases
 
 - A component directory exists but is missing required files for image build; the failure should be isolated to that component and clearly reported.
@@ -65,6 +84,9 @@ As a maintainer, I can rely on a consistent containerization pattern for every a
 - Service name collisions occur in compose definitions; each component must have a unique service identity.
 - If either `kafka` or `backend-service` health check is failing, dependent services should remain blocked by dependency gating until both become healthy.
 - If backend emits an upload path that does not resolve in the RAG container, the workflow should fail fast with a clear error instead of silently skipping file access.
+
+- If a required UI frontend environment variable is missing, the application must fail with a clear error rather than silently serving a broken interface.
+- If the backend service is unreachable from the UI container (e.g., misconfigured `UI_BACKEND_URL`), the error must surface in the UI and not crash the container silently.
 
 ## Requirements *(mandatory)*
 
@@ -84,6 +106,12 @@ As a maintainer, I can rely on a consistent containerization pattern for every a
 - **FR-012**: The system MUST map a shared uploads volume between `backend-service` and `rag-agent` so file paths produced by backend remain valid and readable by RAG.
 - **FR-013**: The system MUST ensure each in-scope agent and service configures Kafka client logging at warning level (`logging.getLogger("kafka").setLevel(logging.WARNING)`).
 - **FR-014**: The system MUST ensure each in-scope agent and service that uses LiteLLM configures the LiteLLM logger at warning level (`logging.getLogger("LiteLLM").setLevel(logging.WARNING)`).
+- **FR-015**: The system MUST provide a container build definition for the UI frontend (`ui_frontend/Dockerfile`).
+- **FR-016**: The system MUST define the UI frontend as a service in compose with automatic restart behavior.
+- **FR-017**: The system MUST allow the UI frontend image to be built from local source as part of compose workflows.
+- **FR-018**: The system MUST pass the UI frontend environment variables (`UI_WEBSOCKET_URL`, `UI_BACKEND_URL`, `UI_SIMULATOR_ENABLED`) into the container via the compose `env_file` pointing to `.env.local`.
+- **FR-019**: The system MUST expose the UI frontend on a port accessible to developers from their local machine.
+- **FR-020**: The UI frontend compose service MUST depend on `backend-service` being healthy before starting.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -105,6 +133,7 @@ As a maintainer, I can rely on a consistent containerization pattern for every a
 - **SC-008**: 100% of backend-emitted upload paths used by RAG resolve to readable files through the shared uploads volume mapping.
 - **SC-009**: 100% of in-scope services that use Kafka configure the Kafka logger level to warning.
 - **SC-010**: 100% of in-scope services that use LiteLLM configure the LiteLLM logger level to warning.
+- **SC-011**: The UI frontend service is accessible in a browser after the compose stack starts with no additional configuration beyond setting required environment variables.
 
 ## Assumptions
 
@@ -112,3 +141,6 @@ As a maintainer, I can rely on a consistent containerization pattern for every a
 - Existing shared infrastructure services in compose (for example, message broker and related dependencies) continue to be used.
 - Local developers have a container runtime capable of building and running compose services.
 - This feature targets local deployment workflows and not production orchestration concerns.
+- A `.env.local.example` file will be created or the existing `.env.local` file defines the environment variables; UI frontend env vars (`UI_WEBSOCKET_URL`, `UI_BACKEND_URL`, `UI_SIMULATOR_ENABLED`) are populated by the developer before starting the stack.
+- The UI frontend Streamlit app runs on a well-known port that developers access via browser after stack startup.
+- The UI frontend depends on `backend-service` being available; it does not require a compose dependency gate but the developer is expected to start the full stack together.
