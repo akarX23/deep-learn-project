@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-# from datetime import datetime, timezone  # no longer needed: new TeachingCompletionEvent has no timing fields
 
 from project.schemas import (
-    # TeachingAgentOutput,  # no longer needed: result is passed through but not type-annotated in build_completion_event
+    StreamTokensEventBody,
     TeachingCompletionEvent,
     TeachingRequestEvent,
 )
 from teaching_agent.agent import TeachingAgent
-from teaching_agent.kafka import KafkaProducerProtocol, publish_teaching_complete
+from teaching_agent.kafka import KafkaProducerProtocol, publish_stream_token, publish_teaching_complete
 
 logger = logging.getLogger(__name__)
 
@@ -26,11 +25,13 @@ class TeachingRequestEventHandler:
         publisher: Callable[
             [KafkaProducerProtocol, TeachingCompletionEvent], None
         ] = publish_teaching_complete,
-        # clock: Callable[[], datetime] | None = None,  # removed: new schema has no timing fields
+        stream_publisher: Callable[
+            [KafkaProducerProtocol, StreamTokensEventBody], None
+        ] = publish_stream_token,
     ) -> None:
         self._agent_factory = agent_factory
         self._publisher = publisher
-        # self._clock = clock or (lambda: datetime.now(timezone.utc))  # removed: no timing in new schema
+        self._stream_publisher = stream_publisher
 
     def parse_event(self, payload: dict[str, object]) -> TeachingRequestEvent:
         """Parse inbound payload into request event schema."""
@@ -39,32 +40,14 @@ class TeachingRequestEventHandler:
     def build_completion_event(
         self,
         event: TeachingRequestEvent,
-        result,
-        # started_at: datetime,   # removed: new TeachingCompletionEvent has no timing fields
-        # completed_at: datetime, # removed: new TeachingCompletionEvent has no timing fields
+        raw_markdown: str,
     ) -> TeachingCompletionEvent:
-        """Map agent output into the outbound Kafka completion contract."""
-        # Old mapping (pre-master-merge schema):
-        # duration_ms = max(0, int((completed_at - started_at).total_seconds() * 1000))
-        # return TeachingCompletionEvent(
-        #     request_id=event.request_id,
-        #     session_ctx=event.session_ctx,
-        #     topic=event.topic,
-        #     output_mode=event.output_mode,
-        #     status=result.status,
-        #     content=result.content,
-        #     tokens_used=result.metadata.tokens_used,
-        #     model=result.metadata.model,
-        #     started_at=_isoformat_utc(started_at),
-        #     completed_at=_isoformat_utc(completed_at),
-        #     duration_ms=duration_ms,
-        # )
-        content_str = result.content.model_dump_json() if result.content else ""
+        """Map raw markdown response into the outbound Kafka completion contract."""
         return TeachingCompletionEvent(
             request_id=event.request_id,
             sid=event.sid,
             user_level=event.user_level,
-            content=content_str,
+            content=raw_markdown,
         )
 
     def process_request(
@@ -83,48 +66,40 @@ class TeachingRequestEventHandler:
             )
             return None  # malformed payload — no completion event published
 
-        # started_at = self._clock()  # removed: no timing in new schema
         agent = self._agent_factory()
         logger.info(
             "processing_started request_id=%s user_prompt=%s user_level=%s",
-            # Old fields: event.topic, event.output_mode
             event.request_id, event.user_prompt, event.user_level,
         )
 
+        def token_callback(field: str, token: str) -> None:
+            if producer is None:
+                return
+            try:
+                self._stream_publisher(producer, StreamTokensEventBody(
+                    from_service="teaching-agent",
+                    sid=event.sid,
+                    data={"field": field, "token": token},
+                ))
+            except Exception as cb_exc:
+                logger.warning(
+                    "stream_publish_failed request_id=%s error=%s", event.request_id, cb_exc,
+                )
+
         try:
-            result = agent.run({
-                # Old mapping (pre-master-merge schema):
-                # "topic": event.topic,
-                # "output_mode": event.output_mode,
-                # "context": event.context,
-                "topic": event.user_prompt,      # user_prompt → topic (core pipeline field)
-                "output_mode": event.user_level,  # user_level  → output_mode (core pipeline field)
-                "context": event.rag_compiled,    # rag_compiled → context (core pipeline field)
-            })
-            # completed_at = self._clock()  # removed: no timing in new schema
-            completion_event = self.build_completion_event(event, result)
-            # Old log included completion_event.status (field removed from new schema):
-            # logger.info("processing_completed request_id=%s status=%s", event.request_id, completion_event.status)
+            result, raw_markdown = agent.run(
+                {
+                    "topic": event.user_prompt,
+                    "output_mode": event.user_level,
+                    "context": event.rag_compiled,
+                },
+                token_callback,
+            )
+            completion_event = self.build_completion_event(event, raw_markdown)
             logger.info("processing_completed request_id=%s", event.request_id)
         except Exception as exc:
-            # completed_at = self._clock()  # removed: no timing in new schema
             logger.error("processing_failed request_id=%s error=%s", event.request_id, exc)
-            # duration_ms = max(0, int((completed_at - started_at).total_seconds() * 1000))
-            # Old error completion event (pre-master-merge schema):
-            # completion_event = TeachingCompletionEvent(
-            #     request_id=event.request_id,
-            #     session_ctx=event.session_ctx,
-            #     topic=event.topic,
-            #     output_mode=event.output_mode,
-            #     status="error",
-            #     content=None,
-            #     tokens_used=0,
-            #     model="unknown",
-            #     started_at=_isoformat_utc(started_at),
-            #     completed_at=_isoformat_utc(completed_at),
-            #     duration_ms=duration_ms,
-            #     errors=[str(exc)],
-            # )
+            result = None
             completion_event = TeachingCompletionEvent(
                 request_id=event.request_id,
                 sid=event.sid,
@@ -132,22 +107,29 @@ class TeachingRequestEventHandler:
                 content="",
             )
 
+        # Publish stream-complete sentinel then flush (always, before completion event)
+        if producer is not None:
+            tokens_used = result.metadata.tokens_used if result is not None else 0
+            try:
+                self._stream_publisher(producer, StreamTokensEventBody(
+                    from_service="teaching-agent",
+                    sid=event.sid,
+                    data={"done": True, "tokens_used": tokens_used},
+                ))
+                producer.flush()
+            except Exception as exc:
+                logger.error(
+                    "stream_sentinel_failed request_id=%s error=%s", event.request_id, exc,
+                )
+
         if producer is not None:
             try:
                 self._publisher(producer, completion_event)
             except Exception as exc:
                 logger.error("publish_failed request_id=%s error=%s", event.request_id, exc)
             else:
-                # Old log included completion_event.status (field removed from new schema):
-                # logger.info("publish_completed request_id=%s status=%s", event.request_id, completion_event.status)
                 logger.info("publish_completed request_id=%s", event.request_id)
         return completion_event
-
-
-# def _isoformat_utc(value: datetime) -> str:
-#     """Serialize datetimes consistently in UTC."""
-#     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-# Removed: new TeachingCompletionEvent has no timing fields (started_at, completed_at, duration_ms)
 
 
 def _extract_request_id(payload: dict[str, object]) -> str:

@@ -68,9 +68,8 @@ All Phase 2 tasks are reviewed and approved individually before implementation.
 
 ---
 
-## Phase 2: Kafka Integration (US5) — Open
+## Phase 2: Kafka Integration (US5) — Complete ✅
 
-**Each task is reviewed and approved before implementation.**
 **All Kafka dependencies are injectable — no real Kafka connection required in tests.**
 
 ---
@@ -91,17 +90,15 @@ Backend service will auto-bootstrap `"teaching"` and `"teaching-complete"` on ne
       `TeachingWorker.start()` for startup topic presence check (mirrors `get_rag_topic_names()`)
 
 - [x] T018 Add `TeachingRequestEvent` to `project/schemas.py` (Teaching Agent section):
-      fields: `request_id` (str, required, non-empty), `session_ctx` (dict, required, may be `{}`),
-      `topic` (str), `output_mode` (str), `context` (str, default `""`),
-      `created_at` (str | None), `source` (str | None);
-      validators: `request_id` non-empty, `session_ctx` not null, `topic`/`output_mode` non-empty
+      fields: `request_id` (str, required, non-empty), `user_prompt` (str),
+      `user_level` (str), `rag_compiled` (str, default `""`), `sid` (str, non-empty
+      Socket.IO session ID for frontend WebSocket routing);
+      no validators beyond Pydantic field types
 
 - [x] T019 Add `TeachingCompletionEvent` to `project/schemas.py` (Teaching Agent section):
-      fields: `request_id` (str), `session_ctx` (dict), `topic` (str), `output_mode` (str),
-      `status` (str — `"ok"` or `"error"`), `content` (TeachingContent | None),
-      `tokens_used` (int, ge=0), `model` (str), `started_at` (str), `completed_at` (str),
-      `duration_ms` (int, ge=0), `errors` (list[str], default `[]`),
-      `source` (str, default `"teaching-agent"`)
+      fields: `request_id` (str), `sid` (str), `user_level` (str),
+      `content` (str, default `""`);
+      validators: `request_id` and `user_level` non-empty
 
 **Checkpoint**: `python -c "from project.topics import get_all_topic_names; assert 'teaching' in get_all_topic_names()"` passes
 
@@ -137,16 +134,16 @@ Backend service will auto-bootstrap `"teaching"` and `"teaching-complete"` on ne
 - [x] T021 Create `teaching_agent/handlers.py`:
       - `TeachingRequestEventHandler` class with injectable dependencies:
         `agent_factory` (default: `TeachingAgent`), `publisher` (default:
-        `publish_teaching_complete`), `clock` (default: `datetime.now(UTC)`)
+        `publish_teaching_complete`)
       - `parse_event(payload: dict) → TeachingRequestEvent` — validates inbound payload
-      - `build_completion_event(event, result, started_at, completed_at) → TeachingCompletionEvent`
-        — maps `TeachingAgentOutput` fields + timing into completion event;
-        flattens `metadata.tokens_used` and `metadata.model` into top-level fields
+      - `build_completion_event(event, result) → TeachingCompletionEvent`
+        — maps agent output to new completion schema: `content = result.content.model_dump_json()
+        if result.content else ""`; passes through `request_id`, `sid`, `user_level`
       - `process_request(payload: dict, producer=None) → TeachingCompletionEvent | None`:
-        parse event → extract `TeachingAgentInput` fields → `agent.run()` → build completion
-        event → publish; on parse failure: log error and return None (no publish);
-        on agent failure: still publish error completion event (always-publish rule)
-      - `_isoformat_utc(dt: datetime) → str` — UTC ISO 8601 serialization helper
+        parse event → map `user_prompt→topic`, `user_level→output_mode`, `rag_compiled→context`
+        → `agent.run()` → build completion event → publish; on parse failure: log error
+        and return None (no publish); on agent failure: still publish error completion
+        event with `content: ""` (always-publish rule)
       - `_extract_request_id(payload: dict) → str` — returns `"unknown"` if absent
 
 **Checkpoint**: Unit-testable without Kafka — `TeachingRequestEventHandler` instantiates with fake `agent_factory` and `publisher` lambda
@@ -249,7 +246,7 @@ Backend service will auto-bootstrap `"teaching"` and `"teaching-complete"` on ne
       (`TEACHING_{MODE}_MODEL`, `TEACHING_{MODE}_API_KEY`, `TEACHING_{MODE}_MAX_TOKENS`)
       with fallback description; update Output mode rules table to reference env vars.
 
-- [ ] T032 Update `teaching_agent/config.py` and `teaching_agent/llm_client.py` for per-mode
+- [x] T032 Update `teaching_agent/config.py` and `teaching_agent/llm_client.py` for per-mode
       temperature and effort (FR-009, Decision 12):
       - `LLMConfig`: add `effort: str | None = None` field
       - `get_llm_config()`: read `TEACHING_{MODE}_TEMPERATURE` (fallback: `TEACHING_TEMPERATURE`,
@@ -258,13 +255,181 @@ Backend service will auto-bootstrap `"teaching"` and `"teaching-complete"` on ne
         `"opus-4-6"`, pass `output_config={"effort": config.effort}` as a kwarg to
         `litellm.completion()`; silently skip for all other models
 
-- [ ] T033 Update `.env.local` — add per-mode temperature and effort stubs under Teaching Agent
+- [x] T033 Update `.env.local` — add per-mode temperature and effort stubs under Teaching Agent
       section: `TEACHING_BEGINNER_TEMPERATURE`, `TEACHING_INTERMEDIATE_TEMPERATURE`,
       `TEACHING_ADVANCED_TEMPERATURE`, `TEACHING_BEGINNER_EFFORT`, `TEACHING_INTERMEDIATE_EFFORT`,
       `TEACHING_ADVANCED_EFFORT`; variables go in `.env.local` (not `.env.local.example`)
 
+- [x] T034 Update `teaching_agent/handlers.py` for new `TeachingRequestEvent` /
+      `TeachingCompletionEvent` schema (post-master-merge Planner Agent contract change):
+      remove `clock` / timing fields; map `user_prompt→topic`, `user_level→output_mode`,
+      `rag_compiled→context` for `agent.run()`; build completion event with `sid`,
+      `user_level`, `content` (JSON string). Update `test_kafka_integration.py`: all 7 tests
+      updated for new schema fields; old field usage commented out (not deleted) for reference.
+
 **Checkpoint**: All Phase 2 tests pass; `"teaching"` and `"teaching-complete"` topics
 registered in `project/topics.py`; worker boots and processes messages end-to-end
+
+---
+
+---
+
+## Phase 4: Token Streaming (US6) — Planned
+
+**Goal**: Stream LLM output tokens field-by-field to the frontend via `"stream-tokens"` Kafka topic in real time, while continuing to deliver the complete response via `"teaching-complete"`. LLM output format switches from JSON to markdown with bold section headers.
+
+**All Phase 4 tasks require explicit user approval before implementation. One task at a time.**
+
+---
+
+### P4-A: LLM Output Format Change (Blocking Prerequisite)
+
+**Purpose**: Switch LLM from JSON mode to markdown bold-header format. All downstream Phase 4 tasks depend on this output format.
+
+- [ ] T035 Update `teaching_agent/prompts.py`:
+      Replace JSON output instruction with markdown bold-header format in all 3 prompts.
+      Each prompt now instructs the LLM to use `**Explanation**`, `**Diagram**`, `**Notes**`,
+      `**Example**` as section headers with a blank line before each header.
+      Remove the "Return ONLY a JSON object" instruction and JSON template from each prompt.
+      Keep all per-mode content requirements (5-part structure, diagram rules, etc.) unchanged.
+
+- [ ] T036 Update `teaching_agent/llm_client.py`:
+      - Remove `response_format={"type": "json_object"}` from `call_llm()` kwargs
+      - Add `call_llm_stream(messages, config) → Iterator[tuple[str, int]]`:
+        uses `stream=True`; yields `(delta: str, tokens_used: int)` tuples;
+        `tokens_used` is `0` for all chunks except the last (populated from `usage.completion_tokens`
+        in the final chunk via `stream_options={"include_usage": True}`);
+        wraps all LiteLLM exceptions as `RuntimeError`
+
+- [ ] T037 Update `teaching_agent/helpers.py`:
+      - Remove `parse_llm_response()`, `_JSON_FENCE_OPEN_RE`, and `import json`
+      - Add `parse_markdown_response(raw: str) → dict`:
+        splits on `**SectionName**` bold headers (case-insensitive);
+        returns dict with keys `explanation`, `diagram`, `notes`, `example`;
+        raises `ValueError` if `explanation` or `notes` sections are absent or empty;
+        `diagram` and `example` default to `None` if section absent or empty
+      - `build_messages()` and `build_error_output()` unchanged
+
+**Checkpoint**: `python -m pytest teaching_agent/tests/test_teaching_agent.py -q -k "parse"` — all parse tests pass with updated markdown format
+
+---
+
+### P4-B: Streaming Field Extractor
+
+**Purpose**: New component that processes raw LLM delta chunks and emits field-keyed token events.
+
+- [ ] T038 Create `teaching_agent/stream_parser.py`:
+      - `StreamingFieldExtractor` class:
+        - `__init__(self, token_callback: Callable[[str, str], None])`:
+          `token_callback(field, token)` called for each token event
+        - `feed(self, chunk: str) → None`:
+          appends chunk to internal buffer; detects `**SectionName**` bold headers;
+          on header detection: transitions state; for previous completed section that
+          was being buffered (diagram): calls `token_callback("diagram", buffer)`;
+          for streaming sections (explanation, notes, example): calls
+          `token_callback(field, chunk)` immediately for each chunk
+        - `finalize(self) → str`:
+          flushes any remaining buffered content (diagram if stream ended without
+          another header following); returns the complete raw markdown buffer
+          (all chunks concatenated, including headers) for use as `TeachingCompletionEvent.content`
+        - Internal state: `_current_field`, `_diagram_buffer`, `_raw_buffer`, `_chunk_buffer`
+          (small lookahead for split headers)
+      - Sections detected: `**Explanation**`, `**Diagram**`, `**Notes**`, `**Example**`
+        (case-insensitive match on the header line)
+
+**Checkpoint**: Unit tests in T042 pass for `StreamingFieldExtractor`
+
+---
+
+### P4-C: Agent and Kafka Updates
+
+**Purpose**: Wire streaming into the agent pipeline and add the `stream-tokens` publisher.
+
+- [ ] T039 Update `teaching_agent/agent.py`:
+      - Add `token_callback: Callable[[str, str], None]` parameter to `run()` (required,
+        no default — callers always provide it; tests provide a no-op lambda)
+      - Replace main LLM call (Step 4) with `call_llm_stream()` + `StreamingFieldExtractor`:
+        instantiate extractor with `token_callback`; iterate `call_llm_stream()` feeding
+        each `(delta, tokens_used)` to `extractor.feed(delta)`; capture final `tokens_used`
+        from last chunk; call `extractor.finalize()` to get `raw_markdown` and flush diagram
+      - Call `parse_markdown_response(raw_markdown)` instead of `parse_llm_response()`
+      - Pass `raw_markdown` back to caller alongside `TeachingAgentOutput`:
+        `run()` returns `tuple[TeachingAgentOutput, str]`
+        (second element is `raw_markdown`; empty string `""` on any error path)
+      - `_resolve_diagram()` retry stays as `call_llm()` (non-streaming); unchanged
+
+- [ ] T040 Update `teaching_agent/kafka.py`:
+      - Add import: `StreamTokensEventBody` from `project.schemas`;
+        `BackendStreamTopics` from `project.topics`
+      - Add `publish_stream_token(producer: KafkaProducerProtocol, event: StreamTokensEventBody) → None`:
+        serializes event with `event.model_dump()`;
+        sends to `BackendStreamTopics.STREAM_TOKENS.value`;
+        does NOT call `producer.flush()` (tokens are high-frequency; flush only on stream-complete)
+
+- [ ] T041 Update `teaching_agent/handlers.py`:
+      - Add injectable `stream_publisher` dependency:
+        `stream_publisher: Callable[[KafkaProducerProtocol, StreamTokensEventBody], None] = publish_stream_token`
+      - In `process_request()`: build `token_callback` closure that publishes
+        `StreamTokensEventBody(from_service="teaching-agent", sid=event.sid, data={"field": field, "token": token})`
+        via `stream_publisher`
+      - Update call to `agent.run()`: pass `token_callback`; unpack tuple result
+        `(result, raw_markdown) = agent.run({...}, token_callback)`
+      - After `agent.run()` returns (success or error): publish stream-complete sentinel:
+        `StreamTokensEventBody(from_service="teaching-agent", sid=event.sid, data={"done": True, "tokens_used": N})`
+        then call `producer.flush()` once
+      - Update `build_completion_event()`: `content = raw_markdown if result.status == "ok" else ""`
+        (replaces `result.content.model_dump_json()`)
+
+**Checkpoint**: `python -m pytest teaching_agent/tests/test_kafka_integration.py -q` — all tests pass
+
+---
+
+### P4-D: Tests
+
+**Purpose**: Full test coverage for Phase 4 changes.
+
+- [ ] T042 Create `teaching_agent/tests/test_stream_parser.py`:
+      - `test_explanation_tokens_emitted_immediately` — chunks before `**Diagram**` header go to `explanation`
+      - `test_diagram_buffered_and_emitted_complete` — diagram chunks buffered; emitted as one event on next header
+      - `test_header_split_across_chunks` — `**Explan` + `ation**` across two chunks correctly detected
+      - `test_finalize_flushes_trailing_diagram` — diagram at end of stream (no trailing header) emitted on `finalize()`
+      - `test_notes_and_example_stream_immediately` — notes and example chunks forwarded per chunk
+      - `test_finalize_returns_complete_raw_markdown` — full buffer including headers returned by `finalize()`
+      - `test_empty_stream_no_callback` — empty input produces no callback calls
+
+- [ ] T043 Update `teaching_agent/tests/test_teaching_agent.py`:
+      - Replace 10 `parse_llm_response` tests with `parse_markdown_response` tests using markdown-format inputs
+      - Update all mock LLM responses from JSON strings to markdown bold-header strings
+      - Update monkeypatch target: `teaching_agent.agent.call_llm` → `teaching_agent.agent.call_llm_stream`
+        (mock must yield `(delta, 0)` tuples for intermediate chunks and `(delta, N)` for final chunk)
+      - All integration tests pass a no-op `token_callback=lambda f, t: None` to `agent.run()`
+      - `agent.run()` now returns a tuple — update all assertions to unpack `(result, raw_markdown)`
+
+- [ ] T044 Update `teaching_agent/tests/test_kafka_integration.py`:
+      - Add `_FakeStreamPublisher`: captures all `StreamTokensEventBody` events in a list
+      - Add `stream_publisher=fake_stream_publisher` to handler construction
+      - Add `test_streaming_tokens_published_before_completion_event`
+      - Add `test_stream_complete_sentinel_published_on_success`
+      - Add `test_stream_complete_sentinel_published_on_error`
+      - Add `test_diagram_field_in_stream_events`
+      - Update `test_completion_event_preserves_request_correlation`: verify `content` is raw markdown string
+
+- [ ] T045 Update `teaching_agent/tests/conftest.py`:
+      - Patch `teaching_agent.agent.call_llm_stream` instead of `teaching_agent.agent.call_llm`
+      - Mock yields tuples: intermediate chunks `(delta, 0)`, final chunk `(last_delta, tokens_used)`
+      - Table output still captures `model`, `tokens_used`, `time_s`
+
+---
+
+### P4-E: Validation
+
+- [ ] T046 Run full test suite: `python -m pytest teaching_agent/tests/ -q` — all tests pass
+- [ ] T047 Run sample outputs: `PYTHONPATH=. python teaching_agent/tests/run_samples.py` —
+      verify all 9 outputs are in markdown format with correct bold section headers
+- [ ] T048 Manual end-to-end validation (requires worker running + Kafka up):
+      publish a `TeachingRequestEvent`; verify `StreamTokensEventBody` events on `"stream-tokens"`
+      with correct `field` keys; verify `TeachingCompletionEvent.content` is raw markdown on
+      `"teaching-complete"`
 
 ---
 

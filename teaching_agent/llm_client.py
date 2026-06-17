@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any
 
 from teaching_agent.config import LLMConfig
@@ -32,7 +33,6 @@ def call_llm(messages: list[dict[str, Any]], config: LLMConfig) -> tuple[str, in
         "messages": messages,
         "temperature": config.temperature,
         "max_tokens": config.max_tokens,
-        "response_format": {"type": "json_object"},
     }
     if config.api_base:
         kwargs["api_base"] = config.api_base
@@ -49,3 +49,49 @@ def call_llm(messages: list[dict[str, Any]], config: LLMConfig) -> tuple[str, in
     content = response.choices[0].message.content or ""
     tokens_used = getattr(response.usage, "completion_tokens", 0) or 0
     return content, tokens_used
+
+
+def call_llm_stream(
+    messages: list[dict[str, Any]], config: LLMConfig
+) -> Iterator[tuple[str, int]]:
+    """Execute a streaming LiteLLM chat completion, yielding (delta, tokens_used) tuples.
+
+    Yields one tuple per chunk. tokens_used is 0 for all chunks except the final
+    chunk, where it carries the completion token count (via stream_options include_usage).
+
+    Raises:
+        RuntimeError: If the LiteLLM call or stream iteration fails.
+    """
+    try:
+        from litellm import completion
+    except Exception as exc:
+        raise RuntimeError("litellm is required but not installed") from exc
+
+    kwargs: dict[str, Any] = {
+        "model": config.model,
+        "messages": messages,
+        "temperature": config.temperature,
+        "max_tokens": config.max_tokens,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+    if config.api_base:
+        kwargs["api_base"] = config.api_base
+    if config.api_key:
+        kwargs["api_key"] = config.api_key
+    if config.effort and any(v in config.model for v in ("sonnet-4-6", "opus-4-6")):
+        kwargs["output_config"] = {"effort": config.effort}
+
+    try:
+        response = completion(**kwargs)
+    except Exception as exc:
+        raise RuntimeError(f"LLM stream call failed: {exc}") from exc
+
+    try:
+        for chunk in response:
+            delta = chunk.choices[0].delta.content or "" if chunk.choices else ""
+            usage = getattr(chunk, "usage", None)
+            tokens_used = getattr(usage, "completion_tokens", 0) or 0
+            yield delta, tokens_used
+    except Exception as exc:
+        raise RuntimeError(f"LLM stream iteration failed: {exc}") from exc
