@@ -770,6 +770,7 @@ class PlannerAgent:
                 "resume: unknown_workflow request_id=%s (completed or never started)",
                 request_id,
             )
+            return
 
         config: dict[str, Any] = {"configurable": {"thread_id": request_id}}
         logger.info(
