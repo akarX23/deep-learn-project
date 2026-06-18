@@ -1,7 +1,12 @@
 export interface StreamTokensEventBody {
   from_service: string;
   sid: string;
-  data: Record<string, any>;
+  data: {
+    token?: string;
+    done?: boolean;
+    tokens_used?: number;
+    [key: string]: unknown;
+  };
 }
 
 export interface ClarifyUserLevelEvent {

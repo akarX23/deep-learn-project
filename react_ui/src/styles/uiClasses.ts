@@ -48,7 +48,8 @@ export const uiClasses = {
     shell: "mt-2 flex items-center gap-2 text-sm text-slate-300",
     dots: "inline-flex items-center gap-1",
     dot: "h-1.5 w-1.5 animate-pulse rounded-full bg-amber-300",
-    placeholder: "rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1 text-xs text-slate-300"
+    placeholder: "rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1 text-xs text-slate-300",
+    usage: "mt-2 text-xs text-slate-400"
   },
   placeholder: {
     panel: "rounded-xl border border-slate-700 bg-slate-900/70 p-6",

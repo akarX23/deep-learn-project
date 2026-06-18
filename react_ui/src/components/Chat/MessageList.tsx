@@ -5,10 +5,19 @@ import { UserMessage } from "./UserMessage";
 
 interface MessageListProps {
   messages: ChatMessage[];
+  sid: string | null;
+  activeStreamMessageId: string | null;
   progressPlaceholder: string;
+  onAssistantStreamDone: (messageId: string) => void;
 }
 
-export function MessageList({ messages, progressPlaceholder }: MessageListProps): JSX.Element {
+export function MessageList({
+  messages,
+  sid,
+  activeStreamMessageId,
+  progressPlaceholder,
+  onAssistantStreamDone
+}: MessageListProps): JSX.Element {
   return (
     <div className={uiClasses.chat.messages}>
       {messages.map((message) => (
@@ -29,9 +38,12 @@ export function MessageList({ messages, progressPlaceholder }: MessageListProps)
             <div className="whitespace-pre-wrap">{message.content}</div>
           ) : (
             <StreamResponseBox
-              markdownContent={message.content}
-              isStreaming={message.isStreaming}
+              sid={sid}
+              messageId={message.id}
+              isActive={activeStreamMessageId === message.id}
+              initialContent={message.content}
               progressPlaceholder={progressPlaceholder}
+              onDone={() => onAssistantStreamDone(message.id)}
             />
           )}
         </div>

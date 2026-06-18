@@ -7,7 +7,7 @@
 
 ## Summary
 
-All planning unknowns are resolved. The design keeps boilerplate low while adding a cleaner dark-mode UI and reusable Tailwind class strategy.
+All planning unknowns are resolved. The design keeps boilerplate low, preserves Tailwind-based theming, and introduces direct event-driven streaming in `StreamResponseBox` without batched delays.
 
 ## 1. Tailwind Styling Strategy with Minimal Boilerplate
 
@@ -31,7 +31,7 @@ All planning unknowns are resolved. The design keeps boilerplate low while addin
 
 ## 3. Markdown Rendering for Streamed Assistant Output
 
-**Decision**: Render assistant stream text through `react-markdown` in a dedicated stream content box component.
+**Decision**: Render assistant stream text through `react-markdown` in `StreamResponseBox`, which owns teaching-agent stream updates.
 
 **Rationale**: Native React markdown rendering with minimal setup and good compatibility with incremental token updates.
 
@@ -49,7 +49,37 @@ All planning unknowns are resolved. The design keeps boilerplate low while addin
 - Spinner only: No explicit progress affordance.
 - Full skeleton system: More boilerplate for limited benefit.
 
-## 5. Attachment Display Pattern in Chat History
+## 5. Explicit Completion Event Handling
+
+**Decision**: End stream only when `stream-tokens-skt` payload includes `data.done === true` from `teaching-agent`.
+
+**Rationale**: Timer-based completion can drop or mis-sequence late packets. Explicit completion removes ambiguity and eliminates timeout tuning.
+
+**Alternatives considered**:
+- Inactivity timeout completion: susceptible to jitter and packet timing variance.
+- Completion on next user submit: can keep stale stream open too long.
+
+## 6. Token Usage Rendering
+
+**Decision**: Render `data.tokens_used` as a small secondary line under each `StreamResponseBox` when completion payload provides it.
+
+**Rationale**: Provides immediate cost/usage context without cluttering primary assistant text.
+
+**Alternatives considered**:
+- Show in separate global area: weak message-to-usage association.
+- Omit usage display: loses useful feedback requested by stakeholders.
+
+## 7. Stream State Ownership Boundary
+
+**Decision**: Move teaching-agent stream state (token aggregation, completion state, placeholder progression, tokens-used display) into `StreamResponseBox`; keep `ChatWindow` focused on message list orchestration.
+
+**Rationale**: Limits high-frequency rerenders to one component and improves responsiveness under rapid token flow.
+
+**Alternatives considered**:
+- Keep stream state in `ChatWindow`: causes broad rerenders and event handling contention.
+- Shared global stream store: unnecessary complexity for current single-chat scope.
+
+## 8. Attachment Display Pattern in Chat History
 
 **Decision**: Show compact file chips (filename visible) inside user message bubbles after submit.
 
@@ -59,7 +89,7 @@ All planning unknowns are resolved. The design keeps boilerplate low while addin
 - Keep attachments only in pre-submit picker: Context is lost after sending.
 - Plain text filenames: Lower visual scanability.
 
-## 6. Component Decomposition for Maintainability
+## 9. Component Decomposition for Maintainability
 
 **Decision**: Extract user-authored message rendering to dedicated reusable component (`UserMessage`) and keep stream display concerns in dedicated response box component.
 
@@ -68,7 +98,7 @@ All planning unknowns are resolved. The design keeps boilerplate low while addin
 **Alternatives considered**:
 - Keep all rendering in `MessageList`: Grows into monolith as visual rules expand.
 
-## 7. Layout and Space Utilization
+## 10. Layout and Space Utilization
 
 **Decision**: Expand content container width for desktop while preserving readable line-length constraints and responsive behavior.
 
@@ -78,9 +108,9 @@ All planning unknowns are resolved. The design keeps boilerplate low while addin
 - Fixed narrow container: Wastes horizontal space.
 - Full-width everything: Can reduce readability for long text.
 
-## 8. Existing Runtime Contract Stability
+## 11. Existing Runtime Contract Stability
 
-**Decision**: Keep existing REST and Socket.IO contracts unchanged (`/api/chat/request`, `stream-tokens-skt`, `clarify-user-level-skt`), and apply UI updates client-side only.
+**Decision**: Keep REST contract unchanged and extend Socket.IO payload interpretation for explicit completion metadata (`done`, `tokens_used`) while preserving event names and core shape.
 
 **Rationale**: Limits risk and avoids backend coordination for this iteration.
 

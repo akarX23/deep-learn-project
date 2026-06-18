@@ -6,7 +6,7 @@ interface LoadingIndicatorProps {
 
 export function LoadingIndicator({ placeholderText }: LoadingIndicatorProps): JSX.Element {
   return (
-    <div className={uiClasses.loading.shell}>
+    <div className={uiClasses.loading.shell} role="status" aria-live="polite">
       <span className={uiClasses.loading.dots} aria-hidden="true">
         <span className={uiClasses.loading.dot} />
         <span className={uiClasses.loading.dot} />

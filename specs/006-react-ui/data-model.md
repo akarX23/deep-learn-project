@@ -1,4 +1,4 @@
-# Data Model: React Web UI for AI Tutor
+# Data Model: React UI Streaming-State Refactor
 
 **Phase**: Phase 1 — Design
 **Feature**: `specs/006-react-ui`
@@ -18,16 +18,17 @@ Represents a single entry in the chat history list.
 |---|---|---|
 | `id` | `string` | UUID generated at creation time; used as React key |
 | `role` | `'user' \| 'assistant'` | Message origin |
-| `content` | `string` | Full text content; accumulated incrementally for streaming messages |
-| `isStreaming` | `boolean` | `true` while tokens are still arriving; `false` when complete |
+| `content` | `string` | Stable content for user/info messages; assistant stream content is maintained in `StreamResponseBox` |
+| `isStreaming` | `boolean` | Assistant stream lifecycle marker used by rendering layer |
+| `attachments` | `Array<{ name: string; sizeBytes: number }>` (optional) | Metadata for user attachment chips |
 
 **Validation rules**:
-- `content` may be empty string while `isStreaming === true` (first token not yet received)
-- `id` must be unique within the session's message list
+- `id` must be unique within the session's message list.
+- For assistant stream entries, `content` may remain empty because stream text state is local to `StreamResponseBox`.
 
 **State transitions**:
-```
-[created] → isStreaming=true, content="" → isStreaming=true, content grows → isStreaming=false
+```text
+assistant stream entry created -> StreamResponseBox appends token fragments -> done=true marks stream completion
 ```
 
 ---
@@ -57,9 +58,13 @@ Payload shape of the `stream-tokens-skt` Socket.IO event emitted by the backend.
 |---|---|---|
 | `from_service` | `string` | Name of the producing agent (e.g., `"teaching-agent"`) |
 | `sid` | `string` | Socket.IO session ID for routing to the correct client |
-| `data` | `Record<string, any>` | Agent-specific payload; for teaching-agent contains `token: string` |
+| `data` | `Record<string, any>` | Agent-specific payload; for teaching-agent includes token fragments and completion metadata |
 
-**Routing rule**: Only render in Chat if `from_service === "teaching-agent"`.
+**Teaching-agent `data` patterns**:
+- `{ token: string }` for streaming fragments
+- `{ done: true, tokens_used?: number }` for explicit completion
+
+**Routing rule**: Only render in Chat if `from_service === "teaching-agent"` and `sid` matches the browser session.
 
 ---
 
@@ -128,6 +133,24 @@ interface ChatState {
 }
 ```
 
+Managed locally within `StreamResponseBox.tsx`:
+
+```typescript
+interface StreamResponseState {
+  markdownContent: string;
+  isStreaming: boolean;
+  progressPlaceholder: string;
+  tokensUsed: number | null;
+}
+```
+
+Completion transition:
+
+```text
+on token fragment -> append markdownContent
+on done=true -> set isStreaming=false and capture tokens_used
+```
+
 ---
 
 ## Relationships
@@ -136,8 +159,10 @@ interface ChatState {
 App
  ├─ socket singleton (1 per session)
  ├─ Navigation (reads/writes currentSection)
- └─ ChatWindow
-      ├─ MessageList (reads messages[])
-      ├─ InputArea (reads/writes inputText, isSubmitting)
-      └─ FileUploader (reads/writes attachedFiles, fileErrors)
+ └─ ChatWindow (message list orchestration)
+  ├─ MessageList
+  │   ├─ UserMessage
+  │   └─ StreamResponseBox (owns teaching-agent stream state)
+  ├─ InputArea
+  └─ FileUploader
 ```

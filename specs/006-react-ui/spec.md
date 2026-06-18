@@ -14,6 +14,7 @@
 - Q: What styling approach should be used for beautification? → A: Option A - Tailwind utility classes only with shared color tokens in one config file.
 - Q: Which loading indicator pattern should be used while streaming? → A: Option D - animated dots loader with placeholder progress text.
 - Q: How should uploaded files be shown after message submission? → A: Option B - compact attachment chips in the user message bubble, including filename display; user-message rendering extracted as a dedicated component.
+- Q: How should stream completion be determined and where should token-stream state live? → A: Use explicit backend completion (`data.done === true`) from `stream-tokens-skt`; keep teaching-agent stream state entirely inside `StreamResponseBox`; show `data.tokens_used` as a small message below each `StreamResponseBox`.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -87,7 +88,7 @@ The application displays three section tabs — Chat, Quiz, and Evaluation. Only
 - **FR-007**: The application MUST reject attachment attempts when the 3-file limit is already reached.
 - **FR-008**: User prompts and attached files MUST be submitted together as multipart form data to `/api/chat/request`.
 - **FR-009**: The application MUST establish a WebSocket connection to the backend on startup.
-- **FR-010**: The application MUST listen to the `stream-tokens-skt` WebSocket event and, when `from_service` equals `"teaching-agent"`, append each token to the current assistant message in the chat view.
+- **FR-010**: The application MUST listen to the `stream-tokens-skt` WebSocket event and, when `from_service` equals `"teaching-agent"`, update streamed markdown content immediately in `StreamResponseBox` with no batching delay.
 - **FR-011**: The application MUST listen to the `clarify-user-level-skt` WebSocket event and display the clarification payload to the user in the chat area.
 - **FR-012**: WebSocket events where `from_service` is not `"teaching-agent"` MUST be ignored for chat rendering in this iteration.
 - **FR-013**: All backend endpoint URLs, WebSocket URLs, and service identifiers MUST be configurable via environment variables, not hardcoded.
@@ -104,13 +105,16 @@ The application displays three section tabs — Chat, Quiz, and Evaluation. Only
 - **FR-024**: The application MUST include a top navigation bar that prominently displays the product title.
 - **FR-025**: The chat interface layout MUST better utilize desktop screen space by using a wider content container while preserving readability.
 - **FR-026**: The file upload control MUST be visually styled as an interactive button and maintain clear selected-file feedback before submission.
+- **FR-027**: Stream completion MUST be determined only by explicit backend payload `data.done === true` from `stream-tokens-skt` events; timeout-driven completion is out of scope.
+- **FR-028**: Teaching-agent stream state (`stream-tokens-skt` token accumulation, completion status, and progress placeholder rendering) MUST be owned by `StreamResponseBox`; `ChatWindow` MUST manage message-list structure but not streamed token content state updates.
+- **FR-029**: When a teaching-agent completion payload includes `data.tokens_used`, the UI MUST render this value as a small secondary message below the corresponding `StreamResponseBox`.
 
 ### Key Entities
 
 - **ChatMessage**: A single entry in the chat history; has a role (`user` or `assistant`), text content, a streaming-complete flag, and optional attachment metadata for user messages (at minimum filename).
 - **WebSocket Session**: The live connection to the backend; carries a session ID (`sid`) used to correlate streaming events to the correct browser session.
 - **AttachedFile**: A PDF file selected by the user; has a name, size, and binary content to be submitted as form data.
-- **StreamTokensEventBody**: `{ from_service: string, sid: string, data: Record<string, any> }` — mirrors the Python schema; `data` carries the token text.
+- **StreamTokensEventBody**: `{ from_service: string, sid: string, data: Record<string, any> }` — mirrors the Python schema; `data` carries token fragments during streaming and completion metadata (for example `done`, `tokens_used`) on finalization.
 - **ClarifyUserLevelEvent**: `{ request_id: string, user_prompt: string, sid: string, reason?: string }` — mirrors the Python schema.
 
 ## Success Criteria *(mandatory)*
@@ -124,13 +128,14 @@ The application displays three section tabs — Chat, Quiz, and Evaluation. Only
 - **SC-005**: All backend URLs and WebSocket addresses are environment-variable-driven; no URL is hardcoded in application source.
 - **SC-006**: The initial page load and chat interaction are usable on a standard desktop browser at typical broadband speeds without noticeable lag.
 - **SC-007**: The refined UI includes a visible top navbar title, Tailwind-styled interactive controls, and a chat layout that uses a wider desktop container without clipping message content.
+- **SC-008**: For teaching-agent streams, completion is recognized from `data.done === true` and `tokens_used` is displayed beneath the related streamed response when provided.
 
 ## Assumptions
 
 - The React application targets modern desktop browsers; mobile responsiveness is not required for this iteration.
 - The backend WebSocket server speaks Socket.IO protocol (matching the existing Python `socketio_client.py`); the React client will use `socket.io-client`.
 - The `sid` used in form data submissions is the Socket.IO session ID assigned upon connection.
-- The `stream-tokens-skt` event payload's `data` field contains a `token` key with the text fragment, consistent with the existing Python frontend behavior.
+- The `stream-tokens-skt` event payload's `data` field provides either token fragments (`token`) or explicit completion metadata (`done`, optional `tokens_used`).
 - The application does not implement authentication; all sessions are anonymous.
 - No state persistence (local storage, cookies) is required in this iteration.
 - The Quiz and Evaluation sections require no functional code beyond routing placeholders.

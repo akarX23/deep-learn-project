@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useBatchedTokens } from "../../hooks/useBatchedTokens";
+import { useCallback, useState } from "react";
 import { usePdfValidator } from "../../hooks/usePdfValidator";
 import { useSocketEvent } from "../../hooks/useSocketEvent";
-import type { ChatMessage, ClarifyUserLevelEvent, StreamTokensEventBody } from "../../schemas";
+import type { ChatMessage, ClarifyUserLevelEvent } from "../../schemas";
 import { WebSocketEvents } from "../../schemas";
 import { uiClasses } from "../../styles/uiClasses";
 import { FileUploader } from "./FileUploader";
@@ -21,46 +20,11 @@ function uuid(): string {
 export function ChatWindow({ sid, onSubmitRequest }: ChatWindowProps): JSX.Element {
   const progressPlaceholder = "Backend progress events will appear here.";
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [activeStreamMessageId, setActiveStreamMessageId] = useState<string | null>(null);
   const [inputText, setInputText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
   const { files, errors, addFiles, removeFile, clearFiles } = usePdfValidator();
-  const { streamedText, addToken, reset } = useBatchedTokens(100);
-  const stopStreamingTimerRef = useRef<number | null>(null);
-
-  useSocketEvent<StreamTokensEventBody>(WebSocketEvents.STREAM_TOKENS_SKT, useCallback((payload) => {
-    if (!sid || payload.sid !== sid) {
-      return;
-    }
-    if (payload.from_service !== "teaching-agent") {
-      return;
-    }
-
-    const token = typeof payload.data.token === "string" ? payload.data.token : "";
-    if (!token) {
-      return;
-    }
-
-    addToken(token);
-
-    if (stopStreamingTimerRef.current !== null) {
-      window.clearTimeout(stopStreamingTimerRef.current);
-    }
-    stopStreamingTimerRef.current = window.setTimeout(() => {
-      setIsSubmitting(false);
-      setMessages((prev) => {
-        if (prev.length === 0) {
-          return prev;
-        }
-        const next = [...prev];
-        const last = next[next.length - 1];
-        if (last.role === "assistant") {
-          next[next.length - 1] = { ...last, isStreaming: false };
-        }
-        return next;
-      });
-    }, 800);
-  }, [addToken, sid]));
 
   useSocketEvent<ClarifyUserLevelEvent>(WebSocketEvents.CLARIFY_USER_LEVEL_SKT, useCallback((payload) => {
     if (!sid || payload.sid !== sid) {
@@ -74,19 +38,15 @@ export function ChatWindow({ sid, onSubmitRequest }: ChatWindowProps): JSX.Eleme
     ]);
   }, [sid]));
 
-  useEffect(() => {
-    setMessages((prev) => {
-      if (prev.length === 0) {
-        return prev;
-      }
-      const next = [...prev];
-      const last = next[next.length - 1];
-      if (last.role === "assistant" && last.isStreaming) {
-        next[next.length - 1] = { ...last, content: streamedText };
-      }
-      return next;
-    });
-  }, [streamedText]);
+  const handleAssistantStreamDone = useCallback((messageId: string): void => {
+    setIsSubmitting(false);
+    setActiveStreamMessageId((prev) => (prev === messageId ? null : prev));
+    setMessages((prev) =>
+      prev.map((message) =>
+        message.id === messageId ? { ...message, isStreaming: false } : message
+      )
+    );
+  }, []);
 
   const handleSubmit = async (): Promise<void> => {
     if (!sid || isSubmitting || inputText.trim().length === 0) {
@@ -96,7 +56,7 @@ export function ChatWindow({ sid, onSubmitRequest }: ChatWindowProps): JSX.Eleme
     const prompt = inputText.trim();
     setRequestError(null);
     setIsSubmitting(true);
-    reset();
+    const assistantMessageId = uuid();
 
     setMessages((prev) => [
       ...prev,
@@ -107,8 +67,9 @@ export function ChatWindow({ sid, onSubmitRequest }: ChatWindowProps): JSX.Eleme
         isStreaming: false,
         attachments: files.map((file) => ({ name: file.name, sizeBytes: file.size }))
       },
-      { id: uuid(), role: "assistant", content: "", isStreaming: true }
+      { id: assistantMessageId, role: "assistant", content: "", isStreaming: true }
     ]);
+    setActiveStreamMessageId(assistantMessageId);
 
     setInputText("");
 
@@ -131,7 +92,13 @@ export function ChatWindow({ sid, onSubmitRequest }: ChatWindowProps): JSX.Eleme
       <h2 className={uiClasses.chat.heading}>Chat</h2>
       <p className={uiClasses.chat.subheading}>Ask a question and optionally upload PDF study material.</p>
 
-      <MessageList messages={messages} progressPlaceholder={progressPlaceholder} />
+      <MessageList
+        messages={messages}
+        sid={sid}
+        activeStreamMessageId={activeStreamMessageId}
+        progressPlaceholder={progressPlaceholder}
+        onAssistantStreamDone={handleAssistantStreamDone}
+      />
 
       <FileUploader
         files={files}

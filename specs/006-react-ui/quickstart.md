@@ -67,6 +67,8 @@ npm run dev
 - Chat container uses more desktop width without readability loss.
 - Streamed assistant output renders markdown in dedicated box.
 - Animated dots loader appears with progress placeholder text while waiting/streaming.
+- Stream completion occurs only when a payload with `data.done === true` is received.
+- When completion payload includes `data.tokens_used`, the value appears below the related stream response box.
 - Upload button is styled and interactive.
 - Submitted user messages show attachment chips with filename.
 - Non-teaching-agent stream events remain ignored.
@@ -83,4 +85,5 @@ npm run test
 
 - Prefer utility composition over new abstractions unless reuse is clear.
 - Keep new component count minimal: `Navbar`, `UserMessage`, optional `StreamResponseBox`.
-- Reuse existing hooks and event-handling flow; avoid socket architecture changes.
+- Keep stream event handling isolated in `StreamResponseBox`; avoid parent-level token accumulation state.
+- Do not use timeout-based stream completion for teaching-agent packets.

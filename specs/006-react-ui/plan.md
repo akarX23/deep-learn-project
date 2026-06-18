@@ -1,33 +1,33 @@
-# Implementation Plan: React UI Refresh (Dark Theme + Tailwind Reuse)
+# Implementation Plan: React UI Streaming-State Refactor
 
 **Branch**: `008-react-ui` | **Date**: 2026-06-18 | **Spec**: `specs/006-react-ui/spec.md`
 **Input**: Feature specification from `/specs/006-react-ui/spec.md`
 
 ## Summary
 
-Refresh the existing React chat UI with minimal-boilerplate visual improvements: dark blue + amber theme, Tailwind-based styling, top navbar, markdown-rendered streaming output box, animated dots loading state with progress placeholder text, improved desktop space usage, and attachment chips (filename visible) in user messages. Keep code clean by extracting repeated/long Tailwind class strings to a single reusable class-token module.
+Refine the React UI architecture to maximize streaming responsiveness by moving teaching-agent stream state ownership into `StreamResponseBox`, removing batched token buffering, and using explicit backend completion (`data.done === true`) with `tokens_used` rendering beneath each streamed response. Keep minimal boilerplate, Tailwind-based dark theme, and reusable class-token organization.
 
 ## Technical Context
 
 **Language/Version**: TypeScript 5.5 + React 18.3.1  
 **Primary Dependencies**: React, Vite, socket.io-client, Tailwind CSS, react-markdown  
-**Storage**: N/A (browser in-memory state only)  
-**Testing**: Vitest + React Testing Library (component behavior), existing lint/typecheck gates  
-**Target Platform**: Modern desktop browsers (baseline), responsive support for smaller widths  
+**Storage**: N/A (in-memory UI state only)  
+**Testing**: Vitest + React Testing Library for component behavior; lint/build for static quality gates  
+**Target Platform**: Modern desktop browsers, responsive fallback for smaller viewports  
 **Project Type**: Frontend web application within monorepo  
-**Performance Goals**: Streaming token render flush <= 120ms cadence; first visible streamed content <= 500ms from event receipt on local dev baseline  
-**Constraints**: Minimal boilerplate, Tailwind-only styling (no UI kit), centralized theme tokens, centralized long class-name reuse file, preserve existing REST + Socket.IO contracts  
-**Scale/Scope**: Single-page app with 3 sections (Chat functional; Quiz/Evaluation placeholders), single active chat session per browser tab
+**Performance Goals**: Immediate per-token UI updates without batching delays; completion tied to explicit `done` payload, not timers  
+**Constraints**: Minimal boilerplate, no additional UI libraries, centralized theme/class tokens, no timeout-driven stream completion  
+**Scale/Scope**: Single-session chat UI with three sections; chat is functional while quiz/evaluation remain placeholders
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- Code Quality Gate: PASS. Enforce `npm run lint`, `npm run build` (typecheck + bundling), and keep UI class reuse in one module to reduce duplication.
-- Testing Gate: PASS. Add/maintain unit/component tests for message rendering, attachment chips, loading indicator state, and markdown stream rendering; no regression to existing socket event routing.
-- UX Consistency Gate: PASS. Preserve current 3-tab IA (Chat/Quiz/Evaluation), keep accessibility labels and disabled states, and apply consistent dark theme tokens from one source.
-- Performance Gate: PASS. Keep batched token strategy and avoid per-token heavy markdown parsing side-effects; validate smooth rendering with local manual perf check.
-- Maintainability Gate: PASS. Document token/class extraction strategy in quickstart and keep component responsibilities explicit (new dedicated user-message component).
+- Code Quality Gate: PASS. Keep modular component ownership (`ChatWindow` structure vs `StreamResponseBox` stream state) and maintain lint/build compatibility.
+- Testing Gate: PASS WITH NOTE. Behavioral changes imply required automated coverage at implementation time (stream completion, tokens_used rendering, no batching).
+- UX Consistency Gate: PASS. Existing navigation, accessibility labels, and visual language remain; streaming feedback becomes more direct.
+- Performance Gate: PASS. Removing buffered token flushes and timeout completion aligns with responsiveness goals.
+- Maintainability Gate: PASS. Contracted ownership boundaries reduce cross-component state churn and simplify reasoning.
 
 ## Project Structure
 
@@ -48,21 +48,21 @@ specs/006-react-ui/
 ### Source Code (repository root)
 
 ```text
-backend_service/
-  app/
-  tests/
-
 react_ui/
 ├── src/
 │   ├── components/
+│   │   ├── Navbar.tsx
+│   │   ├── Navigation.tsx
 │   │   ├── Chat/
 │   │   │   ├── ChatWindow.tsx
 │   │   │   ├── MessageList.tsx
 │   │   │   ├── UserMessage.tsx
+│   │   │   ├── StreamResponseBox.tsx
+│   │   │   ├── LoadingIndicator.tsx
 │   │   │   ├── InputArea.tsx
 │   │   │   └── FileUploader.tsx
-│   │   ├── Navigation.tsx
-│   │   └── Navbar.tsx
+│   │   ├── Quiz/QuizPlaceholder.tsx
+│   │   └── Evaluation/EvaluationPlaceholder.tsx
 │   ├── styles/
 │   │   ├── theme.ts
 │   │   └── uiClasses.ts
@@ -71,33 +71,33 @@ react_ui/
 │   ├── schemas.ts
 │   ├── App.tsx
 │   └── main.tsx
-└── tests/
+└── package.json
 ```
 
-**Structure Decision**: Keep current monorepo and extend only `react_ui/` for this feature iteration. No backend API shape changes required.
+**Structure Decision**: Keep all frontend implementation changes inside `react_ui/`; backend event contract remains backward-compatible and additive (`done`, `tokens_used` in `data`).
 
 ## Phase 0: Research Focus
 
-- Tailwind minimal setup for existing Vite+React codebase.
-- Safe markdown rendering strategy for streamed text.
-- Reusable class-token extraction pattern to avoid long inline class strings.
-- Lightweight animated loader and placeholder integration pattern.
+- Event-driven stream completion via explicit payload metadata instead of timer heuristics.
+- Component-local high-frequency stream rendering to minimize parent re-renders.
+- Stable mapping between streamed assistant messages and stream state in `StreamResponseBox`.
 
 ## Phase 1: Design Outputs
 
-- `data-model.md`: add attachment metadata in chat messages and UI theme/class token entities.
-- `contracts/api-contracts.md`: confirm no backend contract changes; clarify rendering behavior constraints.
-- `contracts/ui-component-contracts.md`: define component input/output contracts for Navbar, UserMessage, StreamResponseBox.
-- `quickstart.md`: include Tailwind setup, theme token location, and class-token reuse guidance.
+- `research.md`: capture rationale for removing `useBatchedTokens` and stream ownership refactor.
+- `data-model.md`: incorporate completion metadata (`done`, `tokens_used`) and per-response stream state ownership.
+- `contracts/api-contracts.md`: codify explicit completion payload semantics.
+- `contracts/ui-component-contracts.md`: define `StreamResponseBox` ownership boundaries and `tokens_used` display rule.
+- `quickstart.md`: include verification checklist for explicit completion and tokens-used rendering.
 
 ## Post-Design Constitution Check
 
-- Code Quality Gate: PASS. Design explicitly separates theme tokens and class maps.
-- Testing Gate: PASS. Component contracts make tests straightforward and targeted.
-- UX Consistency Gate: PASS. Clarified interactive states, loading, markdown display, and attachment visibility.
-- Performance Gate: PASS. Continues batched token updates and avoids introducing heavy design-system runtime overhead.
-- Maintainability Gate: PASS. New dedicated `UserMessage` component + centralized style tokens reduce churn.
+- Code Quality Gate: PASS. Ownership boundaries are explicit and reduce mutable shared state.
+- Testing Gate: PASS WITH NOTE. Implementation must include regression tests for explicit `done` completion and `tokens_used` rendering.
+- UX Consistency Gate: PASS. Chat remains consistent while improving responsiveness and completion correctness.
+- Performance Gate: PASS. Direct stream updates avoid batching delay and timeout jitter.
+- Maintainability Gate: PASS. Stream concerns are isolated in one component with clear contract.
 
 ## Complexity Tracking
 
-No constitution violations requiring exceptions.
+No constitution violations requiring exception handling.

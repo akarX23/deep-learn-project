@@ -54,23 +54,31 @@ interface UserMessageProps {
 
 ## StreamResponseBox
 
-**Purpose**: Render assistant streamed content with markdown and loading state.
+**Purpose**: Own teaching-agent stream state and render assistant streamed markdown content with loading and completion metadata.
 
 ### Props
 
 ```typescript
 interface StreamResponseBoxProps {
-  markdownContent: string;
-  isStreaming: boolean;
+  sid: string | null;
+  messageId: string;
+  isActive: boolean;
+  initialContent: string;
   progressPlaceholder: string;
+  onDone: () => void;
 }
 ```
 
 ### Contract Rules
 
-- Must render markdown via `react-markdown`.
-- While `isStreaming` is true, show animated dots loader.
-- Must show progress placeholder text region for future backend progress events.
+- Must subscribe to `stream-tokens-skt` teaching-agent packets for matching `sid`.
+- Must process stream packets only when `isActive` is true for the current assistant message.
+- Must maintain local stream state (markdown text, completion flag, tokens-used value).
+- Must render markdown via `react-markdown` with no batching delay.
+- Must mark completion only when payload contains `data.done === true`.
+- Must display `tokens_used` as small secondary text below markdown content when provided.
+- Must show progress placeholder text while streaming.
+- Must trigger `onDone` when explicit completion is received so parent orchestration can unlock new submissions.
 
 ---
 
