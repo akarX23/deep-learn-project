@@ -1,124 +1,100 @@
-# Tasks: React Web UI for AI Tutor
+# Tasks: React UI Refresh (Dark Theme + Tailwind Reuse)
 
-**Input**: Design documents from `/specs/006-react-ui/`
-**Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
+**Input**: Design documents from `/specs/006-react-ui/`  
+**Prerequisites**: `plan.md` (required), `spec.md` (required), `research.md`, `data-model.md`, `contracts/`, `quickstart.md`
 
-**Tests**: Test tasks are included for each user story because behavior changes are user-facing and contract-sensitive.
+**Tests**: No explicit test tasks are generated because the current feature specification does not explicitly request TDD or test-first tasks for this iteration.
 
-**Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
-
-## Format: `[ID] [P?] [Story] Description`
-
-- **[P]**: Can run in parallel (different files, no dependencies)
-- **[Story]**: Which user story this task belongs to (e.g., US1, US2, US3)
-- Every task includes an exact file path
+**Organization**: Tasks are grouped by user story to keep each story independently implementable and verifiable.
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-**Purpose**: Create the React workspace and baseline tooling.
+**Purpose**: Install styling/rendering dependencies and baseline frontend configuration.
 
-- [X] T001 Initialize React + TypeScript Vite app in react_ui/package.json
-- [X] T002 Configure TypeScript compiler options in react_ui/tsconfig.json
-- [X] T003 [P] Configure Vite build/dev settings in react_ui/vite.config.ts
-- [X] T004 [P] Add lint/format scripts and config references in react_ui/package.json
-- [X] T005 [P] Define required environment variable template in react_ui/.env.example
-- [X] T006 Create source directory skeleton and entry files in react_ui/src/main.tsx
+- [X] T001 Install Tailwind build dependencies in `react_ui/package.json`
+- [X] T002 Install markdown renderer dependency in `react_ui/package.json`
+- [X] T003 Configure Tailwind and PostCSS in `react_ui/tailwind.config.js` and `react_ui/postcss.config.js`
+- [X] T004 Add Tailwind directives to stylesheet in `react_ui/src/index.css`
+- [X] T005 Ensure app entry imports shared stylesheet in `react_ui/src/main.tsx`
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-**Purpose**: Build shared contracts and infrastructure required by all stories.
+**Purpose**: Build shared style/system primitives used by all stories.
 
-**⚠️ CRITICAL**: No user story implementation begins until this phase is complete.
+**⚠️ CRITICAL**: No user story work starts before this phase completes.
 
-- [X] T007 Define mirrored TypeScript backend contracts in react_ui/src/schemas.ts
-- [X] T008 Implement runtime env validation and config exports in react_ui/src/config.ts
-- [X] T009 Implement Socket.IO singleton connection service in react_ui/src/services/socket.ts
-- [X] T010 [P] Implement reusable socket event subscription hook in react_ui/src/hooks/useSocketEvent.ts
-- [X] T011 [P] Implement multipart chat request API client in react_ui/src/services/api.ts
-- [X] T012 Create root app shell with section state and socket lifecycle wiring in react_ui/src/App.tsx
+- [X] T006 Create centralized color and spacing tokens in `react_ui/src/styles/theme.ts`
+- [X] T007 Create reusable Tailwind class registry in `react_ui/src/styles/uiClasses.ts`
+- [X] T008 [P] Extend chat message schema for attachment metadata in `react_ui/src/schemas.ts`
+- [X] T009 [P] Add shared markdown stream response box component in `react_ui/src/components/Chat/StreamResponseBox.tsx`
+- [X] T010 Add shared loading indicator component with placeholder text slot in `react_ui/src/components/Chat/LoadingIndicator.tsx`
+- [X] T011 Create dedicated user message presentation component in `react_ui/src/components/Chat/UserMessage.tsx`
 
-**Checkpoint**: Foundation ready; user stories can proceed.
+**Checkpoint**: Shared theme, class reuse, and message primitives are ready for story implementation.
 
 ---
 
 ## Phase 3: User Story 1 - Send a Chat Message with PDF Upload (Priority: P1) 🎯 MVP
 
-**Goal**: Deliver end-to-end chat request submission with PDF validation and streaming token rendering from `teaching-agent`.
+**Goal**: Deliver beautified chat flow with PDF upload, markdown streaming, loading animation, and attachment chips in sent user messages.
 
-**Independent Test**: User sends a prompt with 0-3 valid PDFs and sees assistant response stream token-by-token in Chat.
+**Independent Test**: User submits a prompt with 0-3 valid PDFs and sees dark-themed chat, markdown-rendered assistant stream, animated dots while streaming, and filename chips on the corresponding user message.
 
-### Tests for User Story 1
+- [X] T012 [P] [US1] Refactor message list to use dedicated user message component in `react_ui/src/components/Chat/MessageList.tsx`
+- [X] T013 [US1] Render attachment chips with filename in user message UI in `react_ui/src/components/Chat/UserMessage.tsx`
+- [X] T014 [US1] Integrate markdown stream box for assistant output in `react_ui/src/components/Chat/MessageList.tsx`
+- [X] T015 [US1] Integrate animated dots loader and progress placeholder in `react_ui/src/components/Chat/ChatWindow.tsx`
+- [X] T016 [US1] Persist submitted file metadata onto user message objects in `react_ui/src/components/Chat/ChatWindow.tsx`
+- [X] T017 [US1] Replace inline chat styles with reusable Tailwind class tokens in `react_ui/src/components/Chat/ChatWindow.tsx`
+- [X] T018 [US1] Beautify input and submit controls with shared Tailwind classes in `react_ui/src/components/Chat/InputArea.tsx`
+- [X] T019 [US1] Beautify file upload button and file list styling in `react_ui/src/components/Chat/FileUploader.tsx`
+- [X] T020 [US1] Keep multipart request and sid wiring stable after UI refactor in `react_ui/src/services/api.ts` and `react_ui/src/components/Chat/ChatWindow.tsx`
 
-- [ ] T013 [P] [US1] Add unit tests for PDF validation rules in react_ui/src/hooks/usePdfValidator.test.ts
-- [ ] T014 [P] [US1] Add unit tests for token batching behavior in react_ui/src/hooks/useBatchedTokens.test.ts
-- [ ] T015 [P] [US1] Add unit tests for multipart form-data request construction in react_ui/src/services/api.test.ts
-- [ ] T016 [P] [US1] Add component test for chat send + streaming render flow in react_ui/src/components/Chat/ChatWindow.test.tsx
-
-### Implementation for User Story 1
-
-- [X] T017 [P] [US1] Implement PDF-only file picker UI with count/size validation messaging in react_ui/src/components/Chat/FileUploader.tsx
-- [X] T018 [P] [US1] Implement token buffering hook for efficient streaming UI updates in react_ui/src/hooks/useBatchedTokens.ts
-- [X] T019 [P] [US1] Implement chat message list rendering for user and assistant roles in react_ui/src/components/Chat/MessageList.tsx
-- [X] T020 [US1] Implement prompt input + submit control with disabled streaming state in react_ui/src/components/Chat/InputArea.tsx
-- [X] T021 [US1] Implement Chat container to compose input/files/messages and route `stream-tokens-skt` from `teaching-agent` in react_ui/src/components/Chat/ChatWindow.tsx
-- [X] T022 [US1] Mount Chat section in app shell and connect submit flow to `/api/chat/request` in react_ui/src/App.tsx
-
-**Checkpoint**: User Story 1 independently functional and demoable (MVP).
+**Checkpoint**: User Story 1 is fully functional and independently demoable as the MVP.
 
 ---
 
 ## Phase 4: User Story 2 - Receive User Level Clarification Prompt (Priority: P2)
 
-**Goal**: Render planner clarification events in chat and keep non-teaching token streams ignored.
+**Goal**: Preserve and polish clarification behavior within the refreshed chat experience.
 
-**Independent Test**: Simulate `clarify-user-level-skt` and verify clarification appears in chat; simulate non-teaching token source and verify it is ignored.
+**Independent Test**: Simulate `clarify-user-level-skt` and non-teaching `stream-tokens-skt` events; clarification appears as styled info content and non-teaching stream tokens remain ignored.
 
-### Tests for User Story 2
+- [X] T021 [US2] Style clarification/info messages with dark-theme visual language in `react_ui/src/components/Chat/MessageList.tsx`
+- [X] T022 [US2] Preserve non-teaching-agent token ignore logic in `react_ui/src/components/Chat/ChatWindow.tsx`
+- [X] T023 [US2] Ensure clarification rendering path remains compatible with markdown stream UI in `react_ui/src/components/Chat/ChatWindow.tsx`
 
-- [ ] T023 [P] [US2] Add component test for clarification event rendering in chat history in react_ui/src/components/Chat/ChatWindow.clarify.test.tsx
-- [ ] T024 [P] [US2] Add unit test for non-teaching token filtering logic in react_ui/src/components/Chat/ChatWindow.filtering.test.tsx
-
-### Implementation for User Story 2
-
-- [X] T025 [US2] Implement `clarify-user-level-skt` event handling and info-bubble insertion in react_ui/src/components/Chat/ChatWindow.tsx
-- [X] T026 [US2] Implement explicit ignore path for `stream-tokens-skt` payloads where `from_service` is not `teaching-agent` in react_ui/src/components/Chat/ChatWindow.tsx
-
-**Checkpoint**: User Story 2 independently testable with mocked socket events.
+**Checkpoint**: Clarification flow is independently verifiable and remains behaviorally correct.
 
 ---
 
 ## Phase 5: User Story 3 - Scaffold Navigation for Future Sections (Priority: P3)
 
-**Goal**: Provide Chat, Quiz, Evaluation section scaffold with placeholders for non-chat sections.
+**Goal**: Provide a polished app shell with navbar/title and improved section layout while keeping Quiz/Evaluation as placeholders.
 
-**Independent Test**: User can switch sections and see placeholders for Quiz/Evaluation without runtime errors.
+**Independent Test**: User sees a top navbar title, can switch across Chat/Quiz/Evaluation, and views styled placeholders for non-chat sections without runtime errors.
 
-### Tests for User Story 3
+- [X] T024 [P] [US3] Create top navbar component with title display in `react_ui/src/components/Navbar.tsx`
+- [X] T025 [US3] Integrate navbar and wider responsive container layout in `react_ui/src/App.tsx`
+- [X] T026 [P] [US3] Apply Tailwind dark-theme styling to section navigation in `react_ui/src/components/Navigation.tsx`
+- [X] T027 [P] [US3] Beautify quiz placeholder surface in `react_ui/src/components/Quiz/QuizPlaceholder.tsx`
+- [X] T028 [P] [US3] Beautify evaluation placeholder surface in `react_ui/src/components/Evaluation/EvaluationPlaceholder.tsx`
 
-- [ ] T027 [P] [US3] Add component test for section switching and placeholder rendering in react_ui/src/components/Navigation.test.tsx
-
-### Implementation for User Story 3
-
-- [X] T028 [P] [US3] Implement top-level section navigation component in react_ui/src/components/Navigation.tsx
-- [X] T029 [P] [US3] Implement Quiz placeholder section component in react_ui/src/components/Quiz/QuizPlaceholder.tsx
-- [X] T030 [P] [US3] Implement Evaluation placeholder section component in react_ui/src/components/Evaluation/EvaluationPlaceholder.tsx
-- [X] T031 [US3] Wire navigation state to section rendering in app shell in react_ui/src/App.tsx
-
-**Checkpoint**: All three sections render; Chat remains functional, Quiz/Evaluation are scaffolded.
+**Checkpoint**: App shell and section navigation are polished and independently usable.
 
 ---
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-**Purpose**: Hardening, documentation, and quality/performance verification.
+**Purpose**: Final consistency, documentation, and validation updates across stories.
 
-- [X] T032 [P] Add accessibility labels and keyboard/disabled-state checks for chat controls in react_ui/src/components/Chat/InputArea.tsx
-- [X] T033 [P] Add accessibility labels and error announcement support for file validation in react_ui/src/components/Chat/FileUploader.tsx
-- [X] T034 Add app usage and environment configuration docs in react_ui/README.md
-- [X] T035 Validate performance budget instrumentation notes and outcomes in specs/006-react-ui/quickstart.md
-- [X] T036 Run end-to-end local verification steps and capture expected behavior checklist in specs/006-react-ui/quickstart.md
+- [X] T029 [P] Update implementation notes for shared theme/class-token reuse in `specs/006-react-ui/quickstart.md`
+- [X] T030 [P] Sync API contract notes with refreshed UI behavior in `specs/006-react-ui/contracts/api-contracts.md`
+- [X] T031 [P] Sync component contracts with implemented props and responsibilities in `specs/006-react-ui/contracts/ui-component-contracts.md`
+- [X] T032 Validate accessibility labels, focus order, and disabled/loading states in `react_ui/src/components/Chat/InputArea.tsx`, `react_ui/src/components/Chat/FileUploader.tsx`, and `react_ui/src/components/Navigation.tsx`
+- [ ] T033 Run full local quality gates from `react_ui/package.json` scripts and resolve surfaced issues across `react_ui/src/`
 
 ---
 
@@ -126,51 +102,46 @@
 
 ### Phase Dependencies
 
-- **Phase 1 (Setup)**: No dependencies.
-- **Phase 2 (Foundational)**: Depends on Phase 1; blocks all user stories.
-- **Phase 3 (US1)**: Depends on Phase 2; defines MVP.
-- **Phase 4 (US2)**: Depends on Phase 2 and extends chat event behavior.
-- **Phase 5 (US3)**: Depends on Phase 2; can run in parallel with US2 after US1 MVP is stable.
-- **Phase 6 (Polish)**: Depends on completion of desired user stories.
+- **Phase 1 (Setup)**: Starts immediately.
+- **Phase 2 (Foundational)**: Depends on Phase 1 and blocks all user stories.
+- **Phase 3 (US1)**: Depends on Phase 2; defines MVP delivery.
+- **Phase 4 (US2)**: Depends on Phase 2 and builds on chat event handling.
+- **Phase 5 (US3)**: Depends on Phase 2 and can proceed in parallel with US2 if staffing allows.
+- **Phase 6 (Polish)**: Depends on completion of selected user stories.
 
 ### User Story Dependencies
 
-- **US1 (P1)**: No dependency on other stories after foundational phase.
-- **US2 (P2)**: Depends on US1 chat container existence (`ChatWindow.tsx`) but remains independently testable via mocked events.
-- **US3 (P3)**: Depends on app shell foundation; independent from US2 logic.
+- **US1 (P1)**: No dependency on other stories after Foundational phase.
+- **US2 (P2)**: Depends on US1 chat event/rendering surfaces but remains independently testable via event simulation.
+- **US3 (P3)**: Depends on shared app shell/state only; independent of US2 event logic.
 
 ### Within Each User Story
 
-- Tests first, then implementation.
-- Hooks/services before component composition.
-- Shared component primitives before app-shell wiring.
+- Build core components before integrating into container components.
+- Keep schema/service compatibility before final UI wiring.
+- Complete each story's checkpoint before moving to next priority.
 
 ---
 
 ## Parallel Opportunities
 
-- **Setup**: T003, T004, T005 can run in parallel once T001/T002 complete.
-- **Foundational**: T010 and T011 can run in parallel after T007-T009.
-- **US1**: T013-T016 parallel test authoring; T017-T019 parallel implementation before T020-T022 integration.
-- **US2**: T023 and T024 can run in parallel; T025/T026 sequential in same file.
-- **US3**: T028-T030 in parallel; T031 after component completion.
-- **Polish**: T032 and T033 parallel.
+- Phase 2: `T008` and `T009` can run in parallel after `T006` and `T007`.
+- US1: `T012` and `T019` can run in parallel; `T017` and `T018` can run in parallel before final integration tasks.
+- US3: `T024`, `T026`, `T027`, and `T028` can run in parallel before `T025` final app-shell integration.
+- Phase 6: `T029`, `T030`, and `T031` can run in parallel.
 
 ---
 
 ## Parallel Example: User Story 1
 
 ```bash
-# Parallel test work
-Task T013: react_ui/src/hooks/usePdfValidator.test.ts
-Task T014: react_ui/src/hooks/useBatchedTokens.test.ts
-Task T015: react_ui/src/services/api.test.ts
-Task T016: react_ui/src/components/Chat/ChatWindow.test.tsx
+# Parallel UI work in separate files
+Task T012: react_ui/src/components/Chat/MessageList.tsx
+Task T019: react_ui/src/components/Chat/FileUploader.tsx
 
-# Parallel implementation work
-Task T017: react_ui/src/components/Chat/FileUploader.tsx
-Task T018: react_ui/src/hooks/useBatchedTokens.ts
-Task T019: react_ui/src/components/Chat/MessageList.tsx
+# Parallel style cleanup in separate files
+Task T017: react_ui/src/components/Chat/ChatWindow.tsx
+Task T018: react_ui/src/components/Chat/InputArea.tsx
 ```
 
 ---
@@ -178,41 +149,42 @@ Task T019: react_ui/src/components/Chat/MessageList.tsx
 ## Parallel Example: User Story 3
 
 ```bash
-Task T028: react_ui/src/components/Navigation.tsx
-Task T029: react_ui/src/components/Quiz/QuizPlaceholder.tsx
-Task T030: react_ui/src/components/Evaluation/EvaluationPlaceholder.tsx
+Task T024: react_ui/src/components/Navbar.tsx
+Task T026: react_ui/src/components/Navigation.tsx
+Task T027: react_ui/src/components/Quiz/QuizPlaceholder.tsx
+Task T028: react_ui/src/components/Evaluation/EvaluationPlaceholder.tsx
 ```
 
 ---
 
 ## Implementation Strategy
 
-### MVP First (US1 Only)
+### MVP First (User Story 1 Only)
 
 1. Complete Phase 1 and Phase 2.
-2. Deliver Phase 3 (US1) end-to-end.
-3. Validate US1 independent test and demo chat + PDF upload + streaming.
-4. Optionally ship MVP before US2/US3.
+2. Complete Phase 3 (US1).
+3. Validate US1 independent test criteria and demo chat refresh.
+4. Ship MVP.
 
 ### Incremental Delivery
 
 1. Foundation complete (Phases 1-2).
-2. Ship US1 (core chat).
-3. Add US2 (clarification event handling).
-4. Add US3 (navigation scaffolding).
-5. Execute Phase 6 polish and verification.
+2. Deliver US1 (core chat refresh).
+3. Deliver US2 (clarification behavior in refreshed UI).
+4. Deliver US3 (navbar and scaffold polish).
+5. Finish Phase 6 cross-cutting validation and docs sync.
 
-### Suggested Team Parallelization
+### Parallel Team Strategy
 
-1. Engineer A: Hooks/services (`useBatchedTokens`, `api.ts`, tests)
-2. Engineer B: Chat UI components (`MessageList`, `InputArea`, `FileUploader`)
-3. Engineer C: Navigation placeholders + accessibility polish
+1. One developer handles style infrastructure (`theme.ts`, `uiClasses.ts`, shared components).
+2. One developer handles chat interaction integration (`ChatWindow`, `MessageList`, `api.ts`).
+3. One developer handles app shell/navigation polish (`Navbar`, `Navigation`, placeholders).
 
 ---
 
 ## Notes
 
-- `[P]` tasks touch different files and can execute concurrently.
-- Every user story phase is independently testable.
-- Keep component code minimal; avoid complex CSS/animation by design.
-- Keep event and request schemas centralized in `react_ui/src/schemas.ts` to prevent drift from Python contracts.
+- `[P]` tasks are designed for parallel execution with file-level isolation.
+- Story labels are only applied to user-story phases.
+- Each user story remains independently verifiable.
+- Keep implementation minimal and avoid introducing unnecessary abstraction layers.

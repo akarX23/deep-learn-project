@@ -1,37 +1,33 @@
-# Implementation Plan: React Web UI for AI Tutor
+# Implementation Plan: React UI Refresh (Dark Theme + Tailwind Reuse)
 
-**Branch**: `008-react-ui` | **Date**: 2026-06-18 | **Spec**: [spec.md](spec.md)
-**Input**: Feature specification from `specs/006-react-ui/spec.md`
+**Branch**: `008-react-ui` | **Date**: 2026-06-18 | **Spec**: `specs/006-react-ui/spec.md`
+**Input**: Feature specification from `/specs/006-react-ui/spec.md`
 
 ## Summary
 
-A React 18 + TypeScript SPA bootstrapped with Vite that provides a streaming Chat interface for the AI Tutor application. The app connects to the existing Python FastAPI + Socket.IO backend, listens to `stream-tokens-skt` and `clarify-user-level-skt` WebSocket events, and submits user prompts with optional PDF uploads (max 3 files, 20 MB each) to `/api/chat/request` as multipart form data. Two additional sections (Quiz, Evaluation) are scaffolded as placeholders. All backend URLs are environment-variable-driven.
+Refresh the existing React chat UI with minimal-boilerplate visual improvements: dark blue + amber theme, Tailwind-based styling, top navbar, markdown-rendered streaming output box, animated dots loading state with progress placeholder text, improved desktop space usage, and attachment chips (filename visible) in user messages. Keep code clean by extracting repeated/long Tailwind class strings to a single reusable class-token module.
 
 ## Technical Context
 
-**Language/Version**: TypeScript 5.x, React 18, Node.js 20 (build toolchain)
-**Primary Dependencies**: Vite 5 (build), socket.io-client 4 (WebSocket), React 18 (UI)
-**Storage**: N/A — no client-side persistence in this iteration
-**Testing**: Vitest + React Testing Library (unit/component tests)
-**Target Platform**: Modern desktop browsers (Chrome, Firefox, Safari — latest 2 versions)
-**Project Type**: Web application (SPA — single-page application)
-**Performance Goals**: First streamed token visible in chat ≤ 500ms after socket event arrival; page TTI ≤ 3s on standard broadband
-**Constraints**: PDF uploads only (application/pdf), max 3 files per request, max 20 MB per file; no SSR; no mobile layout required
-**Scale/Scope**: Single-user browser session; 3 navigation sections; 1 functional (Chat) + 2 placeholder sections
+**Language/Version**: TypeScript 5.5 + React 18.3.1  
+**Primary Dependencies**: React, Vite, socket.io-client, Tailwind CSS, react-markdown  
+**Storage**: N/A (browser in-memory state only)  
+**Testing**: Vitest + React Testing Library (component behavior), existing lint/typecheck gates  
+**Target Platform**: Modern desktop browsers (baseline), responsive support for smaller widths  
+**Project Type**: Frontend web application within monorepo  
+**Performance Goals**: Streaming token render flush <= 120ms cadence; first visible streamed content <= 500ms from event receipt on local dev baseline  
+**Constraints**: Minimal boilerplate, Tailwind-only styling (no UI kit), centralized theme tokens, centralized long class-name reuse file, preserve existing REST + Socket.IO contracts  
+**Scale/Scope**: Single-page app with 3 sections (Chat functional; Quiz/Evaluation placeholders), single active chat session per browser tab
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **Code Quality Gate**: ESLint + Prettier enforced via Vite project scripts. TypeScript strict mode enabled (`"strict": true` in tsconfig). All files must pass `eslint --max-warnings 0` before merge. No `any` types except at explicit schema boundaries (`data: Record<string, any>` in `StreamTokensEventBody`).
-
-- **Testing Gate**: Unit tests required for all custom hooks (`useSocketEvent`, `useBatchedTokens`, `usePdfValidator`) and the `submitChatRequest` service function. Component tests required for `ChatWindow`, `InputArea`, and `FileUploader` using React Testing Library. No regression in existing Python backend tests. Vitest run must pass in CI.
-
-- **UX Consistency Gate**: Interaction patterns mirror the existing Python `ui_frontend` (chat history list with user/assistant roles, streaming token accumulation into assistant bubble, clarification message rendered as info bubble). Pleasant theme, clean layout; no complex animations. Accessible: labels on all form controls, file input described with `aria-label`, submit button disabled state communicated to assistive technology.
-
-- **Performance Gate**: Streaming token render latency ≤ 500ms (debounced flush at 100ms interval). TTI ≤ 3s on standard broadband. Bundle size target: ≤ 500KB gzipped (Vite bundle analysis to be run post-build). Validation: manually timed in Chrome DevTools against local backend.
-
-- **Maintainability Gate**: `src/schemas.ts` is the single source of truth for types mirrored from Python schemas. All env vars documented in `.env.example`. Non-obvious decisions (debounce interval, singleton socket, repeated form keys for array) documented in `research.md`. No dead code or commented-out logic at merge.
+- Code Quality Gate: PASS. Enforce `npm run lint`, `npm run build` (typecheck + bundling), and keep UI class reuse in one module to reduce duplication.
+- Testing Gate: PASS. Add/maintain unit/component tests for message rendering, attachment chips, loading indicator state, and markdown stream rendering; no regression to existing socket event routing.
+- UX Consistency Gate: PASS. Preserve current 3-tab IA (Chat/Quiz/Evaluation), keep accessibility labels and disabled states, and apply consistent dark theme tokens from one source.
+- Performance Gate: PASS. Keep batched token strategy and avoid per-token heavy markdown parsing side-effects; validate smooth rendering with local manual perf check.
+- Maintainability Gate: PASS. Document token/class extraction strategy in quickstart and keep component responsibilities explicit (new dedicated user-message component).
 
 ## Project Structure
 
@@ -39,54 +35,69 @@ A React 18 + TypeScript SPA bootstrapped with Vite that provides a streaming Cha
 
 ```text
 specs/006-react-ui/
-├── plan.md              # This file (/speckit.plan command output)
-├── research.md          # Phase 0 output (/speckit.plan command)
-├── data-model.md        # Phase 1 output (/speckit.plan command)
-├── quickstart.md        # Phase 1 output (/speckit.plan command)
-├── contracts/           # Phase 1 output (/speckit.plan command)
-└── tasks.md             # Phase 2 output (/speckit.tasks command - NOT created by /speckit.plan)
+├── plan.md
+├── research.md
+├── data-model.md
+├── quickstart.md
+├── contracts/
+│   ├── api-contracts.md
+│   └── ui-component-contracts.md
+└── tasks.md
 ```
 
 ### Source Code (repository root)
 
 ```text
-react_ui/                      # New top-level directory for the React SPA
-  src/
-    components/
-      Chat/
-        ChatWindow.tsx          # Root chat section; composes MessageList + InputArea
-        MessageList.tsx         # Renders chat history (user + assistant bubbles)
-        InputArea.tsx           # Textarea + send button + file uploader
-        FileUploader.tsx        # PDF file picker with validation UI
-      Quiz/
-        QuizPlaceholder.tsx     # "Coming soon" placeholder
-      Evaluation/
-        EvaluationPlaceholder.tsx  # "Coming soon" placeholder
-      Navigation.tsx            # Tab bar: Chat | Quiz | Evaluation
-    hooks/
-      useSocketEvent.ts         # Subscribes to a named socket event; cleanup on unmount
-      useBatchedTokens.ts       # Buffers streamed tokens in ref, flushes to state @ 100ms
-      usePdfValidator.ts        # Validates MIME, count, and size; returns errors + valid files
-    services/
-      socket.ts                 # Module-level socket.io-client singleton + getSocket()
-      api.ts                    # submitChatRequest(FormData) → fetch to /api/chat/request
-    schemas.ts                  # TypeScript types mirrored from project/schemas.py + events.py
-    config.ts                   # VITE_ env var access with startup validation
-    App.tsx                     # Root: section state, event routing, socket initialization
-    main.tsx                    # ReactDOM.createRoot entry point
-  public/
-    index.html
-  .env                          # Dev environment variables (not committed)
-  .env.example                  # Template with all required VITE_ variables (committed)
-  .env.production               # Production env vars (not committed)
-  vite.config.ts
-  tsconfig.json
-  package.json
-  README.md
+backend_service/
+  app/
+  tests/
+
+react_ui/
+├── src/
+│   ├── components/
+│   │   ├── Chat/
+│   │   │   ├── ChatWindow.tsx
+│   │   │   ├── MessageList.tsx
+│   │   │   ├── UserMessage.tsx
+│   │   │   ├── InputArea.tsx
+│   │   │   └── FileUploader.tsx
+│   │   ├── Navigation.tsx
+│   │   └── Navbar.tsx
+│   ├── styles/
+│   │   ├── theme.ts
+│   │   └── uiClasses.ts
+│   ├── hooks/
+│   ├── services/
+│   ├── schemas.ts
+│   ├── App.tsx
+│   └── main.tsx
+└── tests/
 ```
 
-**Structure Decision**: Web application (Option 2 variant — frontend only). The React SPA lives in `react_ui/` at the repository root alongside the existing Python agent modules. No backend changes required; the new directory is purely additive.
+**Structure Decision**: Keep current monorepo and extend only `react_ui/` for this feature iteration. No backend API shape changes required.
+
+## Phase 0: Research Focus
+
+- Tailwind minimal setup for existing Vite+React codebase.
+- Safe markdown rendering strategy for streamed text.
+- Reusable class-token extraction pattern to avoid long inline class strings.
+- Lightweight animated loader and placeholder integration pattern.
+
+## Phase 1: Design Outputs
+
+- `data-model.md`: add attachment metadata in chat messages and UI theme/class token entities.
+- `contracts/api-contracts.md`: confirm no backend contract changes; clarify rendering behavior constraints.
+- `contracts/ui-component-contracts.md`: define component input/output contracts for Navbar, UserMessage, StreamResponseBox.
+- `quickstart.md`: include Tailwind setup, theme token location, and class-token reuse guidance.
+
+## Post-Design Constitution Check
+
+- Code Quality Gate: PASS. Design explicitly separates theme tokens and class maps.
+- Testing Gate: PASS. Component contracts make tests straightforward and targeted.
+- UX Consistency Gate: PASS. Clarified interactive states, loading, markdown display, and attachment visibility.
+- Performance Gate: PASS. Continues batched token updates and avoids introducing heavy design-system runtime overhead.
+- Maintainability Gate: PASS. New dedicated `UserMessage` component + centralized style tokens reduce churn.
 
 ## Complexity Tracking
 
-*No constitution violations. All gates pass without exceptions.*
+No constitution violations requiring exceptions.

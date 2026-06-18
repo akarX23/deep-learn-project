@@ -6,6 +6,8 @@
 
 This document defines the interface contracts between the React SPA and the existing Python backend. The SPA is a pure consumer — it does not expose an API; it only calls backend endpoints and subscribes to backend WebSocket events.
 
+UI refresh note: this iteration updates frontend presentation (Tailwind styling, markdown stream box, animated loader, attachment chips) without changing backend API/event shapes.
+
 ---
 
 ## REST API Contract
@@ -41,6 +43,8 @@ Content-Type: application/json
 | 500 | Internal server error |
 
 **Client handling**: On non-2xx response, display an error message in the chat area. Do not retry automatically.
+
+**Client rendering note**: User message rendering may include local `attachments` metadata (filename chips) derived from submitted files. This is a frontend-only view model and does not alter request/response payloads.
 
 ---
 
@@ -78,6 +82,8 @@ Content-Type: application/json
 
 **Routing rule**: If `from_service === "teaching-agent"`, append `data.token` to the current streaming assistant `ChatMessage`. Otherwise, discard silently.
 
+**Progress placeholder compatibility**: No new progress fields are required for this feature. Placeholder progress text is static and reserved for future backend event enrichment.
+
 ---
 
 ### Event: `clarify-user-level-skt` (inbound)
@@ -110,3 +116,12 @@ All variables must be present in the runtime environment before the app initiali
 | `VITE_WS_URL` | `http://localhost:8000` | `https://api.example.com` | Socket.IO server URL |
 
 All variables must be present in `.env.example` (committed to repository) with placeholder values.
+
+---
+
+## Non-Breaking Guarantee
+
+- No new required request fields.
+- No renamed event names.
+- No renamed payload fields.
+- Existing backend implementations remain compatible with this UI refresh.

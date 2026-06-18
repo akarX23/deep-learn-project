@@ -17,12 +17,18 @@ export interface UserRequest {
   sid: string;
 }
 
+export interface ChatAttachment {
+  name: string;
+  sizeBytes: number;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
   isStreaming: boolean;
   info?: boolean;
+  attachments?: ChatAttachment[];
 }
 
 export const WebSocketEvents = {

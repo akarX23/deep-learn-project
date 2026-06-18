@@ -4,6 +4,7 @@ import { usePdfValidator } from "../../hooks/usePdfValidator";
 import { useSocketEvent } from "../../hooks/useSocketEvent";
 import type { ChatMessage, ClarifyUserLevelEvent, StreamTokensEventBody } from "../../schemas";
 import { WebSocketEvents } from "../../schemas";
+import { uiClasses } from "../../styles/uiClasses";
 import { FileUploader } from "./FileUploader";
 import { InputArea } from "./InputArea";
 import { MessageList } from "./MessageList";
@@ -18,6 +19,7 @@ function uuid(): string {
 }
 
 export function ChatWindow({ sid, onSubmitRequest }: ChatWindowProps): JSX.Element {
+  const progressPlaceholder = "Backend progress events will appear here.";
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -98,7 +100,13 @@ export function ChatWindow({ sid, onSubmitRequest }: ChatWindowProps): JSX.Eleme
 
     setMessages((prev) => [
       ...prev,
-      { id: uuid(), role: "user", content: prompt, isStreaming: false },
+      {
+        id: uuid(),
+        role: "user",
+        content: prompt,
+        isStreaming: false,
+        attachments: files.map((file) => ({ name: file.name, sizeBytes: file.size }))
+      },
       { id: uuid(), role: "assistant", content: "", isStreaming: true }
     ]);
 
@@ -108,7 +116,6 @@ export function ChatWindow({ sid, onSubmitRequest }: ChatWindowProps): JSX.Eleme
       await onSubmitRequest(prompt, files);
       clearFiles();
     } catch (error) {
-    console.log(`Error on API call: `, error)
       const message = error instanceof Error ? error.message : "Failed to submit request";
       setIsSubmitting(false);
       setMessages((prev) => [
@@ -121,10 +128,10 @@ export function ChatWindow({ sid, onSubmitRequest }: ChatWindowProps): JSX.Eleme
 
   return (
     <section>
-      <h2 style={{ marginTop: 0 }}>AI Tutor</h2>
-      <p style={{ color: "#4b5563" }}>Ask a question and optionally upload PDF study material.</p>
+      <h2 className={uiClasses.chat.heading}>Chat</h2>
+      <p className={uiClasses.chat.subheading}>Ask a question and optionally upload PDF study material.</p>
 
-      <MessageList messages={messages} />
+      <MessageList messages={messages} progressPlaceholder={progressPlaceholder} />
 
       <FileUploader
         files={files}
@@ -136,8 +143,8 @@ export function ChatWindow({ sid, onSubmitRequest }: ChatWindowProps): JSX.Eleme
 
       <InputArea value={inputText} onChange={setInputText} onSubmit={handleSubmit} disabled={isSubmitting} />
 
-      {!sid && <p style={{ color: "#b91c1c" }}>Connecting to backend...</p>}
-      {requestError && <p style={{ color: "#b91c1c" }}>{requestError}</p>}
+      {!sid && <p className={uiClasses.chat.errorText}>Connecting to backend...</p>}
+      {requestError && <p className={uiClasses.chat.errorText}>{requestError}</p>}
     </section>
   );
 }

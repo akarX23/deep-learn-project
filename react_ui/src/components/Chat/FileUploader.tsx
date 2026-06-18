@@ -1,3 +1,5 @@
+import { uiClasses } from "../../styles/uiClasses";
+
 interface FileUploaderProps {
   files: File[];
   errors: string[];
@@ -8,12 +10,16 @@ interface FileUploaderProps {
 
 export function FileUploader({ files, errors, onAdd, onRemove, disabled }: FileUploaderProps): JSX.Element {
   return (
-    <div style={{ marginBottom: 12 }}>
-      <label htmlFor="pdf-files" style={{ display: "block", marginBottom: 6 }}>
+    <div className={uiClasses.uploader.shell}>
+      <label htmlFor="pdf-files" className={uiClasses.uploader.label}>
         Upload PDFs (max 3, 20 MB each)
+      </label>
+      <label htmlFor="pdf-files" className={uiClasses.uploader.picker} aria-disabled={disabled}>
+        Choose files
       </label>
       <input
         id="pdf-files"
+        className={uiClasses.uploader.hiddenInput}
         type="file"
         accept="application/pdf"
         multiple
@@ -23,15 +29,17 @@ export function FileUploader({ files, errors, onAdd, onRemove, disabled }: FileU
       />
 
       {files.length > 0 && (
-        <ul style={{ marginTop: 8, paddingLeft: 18 }}>
+        <ul className={uiClasses.uploader.list}>
           {files.map((file, index) => (
-            <li key={`${file.name}-${index}`}>
-              {file.name} ({(file.size / (1024 * 1024)).toFixed(2)} MB)
+            <li key={`${file.name}-${index}`} className={uiClasses.uploader.fileItem}>
+              <span>
+                {file.name} ({(file.size / (1024 * 1024)).toFixed(2)} MB)
+              </span>
               <button
                 type="button"
                 onClick={() => onRemove(index)}
                 disabled={disabled}
-                style={{ marginLeft: 8 }}
+                className={uiClasses.uploader.remove}
               >
                 Remove
               </button>
@@ -41,7 +49,7 @@ export function FileUploader({ files, errors, onAdd, onRemove, disabled }: FileU
       )}
 
       {errors.length > 0 && (
-        <div role="alert" aria-live="polite" style={{ color: "#b91c1c", marginTop: 8 }}>
+        <div role="alert" aria-live="polite" className={uiClasses.uploader.errorBox}>
           {errors.map((error) => (
             <div key={error}>{error}</div>
           ))}

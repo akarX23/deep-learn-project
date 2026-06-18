@@ -21,6 +21,7 @@ export function useBatchedTokens(delayMs = 100): {
 
   const addToken = useCallback(
     (token: string) => {
+      console.log("Adding token:", token);
       bufferRef.current += token;
       if (timerRef.current !== null) {
         window.clearTimeout(timerRef.current);

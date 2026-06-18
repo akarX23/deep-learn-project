@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChatWindow } from "./components/Chat/ChatWindow";
 import { EvaluationPlaceholder } from "./components/Evaluation/EvaluationPlaceholder";
+import { Navbar } from "./components/Navbar";
 import { Navigation } from "./components/Navigation";
 import { QuizPlaceholder } from "./components/Quiz/QuizPlaceholder";
 import { submitChatRequest } from "./services/api";
 import { getSocket } from "./services/socket";
+import { uiClasses } from "./styles/uiClasses";
 
 type Section = "chat" | "quiz" | "evaluation";
 
@@ -61,18 +63,11 @@ export default function App(): JSX.Element {
   }, [currentSection, socketId]);
 
   return (
-    <main
-      style={{
-        maxWidth: 860,
-        margin: "32px auto",
-        padding: 16,
-        fontFamily: "Segoe UI, Tahoma, sans-serif",
-        color: "#111827"
-      }}
-    >
-      <Navigation current={currentSection} onSelect={setCurrentSection} />
-      <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 16, background: "#ffffff" }}>
-        {sectionView}
+    <main className={uiClasses.layout.page}>
+      <div className={uiClasses.layout.container}>
+        <Navbar title="AI Tutor" />
+        <Navigation current={currentSection} onSelect={setCurrentSection} />
+        <div className={uiClasses.layout.card}>{sectionView}</div>
       </div>
     </main>
   );

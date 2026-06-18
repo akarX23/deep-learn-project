@@ -5,6 +5,16 @@
 **Status**: Draft
 **Input**: User description: "I want to create a Web interface in React for my AI Tutor application..."
 
+## Clarifications
+
+### Session 2026-06-18
+
+- Q: Which dark-mode visual palette should be used? → A: Option C - dark blue backgrounds with warm golden/amber accents.
+- Q: Which markdown rendering library should be used for streamed content? → A: Option A - react-markdown.
+- Q: What styling approach should be used for beautification? → A: Option A - Tailwind utility classes only with shared color tokens in one config file.
+- Q: Which loading indicator pattern should be used while streaming? → A: Option D - animated dots loader with placeholder progress text.
+- Q: How should uploaded files be shown after message submission? → A: Option B - compact attachment chips in the user message bubble, including filename display; user-message rendering extracted as a dedicated component.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Send a Chat Message with PDF Upload (Priority: P1)
@@ -70,7 +80,7 @@ The application displays three section tabs — Chat, Quiz, and Evaluation. Only
 
 - **FR-001**: The application MUST provide three navigation sections: Chat, Quiz, and Evaluation.
 - **FR-002**: Only the Chat section MUST be fully functional in this iteration; Quiz and Evaluation MUST render placeholder content.
-- **FR-003**: The Chat section MUST display a header with the title "AI Tutor" and a pleasant, clean visual theme.
+- **FR-003**: The Chat section MUST display a header with the title "AI Tutor" and use a dark-blue theme with warm golden/amber accents.
 - **FR-004**: The Chat section MUST provide a message input field and a submit button for sending user prompts.
 - **FR-005**: The Chat section MUST support attaching up to 3 PDF files per request, with a maximum file size of 20 MB each.
 - **FR-006**: The application MUST reject non-PDF file attachments and display a descriptive error to the user.
@@ -85,10 +95,19 @@ The application displays three section tabs — Chat, Quiz, and Evaluation. Only
 - **FR-015**: The application MUST follow the UI language and interaction patterns established in the existing Python `ui_frontend` module (chat history list, streaming token accumulation, per-message roles).
 - **FR-016**: The submit button MUST be disabled while a streaming response is in progress to prevent duplicate submissions.
 - **FR-017**: The application MUST keep component code minimal and avoid complex CSS or animations.
+- **FR-018**: The UI color palette tokens MUST be defined in one centralized configuration location to allow fast theme experimentation without editing multiple component files.
+- **FR-019**: Streamed assistant content MUST render inside a dedicated text box component that supports Markdown using `react-markdown`.
+- **FR-020**: UI beautification MUST use Tailwind CSS utility classes (without additional UI component libraries) to keep implementation minimal and consistent.
+- **FR-021**: While awaiting or streaming assistant output, the chat UI MUST show an animated dots loading indicator plus a placeholder progress text area reserved for future backend event-status integration.
+- **FR-022**: After a user submits a prompt with files, the corresponding user message bubble MUST display compact attachment chips that include each file's filename.
+- **FR-023**: Rendering of user-authored chat messages (including attachment chips) MUST be implemented in a dedicated reusable component to keep message presentation modular.
+- **FR-024**: The application MUST include a top navigation bar that prominently displays the product title.
+- **FR-025**: The chat interface layout MUST better utilize desktop screen space by using a wider content container while preserving readability.
+- **FR-026**: The file upload control MUST be visually styled as an interactive button and maintain clear selected-file feedback before submission.
 
 ### Key Entities
 
-- **ChatMessage**: A single entry in the chat history; has a role (`user` or `assistant`), text content, and a streaming-complete flag.
+- **ChatMessage**: A single entry in the chat history; has a role (`user` or `assistant`), text content, a streaming-complete flag, and optional attachment metadata for user messages (at minimum filename).
 - **WebSocket Session**: The live connection to the backend; carries a session ID (`sid`) used to correlate streaming events to the correct browser session.
 - **AttachedFile**: A PDF file selected by the user; has a name, size, and binary content to be submitted as form data.
 - **StreamTokensEventBody**: `{ from_service: string, sid: string, data: Record<string, any> }` — mirrors the Python schema; `data` carries the token text.
@@ -104,6 +123,7 @@ The application displays three section tabs — Chat, Quiz, and Evaluation. Only
 - **SC-004**: All three navigation sections (Chat, Quiz, Evaluation) are reachable via the UI with no runtime errors.
 - **SC-005**: All backend URLs and WebSocket addresses are environment-variable-driven; no URL is hardcoded in application source.
 - **SC-006**: The initial page load and chat interaction are usable on a standard desktop browser at typical broadband speeds without noticeable lag.
+- **SC-007**: The refined UI includes a visible top navbar title, Tailwind-styled interactive controls, and a chat layout that uses a wider desktop container without clipping message content.
 
 ## Assumptions
 
@@ -114,6 +134,6 @@ The application displays three section tabs — Chat, Quiz, and Evaluation. Only
 - The application does not implement authentication; all sessions are anonymous.
 - No state persistence (local storage, cookies) is required in this iteration.
 - The Quiz and Evaluation sections require no functional code beyond routing placeholders.
-- CSS styling will rely on minimal inline styles or a single lightweight stylesheet — no CSS-in-JS library or design system is required.
+- CSS styling will use Tailwind CSS utility classes with centralized theme tokens; additional component UI libraries are out of scope for this iteration.
 - The React project will be bootstrapped with Vite for minimal boilerplate.
 - The `user_level` field sent with chat requests will default to an empty array, consistent with the backend's `UserRequest` schema default.
