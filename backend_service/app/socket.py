@@ -35,8 +35,8 @@ logger = logging.getLogger(__name__)
 CONSUMER_GROUP_ID = "backend-service-consumer"
 
 # Socket.IO server mounted onto the FastAPI app in main.py.
-sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
-socket_asgi_app = socketio.ASGIApp(sio, socketio_path="")
+sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins=[])
+socket_asgi_app = socketio.ASGIApp(sio)
 
 # Shared connection manager keyed by session_id (== sid).
 connection_manager = ConnectionManager()

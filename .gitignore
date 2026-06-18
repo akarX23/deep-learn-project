@@ -20,6 +20,11 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 
+# Node / frontend
+node_modules/
+react_ui/dist/
+react_ui/build/
+
 # Environment files
 .env
 .env.local
