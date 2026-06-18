@@ -38,6 +38,7 @@ _RESUME_TOPICS: dict[str, str] = {
     PlannerInboundTopics.RAG_COMPLETE.value: "rag-complete",
     PlannerInboundTopics.MATERIAL_COMPILED.value: "material-compiled",
     PlannerInboundTopics.QUIZ_COMPLETE.value: "quiz-complete",
+    PlannerInboundTopics.TEACHING_COMPLETE.value: "teaching-complete",
 }
 
 

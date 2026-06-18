@@ -12,7 +12,7 @@
 | Phase 1 — Core pipeline | `TeachingAgent.run()`, schemas, prompts, validators, helpers, LLM client, config | **Complete** |
 | Phase 2 — Kafka integration | `kafka.py`, `handlers.py`, `worker.py`, Kafka event schemas, topic registration | **Complete** |
 | Phase 3 — Reflection pattern | Colleague-owned; not in scope for this feature branch | In progress (separate branch) |
-| Phase 4 — Token streaming | Markdown LLM output, `StreamingFieldExtractor`, `stream-tokens` Kafka topic, real-time field-keyed token delivery to frontend | **Planned** |
+| Phase 4 — Token streaming | Markdown LLM output, `StreamingFieldExtractor`, `stream-tokens` Kafka topic, real-time field-keyed token delivery to frontend | **Complete** |
 
 ---
 
@@ -163,7 +163,7 @@ tokens arrive incrementally, the `diagram` field arrives as a single complete ev
 
 - Topic is a single word vs. a multi-word phrase (e.g., "Trees" vs. "Balanced Binary Search Trees").
 - `context` field is empty string — agent must handle gracefully and still produce a complete response.
-- `context` field contains a lengthy prior-session summary — agent must incorporate it without exceeding the token ceiling for the mode.
+- `context` field contains lengthy RAG-compiled study material — agent must use it as the primary source without exceeding the token ceiling for the mode.
 - Two requests with the same topic but different `output_mode` values — responses must be qualitatively different, not just length-adjusted.
 - Topic is ambiguous or out of scope of a standard CS curriculum — agent must still return a structured, best-effort response rather than failing.
 - LLM call fails or returns an empty response — agent must return `status: "error"` with an appropriate message rather than propagating an exception.
@@ -175,7 +175,7 @@ tokens arrive incrementally, the `diagram` field arrives as a single complete ev
 
 ### Functional Requirements
 
-- **FR-001**: The system MUST accept a structured input payload containing `topic` (non-empty string), `output_mode` (one of: `beginner`, `intermediate`, `advanced`), and `context` (string, may be empty).
+- **FR-001**: The system MUST accept a structured input payload containing `topic` (non-empty string), `output_mode` (one of: `beginner`, `intermediate`, `advanced`), and `context` (string, may be empty — carries RAG-compiled study material from the user's course documents when provided).
 - **FR-002**: The system MUST return a structured output payload containing `status`, `output_mode`, `content` (with `explanation`, `diagram`, `notes`, `example`), and `metadata` (with `topic`, `tokens_used`, `model`) in every response, including error cases.
 - **FR-003**: The system MUST treat `output_mode` as authoritative from input and MUST NOT infer or modify it based on topic or context.
 - **FR-004**: The system MUST produce qualitatively distinct explanations for each output mode — the same topic processed at different modes must yield structurally and substantively different responses.
@@ -221,10 +221,11 @@ tokens arrive incrementally, the `diagram` field arrives as a single complete ev
 - **FR-033**: The `StreamingFieldExtractor` component MUST detect section boundaries by watching for `**SectionName**` bold headers in the LLM delta stream. It MUST handle chunks that span a header boundary (i.e. a header may arrive split across two consecutive chunks).
 - **FR-034**: `TeachingCompletionEvent.content` MUST carry the complete raw markdown string produced by the LLM when the pipeline succeeds; empty string `""` on failure. Downstream agents (Planner, Quiz Agent) receive markdown — no longer JSON-serialized `TeachingContent`.
 - **FR-035**: The existing `parse_markdown_response()` parser (replacing `parse_llm_response()`) MUST be used internally in `agent.py` for Mermaid diagram validation and `TeachingAgentOutput` construction. It is not exposed to Kafka consumers.
+- **FR-036**: When `context` is non-empty, the LLM prompt MUST explicitly instruct the model to treat it as the primary reference source and ground the explanation in the provided material. General knowledge MAY be used only to supplement where the material is silent or incomplete. The prompt label for `context` MUST NOT describe it as a "prior session" summary — it is course reference material compiled by the RAG Agent.
 
 ### Key Entities
 
-- **TeachingAgentInput**: The input contract. Contains `topic` (the subject to be explained), `output_mode` (the target learner level), and `context` (optional prior session summary passed by the Planner Agent).
+- **TeachingAgentInput**: The input contract. Contains `topic` (the subject to be explained), `output_mode` (the target learner level), and `context` (RAG-compiled study material from the user's course documents; used as the primary LLM reference source when non-empty).
 - **TeachingAgentOutput**: The output contract. Contains `status` (`ok` or `error`), `output_mode` (mirrored from input), `content` (the explanation payload), and `metadata` (audit information).
 - **TeachingContent**: The structured explanation payload. Contains `explanation` (full markdown explanation), `diagram` (Mermaid syntax or null), `notes` (summary markdown), and `example` (worked example or code snippet, or null).
 - **OutputMode**: Enum of `beginner`, `intermediate`, `advanced`. Determines explanation structure, diagram rules, token ceiling, and language register.
@@ -252,13 +253,13 @@ tokens arrive incrementally, the `diagram` field arrives as a single complete ev
 - **SC-011**: 100% of successful requests publish at least one `StreamTokensEventBody` event with `field: "explanation"` to `"stream-tokens"` before the `TeachingCompletionEvent` is published to `"teaching-complete"`.
 - **SC-012**: 100% of requests — including error cases — result in a stream-complete sentinel (`{"done": true}`) published to `"stream-tokens"`. The frontend is never left waiting without an end signal.
 - **SC-013**: 100% of diagram tokens published to `"stream-tokens"` are complete valid Mermaid strings. No partial diagram tokens are ever published.
+- **SC-014**: When `context` is non-empty, the generated explanation MUST demonstrably draw from the provided reference material rather than defaulting to generic general-knowledge content about the topic.
 
 ## Assumptions
 
 - The Teaching Agent is invoked exclusively via Kafka. The Planner Agent publishes a `TeachingRequestEvent` to the `"teaching"` topic; the Teaching Agent worker consumes it. No direct Python calls, REST calls, or UI calls are made to the Teaching Agent at runtime.
 - The `"teaching"` and `"teaching-complete"` Kafka topics are bootstrapped by the backend service at startup via `project/topics.py`. The Teaching Agent worker does not create topics; it assumes they exist.
-- The `context` field carries a prior session summary generated by a Memory Agent; the Memory Agent is a separate system component not implemented in this feature.
-- When `context` is empty, the agent produces a complete response without prior-session context.
+- The `context` field carries study material compiled by the RAG Agent from the user's course documents. It is the primary reference source for the LLM — prompts MUST instruct the model to prioritize this content over general knowledge when it is non-empty. When `context` is empty, the agent generates a complete response from general knowledge.
 - `request_id` is assigned by the Planner Agent before publishing to Kafka. The Teaching Agent treats it as an opaque string and passes it through unchanged.
 - `sid` is the Socket.IO session ID assigned by the backend when the user's browser connects. It is threaded through the Planner via `TeachingRequestEvent` and echoed back in `TeachingCompletionEvent` so the backend can route the completion event to the correct WebSocket session. The Teaching Agent never reads or validates its contents.
 - LLM connection parameters (API key, model name, temperature, token limits) are provided through environment variables. During development, a free-tier provider (e.g. Groq, Gemini) may be used. In production, the target provider may differ. The agent logic MUST NOT depend on any provider-specific SDK — all LLM calls go through `teaching_agent/llm_client.py`.

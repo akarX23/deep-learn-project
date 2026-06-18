@@ -65,15 +65,23 @@
   },
   {
     "field": "explanation",
-    "token": " tree"
+    "token": " special"
   },
   {
     "field": "explanation",
-    "token": " with"
+    "token": " kind"
   },
   {
     "field": "explanation",
-    "token": " branches"
+    "token": " of"
+  },
+  {
+    "field": "explanation",
+    "token": " filing"
+  },
+  {
+    "field": "explanation",
+    "token": " system"
   },
   {
     "field": "explanation",
@@ -81,43 +89,15 @@
   },
   {
     "field": "explanation",
-    "token": " where"
+    "token": " that"
   },
   {
     "field": "explanation",
-    "token": " each"
+    "token": " helps"
   },
   {
     "field": "explanation",
-    "token": " branch"
-  },
-  {
-    "field": "explanation",
-    "token": " splits"
-  },
-  {
-    "field": "explanation",
-    "token": " into"
-  },
-  {
-    "field": "explanation",
-    "token": " two"
-  },
-  {
-    "field": "explanation",
-    "token": " smaller"
-  },
-  {
-    "field": "explanation",
-    "token": " branches"
-  },
-  {
-    "field": "explanation",
-    "token": " to"
-  },
-  {
-    "field": "explanation",
-    "token": " help"
+    "token": " us"
   },
   {
     "field": "explanation",
@@ -149,6 +129,34 @@
   },
   {
     "field": "explanation",
+    "token": " you"
+  },
+  {
+    "field": "explanation",
+    "token": "'re"
+  },
+  {
+    "field": "explanation",
+    "token": " looking"
+  },
+  {
+    "field": "explanation",
+    "token": " for"
+  },
+  {
+    "field": "explanation",
+    "token": " a"
+  },
+  {
+    "field": "explanation",
+    "token": " book"
+  },
+  {
+    "field": "explanation",
+    "token": " in"
+  },
+  {
+    "field": "explanation",
     "token": " a"
   },
   {
@@ -157,19 +165,35 @@
   },
   {
     "field": "explanation",
-    "token": " with"
+    "token": " where"
   },
   {
     "field": "explanation",
-    "token": " millions"
+    "token": " all"
   },
   {
     "field": "explanation",
-    "token": " of"
+    "token": " the"
   },
   {
     "field": "explanation",
     "token": " books"
+  },
+  {
+    "field": "explanation",
+    "token": " are"
+  },
+  {
+    "field": "explanation",
+    "token": " arranged"
+  },
+  {
+    "field": "explanation",
+    "token": " alphabet"
+  },
+  {
+    "field": "explanation",
+    "token": "ically"
   },
   {
     "field": "explanation",
@@ -181,19 +205,15 @@
   },
   {
     "field": "explanation",
-    "token": " you"
+    "token": " each"
   },
   {
     "field": "explanation",
-    "token": " want"
+    "token": " shelf"
   },
   {
     "field": "explanation",
-    "token": " to"
-  },
-  {
-    "field": "explanation",
-    "token": " find"
+    "token": " has"
   },
   {
     "field": "explanation",
@@ -201,15 +221,59 @@
   },
   {
     "field": "explanation",
-    "token": " specific"
+    "token": " sign"
   },
   {
     "field": "explanation",
-    "token": " book"
+    "token": " saying"
+  },
+  {
+    "field": "explanation",
+    "token": " what"
+  },
+  {
+    "field": "explanation",
+    "token": " letters"
+  },
+  {
+    "field": "explanation",
+    "token": " are"
+  },
+  {
+    "field": "explanation",
+    "token": " on"
+  },
+  {
+    "field": "explanation",
+    "token": " that"
+  },
+  {
+    "field": "explanation",
+    "token": " shelf"
   },
   {
     "field": "explanation",
     "token": " -"
+  },
+  {
+    "field": "explanation",
+    "token": " this"
+  },
+  {
+    "field": "explanation",
+    "token": " is"
+  },
+  {
+    "field": "explanation",
+    "token": " similar"
+  },
+  {
+    "field": "explanation",
+    "token": " to"
+  },
+  {
+    "field": "explanation",
+    "token": " how"
   },
   {
     "field": "explanation",
@@ -229,83 +293,7 @@
   },
   {
     "field": "explanation",
-    "token": " is"
-  },
-  {
-    "field": "explanation",
-    "token": " like"
-  },
-  {
-    "field": "explanation",
-    "token": " a"
-  },
-  {
-    "field": "explanation",
-    "token": " super"
-  },
-  {
-    "field": "explanation",
-    "token": "-efficient"
-  },
-  {
-    "field": "explanation",
-    "token": " librarian"
-  },
-  {
-    "field": "explanation",
-    "token": " who"
-  },
-  {
-    "field": "explanation",
-    "token": " helps"
-  },
-  {
-    "field": "explanation",
-    "token": " you"
-  },
-  {
-    "field": "explanation",
-    "token": " find"
-  },
-  {
-    "field": "explanation",
-    "token": " the"
-  },
-  {
-    "field": "explanation",
-    "token": " book"
-  },
-  {
-    "field": "explanation",
-    "token": " by"
-  },
-  {
-    "field": "explanation",
-    "token": " constantly"
-  },
-  {
-    "field": "explanation",
-    "token": " dividing"
-  },
-  {
-    "field": "explanation",
-    "token": " the"
-  },
-  {
-    "field": "explanation",
-    "token": " search"
-  },
-  {
-    "field": "explanation",
-    "token": " area"
-  },
-  {
-    "field": "explanation",
-    "token": " in"
-  },
-  {
-    "field": "explanation",
-    "token": " half"
+    "token": " works"
   },
   {
     "field": "explanation",
@@ -337,15 +325,11 @@
   },
   {
     "field": "explanation",
-    "token": " allows"
+    "token": " helps"
   },
   {
     "field": "explanation",
-    "token": " us"
-  },
-  {
-    "field": "explanation",
-    "token": " to"
+    "token": " computers"
   },
   {
     "field": "explanation",
@@ -353,43 +337,19 @@
   },
   {
     "field": "explanation",
-    "token": " information"
+    "token": " and"
   },
   {
     "field": "explanation",
-    "token": " quickly"
+    "token": " organize"
   },
   {
     "field": "explanation",
-    "token": ","
+    "token": " large"
   },
   {
     "field": "explanation",
-    "token": " even"
-  },
-  {
-    "field": "explanation",
-    "token": " when"
-  },
-  {
-    "field": "explanation",
-    "token": " there"
-  },
-  {
-    "field": "explanation",
-    "token": "'s"
-  },
-  {
-    "field": "explanation",
-    "token": " a"
-  },
-  {
-    "field": "explanation",
-    "token": " huge"
-  },
-  {
-    "field": "explanation",
-    "token": " amount"
+    "token": " amounts"
   },
   {
     "field": "explanation",
@@ -398,6 +358,10 @@
   {
     "field": "explanation",
     "token": " data"
+  },
+  {
+    "field": "explanation",
+    "token": " efficiently"
   },
   {
     "field": "explanation",
@@ -413,10 +377,6 @@
   },
   {
     "field": "explanation",
-    "token": " really"
-  },
-  {
-    "field": "explanation",
     "token": " important"
   },
   {
@@ -425,7 +385,11 @@
   },
   {
     "field": "explanation",
-    "token": " things"
+    "token": " many"
+  },
+  {
+    "field": "explanation",
+    "token": " applications"
   },
   {
     "field": "explanation",
@@ -433,7 +397,7 @@
   },
   {
     "field": "explanation",
-    "token": " computers"
+    "token": " databases"
   },
   {
     "field": "explanation",
@@ -441,7 +405,11 @@
   },
   {
     "field": "explanation",
-    "token": " websites"
+    "token": " file"
+  },
+  {
+    "field": "explanation",
+    "token": " systems"
   },
   {
     "field": "explanation",
@@ -481,15 +449,7 @@
   },
   {
     "field": "explanation",
-    "token": " first"
-  },
-  {
-    "field": "explanation",
-    "token": ","
-  },
-  {
-    "field": "explanation",
-    "token": " you"
+    "token": " we"
   },
   {
     "field": "explanation",
@@ -505,7 +465,7 @@
   },
   {
     "field": "explanation",
-    "token": " \""
+    "token": " '"
   },
   {
     "field": "explanation",
@@ -513,7 +473,7 @@
   },
   {
     "field": "explanation",
-    "token": "\""
+    "token": "'"
   },
   {
     "field": "explanation",
@@ -521,15 +481,7 @@
   },
   {
     "field": "explanation",
-    "token": "the"
-  },
-  {
-    "field": "explanation",
-    "token": " top"
-  },
-  {
-    "field": "explanation",
-    "token": " of"
+    "token": "like"
   },
   {
     "field": "explanation",
@@ -537,7 +489,23 @@
   },
   {
     "field": "explanation",
-    "token": " tree"
+    "token": " first"
+  },
+  {
+    "field": "explanation",
+    "token": " shelf"
+  },
+  {
+    "field": "explanation",
+    "token": " in"
+  },
+  {
+    "field": "explanation",
+    "token": " the"
+  },
+  {
+    "field": "explanation",
+    "token": " library"
   },
   {
     "field": "explanation",
@@ -545,23 +513,19 @@
   },
   {
     "field": "explanation",
-    "token": " then"
+    "token": " and"
   },
   {
     "field": "explanation",
-    "token": " you"
+    "token": " each"
   },
   {
     "field": "explanation",
-    "token": " look"
+    "token": " piece"
   },
   {
     "field": "explanation",
-    "token": " at"
-  },
-  {
-    "field": "explanation",
-    "token": " the"
+    "token": " of"
   },
   {
     "field": "explanation",
@@ -569,15 +533,43 @@
   },
   {
     "field": "explanation",
-    "token": " you"
+    "token": " ("
   },
   {
     "field": "explanation",
-    "token": "'re"
+    "token": "or"
   },
   {
     "field": "explanation",
-    "token": " searching"
+    "token": " '"
+  },
+  {
+    "field": "explanation",
+    "token": "node"
+  },
+  {
+    "field": "explanation",
+    "token": "')"
+  },
+  {
+    "field": "explanation",
+    "token": " has"
+  },
+  {
+    "field": "explanation",
+    "token": " two"
+  },
+  {
+    "field": "explanation",
+    "token": " branches"
+  },
+  {
+    "field": "explanation",
+    "token": " -"
+  },
+  {
+    "field": "explanation",
+    "token": " one"
   },
   {
     "field": "explanation",
@@ -585,15 +577,19 @@
   },
   {
     "field": "explanation",
-    "token": " and"
+    "token": " things"
   },
   {
     "field": "explanation",
-    "token": " decide"
+    "token": " that"
   },
   {
     "field": "explanation",
-    "token": " whether"
+    "token": " come"
+  },
+  {
+    "field": "explanation",
+    "token": " before"
   },
   {
     "field": "explanation",
@@ -601,91 +597,39 @@
   },
   {
     "field": "explanation",
-    "token": "'s"
-  },
-  {
-    "field": "explanation",
-    "token": " \""
-  },
-  {
-    "field": "explanation",
-    "token": "less"
-  },
-  {
-    "field": "explanation",
-    "token": " than"
-  },
-  {
-    "field": "explanation",
-    "token": "\""
-  },
-  {
-    "field": "explanation",
-    "token": " or"
-  },
-  {
-    "field": "explanation",
-    "token": " \""
-  },
-  {
-    "field": "explanation",
-    "token": "greater"
-  },
-  {
-    "field": "explanation",
-    "token": " than"
-  },
-  {
-    "field": "explanation",
-    "token": "\""
-  },
-  {
-    "field": "explanation",
-    "token": " the"
-  },
-  {
-    "field": "explanation",
-    "token": " root"
-  },
-  {
-    "field": "explanation",
     "token": ","
   },
   {
     "field": "explanation",
-    "token": " then"
+    "token": " and"
   },
   {
     "field": "explanation",
-    "token": " you"
+    "token": " one"
   },
   {
     "field": "explanation",
-    "token": " move"
+    "token": " for"
   },
   {
     "field": "explanation",
-    "token": " to"
+    "token": " things"
   },
   {
     "field": "explanation",
-    "token": " the"
+    "token": " that"
   },
   {
     "field": "explanation",
-    "token": " left"
+    "token": " come"
   },
   {
     "field": "explanation",
-    "token": " or"
+    "token": " after"
   },
   {
     "field": "explanation",
-    "token": " right"
-  },
-  {
-    "field": "explanation",
-    "token": " branch"
+    "token": " it"
   },
   {
     "field": "explanation",
@@ -697,11 +641,19 @@
   },
   {
     "field": "explanation",
+    "token": " we"
+  },
+  {
+    "field": "explanation",
     "token": " keep"
   },
   {
     "field": "explanation",
-    "token": " repeating"
+    "token": " dividing"
+  },
+  {
+    "field": "explanation",
+    "token": " like"
   },
   {
     "field": "explanation",
@@ -709,15 +661,11 @@
   },
   {
     "field": "explanation",
-    "token": " process"
-  },
-  {
-    "field": "explanation",
     "token": " until"
   },
   {
     "field": "explanation",
-    "token": " you"
+    "token": " we"
   },
   {
     "field": "explanation",
@@ -729,7 +677,7 @@
   },
   {
     "field": "explanation",
-    "token": " you"
+    "token": " we"
   },
   {
     "field": "explanation",
@@ -789,6 +737,18 @@
   },
   {
     "field": "explanation",
+    "token": " every"
+  },
+  {
+    "field": "explanation",
+    "token": " tree"
+  },
+  {
+    "field": "explanation",
+    "token": " is"
+  },
+  {
+    "field": "explanation",
     "token": " a"
   },
   {
@@ -805,35 +765,7 @@
   },
   {
     "field": "explanation",
-    "token": " is"
-  },
-  {
-    "field": "explanation",
-    "token": " just"
-  },
-  {
-    "field": "explanation",
-    "token": " a"
-  },
-  {
-    "field": "explanation",
-    "token": " random"
-  },
-  {
-    "field": "explanation",
-    "token": " collection"
-  },
-  {
-    "field": "explanation",
-    "token": " of"
-  },
-  {
-    "field": "explanation",
-    "token": " branches"
-  },
-  {
-    "field": "explanation",
-    "token": " -"
+    "token": ","
   },
   {
     "field": "explanation",
@@ -849,7 +781,11 @@
   },
   {
     "field": "explanation",
-    "token": " actually"
+    "token": " not"
+  },
+  {
+    "field": "explanation",
+    "token": " -"
   },
   {
     "field": "explanation",
@@ -857,39 +793,19 @@
   },
   {
     "field": "explanation",
-    "token": " very"
+    "token": " Binary"
   },
   {
     "field": "explanation",
-    "token": " organized"
+    "token": " Search"
   },
   {
     "field": "explanation",
-    "token": " system"
+    "token": " Tree"
   },
   {
     "field": "explanation",
-    "token": " where"
-  },
-  {
-    "field": "explanation",
-    "token": " each"
-  },
-  {
-    "field": "explanation",
-    "token": " branch"
-  },
-  {
-    "field": "explanation",
-    "token": " is"
-  },
-  {
-    "field": "explanation",
-    "token": " carefully"
-  },
-  {
-    "field": "explanation",
-    "token": " arranged"
+    "token": " has"
   },
   {
     "field": "explanation",
@@ -897,23 +813,43 @@
   },
   {
     "field": "explanation",
-    "token": " make"
+    "token": " follow"
   },
   {
     "field": "explanation",
-    "token": " searching"
+    "token": " specific"
   },
   {
     "field": "explanation",
-    "token": " efficient"
+    "token": " rules"
+  },
+  {
+    "field": "explanation",
+    "token": " about"
+  },
+  {
+    "field": "explanation",
+    "token": " how"
+  },
+  {
+    "field": "explanation",
+    "token": " the"
+  },
+  {
+    "field": "explanation",
+    "token": " information"
+  },
+  {
+    "field": "explanation",
+    "token": " is"
+  },
+  {
+    "field": "explanation",
+    "token": " organized"
   },
   {
     "field": "explanation",
     "token": ".\n\n"
-  },
-  {
-    "field": "diagram",
-    "token": "graph TD\n    A[Root] -->|less than|> B[Left Branch]\n    A -->|greater than|> C[Right Branch]\n    B -->|less than|> D[Left Sub-Branch]\n    B -->|greater than|> E[Right Sub-Branch]\n    C -->|less than|> F[Left Sub-Branch]\n    C -->|greater than|> G[Right Sub-Branch]"
   },
   {
     "field": "notes",
@@ -941,43 +877,27 @@
   },
   {
     "field": "notes",
-    "token": " a"
+    "token": " used"
   },
   {
     "field": "notes",
-    "token": " way"
+    "token": " for"
   },
   {
     "field": "notes",
-    "token": " to"
+    "token": " efficient"
   },
   {
     "field": "notes",
-    "token": " organize"
+    "token": " data"
   },
   {
     "field": "notes",
-    "token": " information"
+    "token": " retrieval"
   },
   {
     "field": "notes",
-    "token": " to"
-  },
-  {
-    "field": "notes",
-    "token": " find"
-  },
-  {
-    "field": "notes",
-    "token": " things"
-  },
-  {
-    "field": "notes",
-    "token": " quickly"
-  },
-  {
-    "field": "notes",
-    "token": ".\n"
+    "token": "\n"
   },
   {
     "field": "notes",
@@ -985,15 +905,19 @@
   },
   {
     "field": "notes",
-    "token": " branch"
+    "token": " node"
   },
   {
     "field": "notes",
-    "token": " splits"
+    "token": " has"
   },
   {
     "field": "notes",
-    "token": " into"
+    "token": " at"
+  },
+  {
+    "field": "notes",
+    "token": " most"
   },
   {
     "field": "notes",
@@ -1001,99 +925,15 @@
   },
   {
     "field": "notes",
-    "token": " smaller"
+    "token": " children"
   },
   {
     "field": "notes",
-    "token": " branches"
+    "token": " ("
   },
   {
     "field": "notes",
-    "token": ".\n"
-  },
-  {
-    "field": "notes",
-    "token": "* The"
-  },
-  {
-    "field": "notes",
-    "token": " tree"
-  },
-  {
-    "field": "notes",
-    "token": " is"
-  },
-  {
-    "field": "notes",
-    "token": " organized"
-  },
-  {
-    "field": "notes",
-    "token": " so"
-  },
-  {
-    "field": "notes",
-    "token": " that"
-  },
-  {
-    "field": "notes",
-    "token": " all"
-  },
-  {
-    "field": "notes",
-    "token": " the"
-  },
-  {
-    "field": "notes",
-    "token": " information"
-  },
-  {
-    "field": "notes",
-    "token": " on"
-  },
-  {
-    "field": "notes",
-    "token": " the"
-  },
-  {
-    "field": "notes",
-    "token": " left"
-  },
-  {
-    "field": "notes",
-    "token": " branch"
-  },
-  {
-    "field": "notes",
-    "token": " is"
-  },
-  {
-    "field": "notes",
-    "token": " \""
-  },
-  {
-    "field": "notes",
-    "token": "less"
-  },
-  {
-    "field": "notes",
-    "token": " than"
-  },
-  {
-    "field": "notes",
-    "token": "\""
-  },
-  {
-    "field": "notes",
-    "token": " the"
-  },
-  {
-    "field": "notes",
-    "token": " root"
-  },
-  {
-    "field": "notes",
-    "token": ","
+    "token": "left"
   },
   {
     "field": "notes",
@@ -1101,43 +941,51 @@
   },
   {
     "field": "notes",
-    "token": " all"
-  },
-  {
-    "field": "notes",
-    "token": " the"
-  },
-  {
-    "field": "notes",
-    "token": " information"
-  },
-  {
-    "field": "notes",
-    "token": " on"
-  },
-  {
-    "field": "notes",
-    "token": " the"
-  },
-  {
-    "field": "notes",
     "token": " right"
   },
   {
     "field": "notes",
-    "token": " branch"
+    "token": ")\n"
   },
   {
     "field": "notes",
-    "token": " is"
+    "token": "* The"
   },
   {
     "field": "notes",
-    "token": " \""
+    "token": " left"
   },
   {
     "field": "notes",
-    "token": "greater"
+    "token": " subtree"
+  },
+  {
+    "field": "notes",
+    "token": " of"
+  },
+  {
+    "field": "notes",
+    "token": " a"
+  },
+  {
+    "field": "notes",
+    "token": " node"
+  },
+  {
+    "field": "notes",
+    "token": " contains"
+  },
+  {
+    "field": "notes",
+    "token": " only"
+  },
+  {
+    "field": "notes",
+    "token": " values"
+  },
+  {
+    "field": "notes",
+    "token": " less"
   },
   {
     "field": "notes",
@@ -1145,7 +993,67 @@
   },
   {
     "field": "notes",
-    "token": "\""
+    "token": " the"
+  },
+  {
+    "field": "notes",
+    "token": " node"
+  },
+  {
+    "field": "notes",
+    "token": "'s"
+  },
+  {
+    "field": "notes",
+    "token": " value"
+  },
+  {
+    "field": "notes",
+    "token": "\n"
+  },
+  {
+    "field": "notes",
+    "token": "* The"
+  },
+  {
+    "field": "notes",
+    "token": " right"
+  },
+  {
+    "field": "notes",
+    "token": " subtree"
+  },
+  {
+    "field": "notes",
+    "token": " of"
+  },
+  {
+    "field": "notes",
+    "token": " a"
+  },
+  {
+    "field": "notes",
+    "token": " node"
+  },
+  {
+    "field": "notes",
+    "token": " contains"
+  },
+  {
+    "field": "notes",
+    "token": " only"
+  },
+  {
+    "field": "notes",
+    "token": " values"
+  },
+  {
+    "field": "notes",
+    "token": " greater"
+  },
+  {
+    "field": "notes",
+    "token": " than"
   },
   {
     "field": "notes",
@@ -1153,11 +1061,19 @@
   },
   {
     "field": "notes",
-    "token": " root"
+    "token": " node"
   },
   {
     "field": "notes",
-    "token": ".\n\n"
+    "token": "'s"
+  },
+  {
+    "field": "notes",
+    "token": " value"
+  },
+  {
+    "field": "notes",
+    "token": "\n\n"
   },
   {
     "field": "example",
@@ -1174,302 +1090,6 @@
   {
     "field": "example",
     "token": " say"
-  },
-  {
-    "field": "example",
-    "token": " we"
-  },
-  {
-    "field": "example",
-    "token": " have"
-  },
-  {
-    "field": "example",
-    "token": " a"
-  },
-  {
-    "field": "example",
-    "token": " Binary"
-  },
-  {
-    "field": "example",
-    "token": " Search"
-  },
-  {
-    "field": "example",
-    "token": " Tree"
-  },
-  {
-    "field": "example",
-    "token": " with"
-  },
-  {
-    "field": "example",
-    "token": " the"
-  },
-  {
-    "field": "example",
-    "token": " following"
-  },
-  {
-    "field": "example",
-    "token": " information"
-  },
-  {
-    "field": "example",
-    "token": ":"
-  },
-  {
-    "field": "example",
-    "token": " "
-  },
-  {
-    "field": "example",
-    "token": "5"
-  },
-  {
-    "field": "example",
-    "token": " ("
-  },
-  {
-    "field": "example",
-    "token": "the"
-  },
-  {
-    "field": "example",
-    "token": " root"
-  },
-  {
-    "field": "example",
-    "token": "),"
-  },
-  {
-    "field": "example",
-    "token": " "
-  },
-  {
-    "field": "example",
-    "token": "2"
-  },
-  {
-    "field": "example",
-    "token": " ("
-  },
-  {
-    "field": "example",
-    "token": "left"
-  },
-  {
-    "field": "example",
-    "token": " branch"
-  },
-  {
-    "field": "example",
-    "token": "),"
-  },
-  {
-    "field": "example",
-    "token": " "
-  },
-  {
-    "field": "example",
-    "token": "8"
-  },
-  {
-    "field": "example",
-    "token": " ("
-  },
-  {
-    "field": "example",
-    "token": "right"
-  },
-  {
-    "field": "example",
-    "token": " branch"
-  },
-  {
-    "field": "example",
-    "token": "),"
-  },
-  {
-    "field": "example",
-    "token": " "
-  },
-  {
-    "field": "example",
-    "token": "1"
-  },
-  {
-    "field": "example",
-    "token": " ("
-  },
-  {
-    "field": "example",
-    "token": "left"
-  },
-  {
-    "field": "example",
-    "token": " sub"
-  },
-  {
-    "field": "example",
-    "token": "-"
-  },
-  {
-    "field": "example",
-    "token": "branch"
-  },
-  {
-    "field": "example",
-    "token": " of"
-  },
-  {
-    "field": "example",
-    "token": " "
-  },
-  {
-    "field": "example",
-    "token": "2"
-  },
-  {
-    "field": "example",
-    "token": "),"
-  },
-  {
-    "field": "example",
-    "token": " "
-  },
-  {
-    "field": "example",
-    "token": "3"
-  },
-  {
-    "field": "example",
-    "token": " ("
-  },
-  {
-    "field": "example",
-    "token": "right"
-  },
-  {
-    "field": "example",
-    "token": " sub"
-  },
-  {
-    "field": "example",
-    "token": "-"
-  },
-  {
-    "field": "example",
-    "token": "branch"
-  },
-  {
-    "field": "example",
-    "token": " of"
-  },
-  {
-    "field": "example",
-    "token": " "
-  },
-  {
-    "field": "example",
-    "token": "2"
-  },
-  {
-    "field": "example",
-    "token": "),"
-  },
-  {
-    "field": "example",
-    "token": " "
-  },
-  {
-    "field": "example",
-    "token": "6"
-  },
-  {
-    "field": "example",
-    "token": " ("
-  },
-  {
-    "field": "example",
-    "token": "left"
-  },
-  {
-    "field": "example",
-    "token": " sub"
-  },
-  {
-    "field": "example",
-    "token": "-"
-  },
-  {
-    "field": "example",
-    "token": "branch"
-  },
-  {
-    "field": "example",
-    "token": " of"
-  },
-  {
-    "field": "example",
-    "token": " "
-  },
-  {
-    "field": "example",
-    "token": "8"
-  },
-  {
-    "field": "example",
-    "token": "),"
-  },
-  {
-    "field": "example",
-    "token": " "
-  },
-  {
-    "field": "example",
-    "token": "9"
-  },
-  {
-    "field": "example",
-    "token": " ("
-  },
-  {
-    "field": "example",
-    "token": "right"
-  },
-  {
-    "field": "example",
-    "token": " sub"
-  },
-  {
-    "field": "example",
-    "token": "-"
-  },
-  {
-    "field": "example",
-    "token": "branch"
-  },
-  {
-    "field": "example",
-    "token": " of"
-  },
-  {
-    "field": "example",
-    "token": " "
-  },
-  {
-    "field": "example",
-    "token": "8"
-  },
-  {
-    "field": "example",
-    "token": ")."
-  },
-  {
-    "field": "example",
-    "token": " If"
   },
   {
     "field": "example",
@@ -1501,6 +1121,50 @@
   },
   {
     "field": "example",
+    "token": "7"
+  },
+  {
+    "field": "example",
+    "token": " in"
+  },
+  {
+    "field": "example",
+    "token": " a"
+  },
+  {
+    "field": "example",
+    "token": " Binary"
+  },
+  {
+    "field": "example",
+    "token": " Search"
+  },
+  {
+    "field": "example",
+    "token": " Tree"
+  },
+  {
+    "field": "example",
+    "token": " that"
+  },
+  {
+    "field": "example",
+    "token": " contains"
+  },
+  {
+    "field": "example",
+    "token": " the"
+  },
+  {
+    "field": "example",
+    "token": " numbers"
+  },
+  {
+    "field": "example",
+    "token": " "
+  },
+  {
+    "field": "example",
     "token": "3"
   },
   {
@@ -1509,11 +1173,59 @@
   },
   {
     "field": "example",
-    "token": " we"
+    "token": " "
   },
   {
     "field": "example",
-    "token": " would"
+    "token": "5"
+  },
+  {
+    "field": "example",
+    "token": ","
+  },
+  {
+    "field": "example",
+    "token": " "
+  },
+  {
+    "field": "example",
+    "token": "7"
+  },
+  {
+    "field": "example",
+    "token": ","
+  },
+  {
+    "field": "example",
+    "token": " "
+  },
+  {
+    "field": "example",
+    "token": "9"
+  },
+  {
+    "field": "example",
+    "token": ","
+  },
+  {
+    "field": "example",
+    "token": " and"
+  },
+  {
+    "field": "example",
+    "token": " "
+  },
+  {
+    "field": "example",
+    "token": "11"
+  },
+  {
+    "field": "example",
+    "token": "."
+  },
+  {
+    "field": "example",
+    "token": " We"
   },
   {
     "field": "example",
@@ -1537,19 +1249,23 @@
   },
   {
     "field": "example",
-    "token": "5"
+    "token": "let"
   },
   {
     "field": "example",
-    "token": "),"
+    "token": "'s"
   },
   {
     "field": "example",
-    "token": " see"
+    "token": " say"
   },
   {
     "field": "example",
-    "token": " that"
+    "token": " it"
+  },
+  {
+    "field": "example",
+    "token": "'s"
   },
   {
     "field": "example",
@@ -1557,7 +1273,27 @@
   },
   {
     "field": "example",
-    "token": "3"
+    "token": "7"
+  },
+  {
+    "field": "example",
+    "token": "),"
+  },
+  {
+    "field": "example",
+    "token": " and"
+  },
+  {
+    "field": "example",
+    "token": " since"
+  },
+  {
+    "field": "example",
+    "token": " "
+  },
+  {
+    "field": "example",
+    "token": "7"
   },
   {
     "field": "example",
@@ -1565,11 +1301,63 @@
   },
   {
     "field": "example",
-    "token": " less"
+    "token": " what"
   },
   {
     "field": "example",
-    "token": " than"
+    "token": " we"
+  },
+  {
+    "field": "example",
+    "token": "'re"
+  },
+  {
+    "field": "example",
+    "token": " looking"
+  },
+  {
+    "field": "example",
+    "token": " for"
+  },
+  {
+    "field": "example",
+    "token": ","
+  },
+  {
+    "field": "example",
+    "token": " we"
+  },
+  {
+    "field": "example",
+    "token": "'re"
+  },
+  {
+    "field": "example",
+    "token": " done"
+  },
+  {
+    "field": "example",
+    "token": "."
+  },
+  {
+    "field": "example",
+    "token": " But"
+  },
+  {
+    "field": "example",
+    "token": " if"
+  },
+  {
+    "field": "example",
+    "token": " the"
+  },
+  {
+    "field": "example",
+    "token": " root"
+  },
+  {
+    "field": "example",
+    "token": " was"
   },
   {
     "field": "example",
@@ -1585,19 +1373,19 @@
   },
   {
     "field": "example",
-    "token": " so"
-  },
-  {
-    "field": "example",
     "token": " we"
   },
   {
     "field": "example",
-    "token": " move"
+    "token": " would"
   },
   {
     "field": "example",
-    "token": " to"
+    "token": " look"
+  },
+  {
+    "field": "example",
+    "token": " at"
   },
   {
     "field": "example",
@@ -1605,7 +1393,7 @@
   },
   {
     "field": "example",
-    "token": " left"
+    "token": " right"
   },
   {
     "field": "example",
@@ -1617,23 +1405,7 @@
   },
   {
     "field": "example",
-    "token": "2"
-  },
-  {
-    "field": "example",
-    "token": "),"
-  },
-  {
-    "field": "example",
-    "token": " then"
-  },
-  {
-    "field": "example",
-    "token": " see"
-  },
-  {
-    "field": "example",
-    "token": " that"
+    "token": "since"
   },
   {
     "field": "example",
@@ -1641,7 +1413,7 @@
   },
   {
     "field": "example",
-    "token": "3"
+    "token": "7"
   },
   {
     "field": "example",
@@ -1661,63 +1433,11 @@
   },
   {
     "field": "example",
-    "token": "2"
+    "token": "5"
   },
   {
     "field": "example",
-    "token": ","
-  },
-  {
-    "field": "example",
-    "token": " so"
-  },
-  {
-    "field": "example",
-    "token": " we"
-  },
-  {
-    "field": "example",
-    "token": " move"
-  },
-  {
-    "field": "example",
-    "token": " to"
-  },
-  {
-    "field": "example",
-    "token": " the"
-  },
-  {
-    "field": "example",
-    "token": " right"
-  },
-  {
-    "field": "example",
-    "token": " sub"
-  },
-  {
-    "field": "example",
-    "token": "-"
-  },
-  {
-    "field": "example",
-    "token": "branch"
-  },
-  {
-    "field": "example",
-    "token": " of"
-  },
-  {
-    "field": "example",
-    "token": " "
-  },
-  {
-    "field": "example",
-    "token": "2"
-  },
-  {
-    "field": "example",
-    "token": " -"
+    "token": "),"
   },
   {
     "field": "example",
@@ -1725,7 +1445,7 @@
   },
   {
     "field": "example",
-    "token": " there"
+    "token": " then"
   },
   {
     "field": "example",
@@ -1733,15 +1453,11 @@
   },
   {
     "field": "example",
+    "token": " would"
+  },
+  {
+    "field": "example",
     "token": " find"
-  },
-  {
-    "field": "example",
-    "token": " the"
-  },
-  {
-    "field": "example",
-    "token": " number"
   },
   {
     "field": "example",
@@ -1749,10 +1465,82 @@
   },
   {
     "field": "example",
-    "token": "3"
+    "token": "7"
   },
   {
     "field": "example",
     "token": "."
+  },
+  {
+    "field": "example",
+    "token": " This"
+  },
+  {
+    "field": "example",
+    "token": " way"
+  },
+  {
+    "field": "example",
+    "token": ","
+  },
+  {
+    "field": "example",
+    "token": " we"
+  },
+  {
+    "field": "example",
+    "token": " can"
+  },
+  {
+    "field": "example",
+    "token": " quickly"
+  },
+  {
+    "field": "example",
+    "token": " find"
+  },
+  {
+    "field": "example",
+    "token": " what"
+  },
+  {
+    "field": "example",
+    "token": " we"
+  },
+  {
+    "field": "example",
+    "token": "'re"
+  },
+  {
+    "field": "example",
+    "token": " looking"
+  },
+  {
+    "field": "example",
+    "token": " for"
+  },
+  {
+    "field": "example",
+    "token": " by"
+  },
+  {
+    "field": "example",
+    "token": " following"
+  },
+  {
+    "field": "example",
+    "token": " the"
+  },
+  {
+    "field": "example",
+    "token": " branches"
+  },
+  {
+    "field": "example",
+    "token": "."
+  },
+  {
+    "field": "diagram",
+    "token": "graph TD\n    A[Start] -->|Compare|> B{Middle}\n    B -->|Smaller|> C[Left]\n    B -->|Larger|> D[Right]\n    C -->|Found|> E[Smaller Result]\n    D -->|Found|> F[Larger Result]"
   }
 ]

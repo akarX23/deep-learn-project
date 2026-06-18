@@ -14,4 +14,4 @@ COPY project /app/project
 
 EXPOSE 8501
 
-CMD ["streamlit", "run", "ui_frontend/app.py", "--server.headless=true", "--server.port=8501", "--server.address=0.0.0.0"]
+CMD ["python", "-m", "streamlit", "run", "ui_frontend/app.py", "--server.headless=true", "--server.port=8501", "--server.address=0.0.0.0"]

@@ -92,7 +92,7 @@ class TeachingAgent:
         except RuntimeError:
             return build_error_output(topic, output_mode, model), ""
 
-        raw_markdown = extractor.finalize()
+        raw_markdown, diagram_raw = extractor.finalize()
 
         try:
             parsed = parse_markdown_response(raw_markdown)
@@ -100,7 +100,10 @@ class TeachingAgent:
             return build_error_output(topic, output_mode, model), ""
 
         # Step 5: Validate the Mermaid diagram and apply mode-specific rules.
-        diagram = self._resolve_diagram(parsed.get("diagram"), output_mode, messages, config)
+        # Diagram is validated (and retried if needed) before being sent to the frontend.
+        diagram = self._resolve_diagram(diagram_raw, output_mode, messages, config)
+        if diagram:
+            token_callback("diagram", diagram)
 
         # Step 6: Assemble and return the successful output.
         try:
