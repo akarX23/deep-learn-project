@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import logging
 import os
@@ -53,6 +54,7 @@ from quiz_agent.helpers import (
     build_error_output,
     build_quiz_from_parsed,
     build_result,
+    parse_mcq_options_response,
     parse_generated_quiz,
     parse_grading_response,
     parse_swot_response,
@@ -60,7 +62,12 @@ from quiz_agent.helpers import (
     score_mcq_single,
 )
 from quiz_agent.llm_client import call_llm
-from quiz_agent.prompts import DESCRIPTIVE_GRADING_PROMPT, QUESTION_GENERATION_PROMPT, SWOT_ANALYSIS_PROMPT
+from quiz_agent.prompts import (
+    DESCRIPTIVE_GRADING_PROMPT,
+    MCQ_OPTIONS_PROMPT,
+    QUESTION_STEMS_PROMPT,
+    SWOT_ANALYSIS_PROMPT,
+)
 from quiz_agent.validators import validate_question_set
 
 # Teaching content is truncated to this character limit before being sent to the LLM
@@ -69,6 +76,11 @@ _MAX_CONTENT_CHARS = 8000
 
 # Minimum word count for teaching content to attempt quiz generation.
 _MIN_CONTENT_WORDS = 100
+
+# Retry semantics: total attempts = 1 initial + _MAX_LLM_RETRIES.
+_MAX_LLM_RETRIES = 2
+_MAX_VALIDATION_RETRIES = 2
+_MAX_MCQ_EXPANSION_WORKERS = 6
 
 
 class QuizAgent:
@@ -141,61 +153,112 @@ class QuizAgent:
         logger.info("[STEP 4] Config — model=%r temperature=%.2f max_tokens=%d",
                     config.model, config.temperature, config.max_tokens)
 
-        # Step 5: call LLM (with one retry on validation deficit)
-        prompt = QUESTION_GENERATION_PROMPT.format(
+        # Step 5: generate question stems in one LLM call (id/type/prompt/sub_concept)
+        stem_prompt = QUESTION_STEMS_PROMPT.format(
             teaching_content=content,
             topic=topic,
             mcq_single_count=agent_input.mcq_single_count,
             mcq_multi_count=agent_input.mcq_multi_count,
         )
-        messages = [{"role": "user", "content": prompt}]
-        logger.info("[STEP 5] Generation prompt assembled — prompt_chars=%d", len(prompt))
-        logger.debug("[STEP 5] Full generation prompt:\n%s", prompt)
+        messages = [{"role": "user", "content": stem_prompt}]
+        logger.info("[STEP 5] Stem prompt assembled — prompt_chars=%d", len(stem_prompt))
+        logger.debug("[STEP 5] Full stem prompt:\n%s", stem_prompt)
 
-        for attempt in range(2):
-            logger.info("[STEP 5] LLM generation call — attempt %d/2", attempt + 1)
-            try:
-                raw_response, tokens_used = call_llm(messages, config)
-            except RuntimeError as exc:
-                logger.error("[STEP 5] LLM call FAILED: %s", exc)
-                return build_error_output(topic, model_name, [str(exc)])
-
-            logger.info("[STEP 5] LLM response received — tokens_used=%d response_chars=%d",
-                        tokens_used, len(raw_response))
-            logger.debug("[STEP 5] Raw LLM response:\n%s", raw_response)
-
-            try:
-                parsed = parse_generated_quiz(raw_response)
-            except ValueError as exc:
-                logger.error("[STEP 5] JSON parse FAILED: %s", exc)
-                return build_error_output(topic, model_name, [str(exc)])
-
-            q_count = len(parsed.get("questions", []))
-            logger.info("[STEP 5] Parsed %d questions from LLM response", q_count)
-
-            errors = validate_question_set(
-                parsed,
-                min_single=max(1, agent_input.mcq_single_count - 2),
-                min_multi=max(1, agent_input.mcq_multi_count - 1),
-                required_descriptive=4,
+        tokens_used = 0
+        stem_parsed: dict[str, Any] | None = None
+        for attempt in range(_MAX_VALIDATION_RETRIES + 1):
+            logger.info(
+                "[STEP 5] Stem generation validation attempt %d/%d",
+                attempt + 1,
+                _MAX_VALIDATION_RETRIES + 1,
             )
+            try:
+                raw_response, attempt_tokens = self._call_llm_with_retry(
+                    messages,
+                    config,
+                    stage="STEP 5/stem-generation",
+                )
+            except RuntimeError as exc:
+                logger.error("[STEP 5] Stem generation failed: %s", exc)
+                return build_error_output(topic, model_name, [str(exc)])
+
+            tokens_used += attempt_tokens
+            logger.info(
+                "[STEP 5] Stem response received — tokens_used=%d response_chars=%d",
+                attempt_tokens,
+                len(raw_response),
+            )
+            logger.debug("[STEP 5] Raw stem response:\n%s", raw_response)
+
+            try:
+                parsed_candidate = parse_generated_quiz(raw_response)
+                errors = self._validate_stem_set(
+                    parsed_candidate,
+                    min_single=max(1, agent_input.mcq_single_count - 2),
+                    min_multi=max(1, agent_input.mcq_multi_count - 1),
+                    required_descriptive=4,
+                )
+            except ValueError as exc:
+                errors = [str(exc)]
+
             if not errors:
-                logger.info("[STEP 5] Question set validation PASSED (%d questions)", q_count)
+                stem_parsed = parsed_candidate
+                logger.info(
+                    "[STEP 5] Stem validation PASSED (%d questions)",
+                    len(stem_parsed.get("questions", [])),
+                )
                 break
-            logger.warning("[STEP 5] Validation errors (attempt %d): %s", attempt + 1, errors)
-            if attempt == 1:
+
+            logger.warning("[STEP 5] Stem validation errors: %s", errors)
+            if attempt == _MAX_VALIDATION_RETRIES:
                 return build_error_output(
                     topic,
                     model_name,
-                    [f"Question set failed validation after retry: {'; '.join(errors)}"],
+                    [f"Question stem generation failed after retries: {'; '.join(errors)}"],
                 )
+            messages = [{
+                "role": "user",
+                "content": (
+                    f"{stem_prompt}\n\n"
+                    f"Previous response issues:\n- "
+                    + "\n- ".join(errors)
+                    + "\nReturn corrected JSON only."
+                ),
+            }]
 
-        # Step 6: assemble Quiz
-        logger.info("[STEP 6] Assembling Quiz schema object")
+        # Step 6: parallel MCQ expansion (options + explanations + deep dive)
+        logger.info("[STEP 6] Expanding MCQ questions in parallel")
+        try:
+            parsed, mcq_expansion_tokens = self._expand_mcq_questions_parallel(
+                stem_parsed,
+                topic,
+                content,
+                config,
+            )
+        except (RuntimeError, ValueError) as exc:
+            logger.error("[STEP 6] MCQ expansion FAILED: %s", exc)
+            return build_error_output(topic, model_name, [str(exc)])
+        tokens_used += mcq_expansion_tokens
+
+        errors = validate_question_set(
+            parsed,
+            min_single=max(1, agent_input.mcq_single_count - 2),
+            min_multi=max(1, agent_input.mcq_multi_count - 1),
+            required_descriptive=4,
+        )
+        if errors:
+            return build_error_output(
+                topic,
+                model_name,
+                [f"Question set failed validation after MCQ expansion: {'; '.join(errors)}"],
+            )
+
+        # Step 7: assemble Quiz
+        logger.info("[STEP 7] Assembling Quiz schema object")
         try:
             quiz = build_quiz_from_parsed(parsed, topic)
         except (ValidationError, KeyError, ValueError) as exc:
-            logger.error("[STEP 6] Quiz assembly FAILED: %s", exc)
+            logger.error("[STEP 7] Quiz assembly FAILED: %s", exc)
             return build_error_output(topic, model_name, [f"Quiz assembly failed: {exc}"])
 
         output = QuizAgentOutput(
@@ -205,9 +268,9 @@ class QuizAgent:
             metadata=QuizAgentMetadata(topic=topic, tokens_used=tokens_used, model=model_name),
             errors=[],
         )
-        logger.info("[STEP 6] Quiz assembled — quiz_id=%s total_questions=%d max_score=%d",
+        logger.info("[STEP 7] Quiz assembled — quiz_id=%s total_questions=%d max_score=%d",
                     quiz.quiz_id, quiz.metadata.total_questions, quiz.metadata.max_score)
-        logger.debug("[STEP 6] QuizAgentOutput schema:\n%s", output.model_dump_json(indent=2))
+        logger.debug("[STEP 7] QuizAgentOutput schema:\n%s", output.model_dump_json(indent=2))
         logger.info("================================================================")
         logger.info("PHASE 1 — generate() DONE  status=generated  tokens_used=%d", tokens_used)
         logger.info("================================================================")
@@ -518,6 +581,213 @@ class QuizAgent:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _call_llm_with_retry(
+        self,
+        messages: list[dict[str, str]],
+        config,
+        stage: str,
+    ) -> tuple[str, int]:
+        """Execute one LLM call with transient-failure retries.
+
+        Total attempts = 1 initial + _MAX_LLM_RETRIES.
+        """
+        last_error: RuntimeError | None = None
+        for attempt in range(_MAX_LLM_RETRIES + 1):
+            try:
+                return call_llm(messages, config)
+            except RuntimeError as exc:
+                last_error = exc
+                if attempt == _MAX_LLM_RETRIES:
+                    break
+                logger.warning(
+                    "[%s] LLM call failed attempt %d/%d: %s",
+                    stage,
+                    attempt + 1,
+                    _MAX_LLM_RETRIES + 1,
+                    exc,
+                )
+        raise RuntimeError(f"[{stage}] LLM call failed after retries: {last_error}")
+
+    def _validate_stem_set(
+        self,
+        parsed: dict[str, Any],
+        min_single: int,
+        min_multi: int,
+        required_descriptive: int,
+    ) -> list[str]:
+        """Validate stem payload before per-question MCQ expansion."""
+        errors: list[str] = []
+        questions = parsed.get("questions")
+        if not isinstance(questions, list) or not questions:
+            return ["Stem response must include a non-empty questions list"]
+
+        single_count = 0
+        multi_count = 0
+        descriptive_count = 0
+
+        for i, q in enumerate(questions):
+            if not isinstance(q, dict):
+                errors.append(f"Question at index {i} is not an object")
+                continue
+            qid = q.get("id", f"index-{i}")
+            qtype = q.get("type")
+            for key in ("id", "type", "prompt", "sub_concept", "max_points"):
+                if key not in q:
+                    errors.append(f"Question {qid} missing required key '{key}'")
+            if qtype == "mcq-single":
+                single_count += 1
+            elif qtype == "mcq-multi":
+                multi_count += 1
+            elif qtype == "descriptive":
+                descriptive_count += 1
+                rubric = q.get("rubric", [])
+                if not isinstance(rubric, list) or len(rubric) == 0:
+                    errors.append(f"Question {qid} (descriptive) must have a non-empty rubric")
+            else:
+                errors.append(f"Question {qid} has unknown type: '{qtype}'")
+
+        if single_count < min_single:
+            errors.append(f"Quiz has {single_count} mcq-single question(s); minimum is {min_single}")
+        if multi_count < min_multi:
+            errors.append(f"Quiz has {multi_count} mcq-multi question(s); minimum is {min_multi}")
+        if descriptive_count != required_descriptive:
+            errors.append(
+                f"Quiz has {descriptive_count} descriptive question(s); exactly {required_descriptive} are required"
+            )
+        return errors
+
+    def _validate_single_mcq_question(self, question: dict[str, Any]) -> list[str]:
+        """Validate one expanded MCQ question before merging into final set."""
+        errors: list[str] = []
+        qid = question.get("id", "unknown")
+        qtype = question.get("type")
+        options = question.get("options", [])
+        if not isinstance(options, list):
+            return [f"Question {qid} options must be a list"]
+
+        if not question.get("topic_deep_dive", "").strip():
+            errors.append(f"Question {qid} must include non-empty topic_deep_dive")
+
+        correct_count = sum(1 for o in options if isinstance(o, dict) and o.get("is_correct"))
+        if qtype == "mcq-single":
+            if len(options) != 4:
+                errors.append(f"Question {qid} (mcq-single) must have exactly 4 options, got {len(options)}")
+            if correct_count != 1:
+                errors.append(f"Question {qid} (mcq-single) must have exactly 1 correct option, got {correct_count}")
+        elif qtype == "mcq-multi":
+            if not (4 <= len(options) <= 6):
+                errors.append(f"Question {qid} (mcq-multi) must have 4-6 options, got {len(options)}")
+            if correct_count < 2:
+                errors.append(f"Question {qid} (mcq-multi) must have at least 2 correct options, got {correct_count}")
+
+        for j, opt in enumerate(options):
+            if not isinstance(opt, dict):
+                errors.append(f"Question {qid} option index {j} is not an object")
+                continue
+            for key in ("id", "text", "is_correct", "explanation"):
+                if key not in opt:
+                    errors.append(f"Question {qid} option index {j} missing '{key}'")
+            if not str(opt.get("explanation", "")).strip():
+                errors.append(f"Question {qid} option index {j} has empty explanation")
+        return errors
+
+    def _expand_single_mcq_question(
+        self,
+        question: dict[str, Any],
+        topic: str,
+        content: str,
+        config,
+    ) -> tuple[dict[str, Any], int]:
+        """Expand one MCQ stem into full options payload with retries."""
+        question_id = str(question.get("id", ""))
+        prompt = MCQ_OPTIONS_PROMPT.format(
+            teaching_content=content,
+            topic=topic,
+            question_id=question_id,
+            question_type=question.get("type", ""),
+            question_prompt=question.get("prompt", ""),
+            sub_concept=question.get("sub_concept", ""),
+            max_points=question.get("max_points", 1),
+        )
+
+        total_tokens = 0
+        messages = [{"role": "user", "content": prompt}]
+        for attempt in range(_MAX_VALIDATION_RETRIES + 1):
+            raw, tokens = self._call_llm_with_retry(
+                messages,
+                config,
+                stage=f"STEP 6/mcq-expand/{question_id}",
+            )
+            total_tokens += tokens
+
+            try:
+                parsed = parse_mcq_options_response(raw, question_id=question_id)
+            except ValueError as exc:
+                validation_errors = [str(exc)]
+            else:
+                updated = dict(question)
+                updated["options"] = parsed.get("options", [])
+                updated["topic_deep_dive"] = parsed.get("topic_deep_dive", "")
+                validation_errors = self._validate_single_mcq_question(updated)
+                if not validation_errors:
+                    return updated, total_tokens
+
+            if attempt == _MAX_VALIDATION_RETRIES:
+                raise ValueError(
+                    f"MCQ expansion failed for {question_id} after retries: {'; '.join(validation_errors)}"
+                )
+
+            messages = [{
+                "role": "user",
+                "content": (
+                    f"{prompt}\n\n"
+                    f"Previous response issues:\n- "
+                    + "\n- ".join(validation_errors)
+                    + "\nReturn corrected JSON only."
+                ),
+            }]
+
+        raise ValueError(f"MCQ expansion failed for {question_id}")
+
+    def _expand_mcq_questions_parallel(
+        self,
+        stem_parsed: dict[str, Any] | None,
+        topic: str,
+        content: str,
+        config,
+    ) -> tuple[dict[str, Any], int]:
+        """Expand all MCQ questions concurrently and return full parsed payload."""
+        if not stem_parsed or not isinstance(stem_parsed.get("questions"), list):
+            raise ValueError("Stem payload is missing questions")
+
+        questions: list[dict[str, Any]] = []
+        for i, q in enumerate(stem_parsed["questions"]):
+            if not isinstance(q, dict):
+                raise ValueError(f"Question at index {i} is not an object")
+            questions.append(dict(q))
+        mcq_indexes = [
+            i for i, q in enumerate(questions)
+            if q.get("type") in {QuestionType.MCQ_SINGLE.value, QuestionType.MCQ_MULTI.value}
+        ]
+
+        if not mcq_indexes:
+            return {"questions": questions}, 0
+
+        tokens_used = 0
+        max_workers = min(_MAX_MCQ_EXPANSION_WORKERS, len(mcq_indexes))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(self._expand_single_mcq_question, questions[i], topic, content, config): i
+                for i in mcq_indexes
+            }
+            for future in as_completed(futures):
+                idx = futures[future]
+                expanded_question, question_tokens = future.result()
+                questions[idx] = expanded_question
+                tokens_used += question_tokens
+
+        return {"questions": questions}, tokens_used
 
     def _build_answers_block(
         self,
