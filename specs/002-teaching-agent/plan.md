@@ -237,12 +237,20 @@ validation rules live in `data-model.md` and `contracts/teaching-agent-contract.
 | Edge case                                   | Handling                                                        |
 |---------------------------------------------|-----------------------------------------------------------------|
 | Single-word vs multi-word topic             | No special handling; passed verbatim to the prompt              |
-| Empty `context`                             | Valid input; full response produced without prior-session context |
-| Lengthy `context` summary                   | Input guard bounds context tokens (see Token-Ceiling Semantics) so the completion ceiling is unaffected |
+| Empty `context`                             | Valid input; full response produced from general knowledge |
+| Lengthy RAG-compiled `context`              | Input guard bounds context tokens (see Token-Ceiling Semantics) so the completion ceiling is unaffected; context is still treated as primary source |
 | Same topic, different modes                 | Distinct prompt templates yield structurally distinct output (FR-004) |
 | Ambiguous / out-of-scope topic              | Prompts instruct a structured best-effort response; never an error solely for ambiguity |
 | LLM call fails or returns empty             | `status: "error"`, `tokens_used: 0`, no unhandled exception (FR-010) |
 | Invalid generated Mermaid                   | Diagram set to null (intermediate/advanced) or retried/fallback (beginner); never returned invalid |
+
+### RAG Context Priority (FR-036)
+
+- The `context` field maps from `rag_compiled` in the Kafka event. It contains study material compiled by the RAG Agent from the user's course documents — **not** a prior conversation or session summary.
+- When `context` is non-empty, LLM prompts MUST label it clearly as reference material (e.g., `"Reference material (compiled from course documents):"`) and include an explicit priority instruction immediately after: the LLM MUST ground its explanation in this material first and supplement with general knowledge only where the material is silent or incomplete.
+- The trailing rule in each prompt template MUST reflect this: `"If no reference material is provided above, explain from general knowledge."` — replacing the old weak instructions ("briefly connect it", "build on it explicitly", "reference it where directly relevant") that treated context as an optional addendum rather than the primary source.
+- When `context` is empty, the agent proceeds with general knowledge only; no special handling required.
+- This was a correction to the original implementation which incorrectly labelled context as `"Prior session context:"` and gave it low-priority instructions.
 
 ## Complexity Tracking
 
