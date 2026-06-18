@@ -274,7 +274,7 @@ registered in `project/topics.py`; worker boots and processes messages end-to-en
 
 ---
 
-## Phase 4: Token Streaming (US6) — Planned
+## Phase 4: Token Streaming (US6) — Complete ✅
 
 **Goal**: Stream LLM output tokens field-by-field to the frontend via `"stream-tokens"` Kafka topic in real time, while continuing to deliver the complete response via `"teaching-complete"`. LLM output format switches from JSON to markdown with bold section headers.
 
@@ -286,14 +286,14 @@ registered in `project/topics.py`; worker boots and processes messages end-to-en
 
 **Purpose**: Switch LLM from JSON mode to markdown bold-header format. All downstream Phase 4 tasks depend on this output format.
 
-- [ ] T035 Update `teaching_agent/prompts.py`:
+- [x] T035 Update `teaching_agent/prompts.py`:
       Replace JSON output instruction with markdown bold-header format in all 3 prompts.
       Each prompt now instructs the LLM to use `**Explanation**`, `**Diagram**`, `**Notes**`,
       `**Example**` as section headers with a blank line before each header.
       Remove the "Return ONLY a JSON object" instruction and JSON template from each prompt.
       Keep all per-mode content requirements (5-part structure, diagram rules, etc.) unchanged.
 
-- [ ] T036 Update `teaching_agent/llm_client.py`:
+- [x] T036 Update `teaching_agent/llm_client.py`:
       - Remove `response_format={"type": "json_object"}` from `call_llm()` kwargs
       - Add `call_llm_stream(messages, config) → Iterator[tuple[str, int]]`:
         uses `stream=True`; yields `(delta: str, tokens_used: int)` tuples;
@@ -301,7 +301,7 @@ registered in `project/topics.py`; worker boots and processes messages end-to-en
         in the final chunk via `stream_options={"include_usage": True}`);
         wraps all LiteLLM exceptions as `RuntimeError`
 
-- [ ] T037 Update `teaching_agent/helpers.py`:
+- [x] T037 Update `teaching_agent/helpers.py`:
       - Remove `parse_llm_response()`, `_JSON_FENCE_OPEN_RE`, and `import json`
       - Add `parse_markdown_response(raw: str) → dict`:
         splits on `**SectionName**` bold headers (case-insensitive);
@@ -318,7 +318,7 @@ registered in `project/topics.py`; worker boots and processes messages end-to-en
 
 **Purpose**: New component that processes raw LLM delta chunks and emits field-keyed token events.
 
-- [ ] T038 Create `teaching_agent/stream_parser.py`:
+- [x] T038 Create `teaching_agent/stream_parser.py`:
       - `StreamingFieldExtractor` class:
         - `__init__(self, token_callback: Callable[[str, str], None])`:
           `token_callback(field, token)` called for each token event
@@ -345,7 +345,7 @@ registered in `project/topics.py`; worker boots and processes messages end-to-en
 
 **Purpose**: Wire streaming into the agent pipeline and add the `stream-tokens` publisher.
 
-- [ ] T039 Update `teaching_agent/agent.py`:
+- [x] T039 Update `teaching_agent/agent.py`:
       - Add `token_callback: Callable[[str, str], None]` parameter to `run()` (required,
         no default — callers always provide it; tests provide a no-op lambda)
       - Replace main LLM call (Step 4) with `call_llm_stream()` + `StreamingFieldExtractor`:
@@ -358,7 +358,7 @@ registered in `project/topics.py`; worker boots and processes messages end-to-en
         (second element is `raw_markdown`; empty string `""` on any error path)
       - `_resolve_diagram()` retry stays as `call_llm()` (non-streaming); unchanged
 
-- [ ] T040 Update `teaching_agent/kafka.py`:
+- [x] T040 Update `teaching_agent/kafka.py`:
       - Add import: `StreamTokensEventBody` from `project.schemas`;
         `BackendStreamTopics` from `project.topics`
       - Add `publish_stream_token(producer: KafkaProducerProtocol, event: StreamTokensEventBody) → None`:
@@ -366,7 +366,7 @@ registered in `project/topics.py`; worker boots and processes messages end-to-en
         sends to `BackendStreamTopics.STREAM_TOKENS.value`;
         does NOT call `producer.flush()` (tokens are high-frequency; flush only on stream-complete)
 
-- [ ] T041 Update `teaching_agent/handlers.py`:
+- [x] T041 Update `teaching_agent/handlers.py`:
       - Add injectable `stream_publisher` dependency:
         `stream_publisher: Callable[[KafkaProducerProtocol, StreamTokensEventBody], None] = publish_stream_token`
       - In `process_request()`: build `token_callback` closure that publishes
@@ -388,7 +388,7 @@ registered in `project/topics.py`; worker boots and processes messages end-to-en
 
 **Purpose**: Full test coverage for Phase 4 changes.
 
-- [ ] T042 Create `teaching_agent/tests/test_stream_parser.py`:
+- [x] T042 Create `teaching_agent/tests/test_stream_parser.py`:
       - `test_explanation_tokens_emitted_immediately` — chunks before `**Diagram**` header go to `explanation`
       - `test_diagram_buffered_and_emitted_complete` — diagram chunks buffered; emitted as one event on next header
       - `test_header_split_across_chunks` — `**Explan` + `ation**` across two chunks correctly detected
@@ -397,7 +397,7 @@ registered in `project/topics.py`; worker boots and processes messages end-to-en
       - `test_finalize_returns_complete_raw_markdown` — full buffer including headers returned by `finalize()`
       - `test_empty_stream_no_callback` — empty input produces no callback calls
 
-- [ ] T043 Update `teaching_agent/tests/test_teaching_agent.py`:
+- [x] T043 Update `teaching_agent/tests/test_teaching_agent.py`:
       - Replace 10 `parse_llm_response` tests with `parse_markdown_response` tests using markdown-format inputs
       - Update all mock LLM responses from JSON strings to markdown bold-header strings
       - Update monkeypatch target: `teaching_agent.agent.call_llm` → `teaching_agent.agent.call_llm_stream`
@@ -405,7 +405,7 @@ registered in `project/topics.py`; worker boots and processes messages end-to-en
       - All integration tests pass a no-op `token_callback=lambda f, t: None` to `agent.run()`
       - `agent.run()` now returns a tuple — update all assertions to unpack `(result, raw_markdown)`
 
-- [ ] T044 Update `teaching_agent/tests/test_kafka_integration.py`:
+- [x] T044 Update `teaching_agent/tests/test_kafka_integration.py`:
       - Add `_FakeStreamPublisher`: captures all `StreamTokensEventBody` events in a list
       - Add `stream_publisher=fake_stream_publisher` to handler construction
       - Add `test_streaming_tokens_published_before_completion_event`
@@ -414,7 +414,7 @@ registered in `project/topics.py`; worker boots and processes messages end-to-en
       - Add `test_diagram_field_in_stream_events`
       - Update `test_completion_event_preserves_request_correlation`: verify `content` is raw markdown string
 
-- [ ] T045 Update `teaching_agent/tests/conftest.py`:
+- [x] T045 Update `teaching_agent/tests/conftest.py`:
       - Patch `teaching_agent.agent.call_llm_stream` instead of `teaching_agent.agent.call_llm`
       - Mock yields tuples: intermediate chunks `(delta, 0)`, final chunk `(last_delta, tokens_used)`
       - Table output still captures `model`, `tokens_used`, `time_s`
@@ -423,13 +423,32 @@ registered in `project/topics.py`; worker boots and processes messages end-to-en
 
 ### P4-E: Validation
 
-- [ ] T046 Run full test suite: `python -m pytest teaching_agent/tests/ -q` — all tests pass
-- [ ] T047 Run sample outputs: `PYTHONPATH=. python teaching_agent/tests/run_samples.py` —
+- [x] T046 Run full test suite: `python -m pytest teaching_agent/tests/ -q` — all tests pass
+- [x] T047 Run sample outputs: `PYTHONPATH=. python teaching_agent/tests/run_samples.py` —
       verify all 9 outputs are in markdown format with correct bold section headers
-- [ ] T048 Manual end-to-end validation (requires worker running + Kafka up):
+- [x] T048 Manual end-to-end validation (requires worker running + Kafka up):
       publish a `TeachingRequestEvent`; verify `StreamTokensEventBody` events on `"stream-tokens"`
       with correct `field` keys; verify `TeachingCompletionEvent.content` is raw markdown on
       `"teaching-complete"`
+
+---
+
+---
+
+### P4-F: RAG Context Priority Correction
+
+**Purpose**: Correct an implementation error from Phase 1 where `context` was labelled and treated as "prior session history" rather than RAG-compiled course material. The fix updates all three prompt templates so the LLM is instructed to treat `context` as the primary reference source.
+
+- [x] T049 Update `teaching_agent/prompts.py` — fix RAG context handling across all three mode prompts (FR-036):
+      - Rename label from `"Prior session context: {context}"` to `"Reference material (compiled from course documents):\n{context}"`
+      - Add explicit priority instruction immediately after the label (before the structure section):
+        `"When reference material is provided above, use it as your PRIMARY source. Ground your explanation in that content. Only draw on general knowledge where the reference material is silent or incomplete."`
+      - Replace trailing rule in Rules section:
+        - Beginner: `"If prior session context is provided, briefly connect it to the new topic."` → `"If no reference material is provided above, explain from general knowledge."`
+        - Intermediate: `"If prior session context is provided, build on it explicitly."` → `"If no reference material is provided above, explain from general knowledge."`
+        - Advanced: `"If prior session context is provided, reference it where directly relevant."` → `"If no reference material is provided above, explain from general knowledge."`
+
+**Checkpoint**: Run `PYTHONPATH=. python teaching_agent/tests/verify_phase4.py` with a non-empty `rag_compiled` context and verify the explanation draws from the provided material.
 
 ---
 
