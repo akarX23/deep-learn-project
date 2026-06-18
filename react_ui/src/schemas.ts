@@ -44,6 +44,62 @@ export interface StreamCompletionPayload {
   tokens_used?: number;
 }
 
+export type QuestionType = "mcq-single" | "mcq-multi" | "descriptive";
+
+export interface MCQOption {
+  id: string;
+  text: string;
+  is_correct: boolean;
+  explanation: string;
+}
+
+export interface QuizQuestion {
+  id: string;
+  type?: QuestionType;
+  prompt: string;
+  sub_concept: string;
+  max_points?: number;
+  options?: MCQOption[];
+  topic_deep_dive?: string;
+  rubric?: string[];
+}
+
+export interface QuizMetadata {
+  question_type_counts?: Record<string, number>;
+  total_questions?: number;
+  max_score?: number;
+  mcq_max_score?: number;
+  descriptive_max_score?: number;
+  ui_hints?: Record<string, unknown>;
+}
+
+export interface Quiz {
+  quiz_id: string;
+  topic: string;
+  questions: QuizQuestion[];
+  metadata?: QuizMetadata;
+}
+
+export interface QuizAgentMetadata {
+  topic: string;
+  tokens_used: number;
+  model: string;
+}
+
+export interface QuizAgentOutput {
+  status: "generated" | "evaluated" | "error";
+  quiz?: Quiz;
+  result?: Record<string, unknown>;
+  metadata?: QuizAgentMetadata;
+  errors?: string[];
+}
+
+export interface SubmittedAnswer {
+  question_id: string;
+  selected_option_ids: string[];
+  free_text: string;
+}
+
 export const WebSocketEvents = {
   STREAM_TOKENS_SKT: "stream-tokens-skt",
   CLARIFY_USER_LEVEL_SKT: "clarify-user-level-skt"

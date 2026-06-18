@@ -5,6 +5,7 @@ import { Navbar } from "./components/Navbar";
 import { Navigation } from "./components/Navigation";
 import { QuizPlaceholder } from "./components/Quiz/QuizPlaceholder";
 import type { ChatWindowContext } from "./components/Chat/ChatWindow";
+import type { QuizSectionContext } from "./components/Quiz/QuizPlaceholder";
 import { submitChatRequest } from "./services/api";
 import { getSocket } from "./services/socket";
 import { uiClasses } from "./styles/uiClasses";
@@ -13,18 +14,21 @@ type Section = "chat" | "quiz" | "evaluation";
 
 interface SectionContexts {
   chat: ChatWindowContext | null;
-  quiz: Record<string, never>;
+  quiz: QuizSectionContext | null;
   evaluation: Record<string, never>;
 }
 
 export default function App(): JSX.Element {
   const [currentSection, setCurrentSection] = useState<Section>("chat");
   const [socketId, setSocketId] = useState<string | null>(null);
-  const [, setSectionContexts] = useState<SectionContexts>({
+  const [sectionContexts, setSectionContexts] = useState<SectionContexts>({
     chat: null,
-    quiz: {},
+    quiz: null,
     evaluation: {}
   });
+
+  const hasInitiatedChat =
+    sectionContexts.chat?.messages.some((message) => message.role === "user") ?? false;
 
   useEffect(() => {
     const socket = getSocket();
@@ -57,6 +61,13 @@ export default function App(): JSX.Element {
     }));
   }, []);
 
+  const handleQuizContextChange = useCallback((context: QuizSectionContext): void => {
+    setSectionContexts((prev) => ({
+      ...prev,
+      quiz: context
+    }));
+  }, []);
+
   return (
     <main className={uiClasses.layout.page}>
       <div className={uiClasses.layout.container}>
@@ -79,7 +90,11 @@ export default function App(): JSX.Element {
           </div>
 
           <div className={currentSection === "quiz" ? "block" : "hidden"}>
-            <QuizPlaceholder />
+            <QuizPlaceholder
+              sid={socketId}
+              hasInitiatedChat={hasInitiatedChat}
+              onContextChange={handleQuizContextChange}
+            />
           </div>
 
           <div className={currentSection === "evaluation" ? "block" : "hidden"}>
