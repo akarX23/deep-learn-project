@@ -168,3 +168,17 @@ services:
   #       condition: service_healthy
   #   env_file:
   #     - .env.local
+
+  react-ui:
+    image: deep-learn/react-ui:local
+    build:
+      context: .
+      dockerfile: react_ui/Dockerfile
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      backend-service:
+        condition: service_healthy
+    env_file:
+      - .env.local
+    

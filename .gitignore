@@ -44,3 +44,7 @@ chat_logs
 # Uploaded user files
 uploads/
 ./uploads
+
+.vite
+*.lock
+*.tsbuildinfo
