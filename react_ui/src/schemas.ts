@@ -2,6 +2,7 @@ export interface StreamTokensEventBody {
   from_service: string;
   sid: string;
   data: {
+    field?: string;
     token?: string;
     done?: boolean;
     tokens_used?: number;
@@ -32,8 +33,15 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   isStreaming: boolean;
+  tokens_used?: number;
   info?: boolean;
   attachments?: ChatAttachment[];
+}
+
+export interface StreamCompletionPayload {
+  messageId: string;
+  fullContent: string;
+  tokens_used?: number;
 }
 
 export const WebSocketEvents = {

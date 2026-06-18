@@ -1,4 +1,4 @@
-import type { ChatMessage } from "../../schemas";
+import type { ChatMessage, StreamCompletionPayload } from "../../schemas";
 import { uiClasses } from "../../styles/uiClasses";
 import { StreamResponseBox } from "./StreamResponseBox";
 import { UserMessage } from "./UserMessage";
@@ -8,7 +8,7 @@ interface MessageListProps {
   sid: string | null;
   activeStreamMessageId: string | null;
   progressPlaceholder: string;
-  onAssistantStreamDone: (messageId: string) => void;
+  onAssistantStreamDone: (payload: StreamCompletionPayload) => void;
 }
 
 export function MessageList({
@@ -42,8 +42,9 @@ export function MessageList({
               messageId={message.id}
               isActive={activeStreamMessageId === message.id}
               initialContent={message.content}
+              initialTokensUsed={message.tokens_used}
               progressPlaceholder={progressPlaceholder}
-              onDone={() => onAssistantStreamDone(message.id)}
+              onDone={onAssistantStreamDone}
             />
           )}
         </div>

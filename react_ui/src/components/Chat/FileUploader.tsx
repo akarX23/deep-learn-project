@@ -11,12 +11,13 @@ interface FileUploaderProps {
 export function FileUploader({ files, errors, onAdd, onRemove, disabled }: FileUploaderProps): JSX.Element {
   return (
     <div className={uiClasses.uploader.shell}>
-      <label htmlFor="pdf-files" className={uiClasses.uploader.label}>
-        Upload PDFs (max 3, 20 MB each)
-      </label>
-      <label htmlFor="pdf-files" className={uiClasses.uploader.picker} aria-disabled={disabled}>
-        Choose files
-      </label>
+      <div className={uiClasses.uploader.row}>
+        <label htmlFor="pdf-files" className={uiClasses.uploader.picker} aria-disabled={disabled}>
+          <span aria-hidden="true" className={uiClasses.uploader.icon}>📎</span>
+          <span>Upload</span>
+        </label>
+        <span className={uiClasses.uploader.helper}>Max 3 PDFs, 20 MB each</span>
+      </div>
       <input
         id="pdf-files"
         className={uiClasses.uploader.hiddenInput}

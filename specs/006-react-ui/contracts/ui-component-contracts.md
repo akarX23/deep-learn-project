@@ -65,7 +65,11 @@ interface StreamResponseBoxProps {
   isActive: boolean;
   initialContent: string;
   progressPlaceholder: string;
-  onDone: () => void;
+  onDone: (payload: {
+    messageId: string;
+    fullContent: string;
+    tokens_used?: number;
+  }) => void;
 }
 ```
 
@@ -78,31 +82,31 @@ interface StreamResponseBoxProps {
 - Must mark completion only when payload contains `data.done === true`.
 - Must display `tokens_used` as small secondary text below markdown content when provided.
 - Must show progress placeholder text while streaming.
-- Must trigger `onDone` when explicit completion is received so parent orchestration can unlock new submissions.
+- Must trigger `onDone` when explicit completion is received and include `messageId`, finalized `fullContent`, and optional `tokens_used` so parent state persists completion results.
+
+---
+
+## InputArea
+
+**Purpose**: Render the prompt text area and send action with minimal chrome.
+
+### Contract Rules
+
+- Must rely on text area placeholder for prompt guidance.
+- Must not render a redundant in-panel "Ask AI Tutor" heading when navbar title is present.
 
 ---
 
 ## FileUploader
 
-**Purpose**: Accept and validate PDF attachments.
-
-### Props
-
-```typescript
-interface FileUploaderProps {
-  files: File[];
-  errors: string[];
-  disabled: boolean;
-  onAdd: (files: FileList | null) => void;
-  onRemove: (index: number) => void;
-}
-```
+**Purpose**: Accept and validate PDF attachments with compact controls.
 
 ### Contract Rules
 
-- Upload control must be visibly styled as an interactive button.
-- Must preserve validation constraints: max 3 files, PDF only, <= 20 MB each.
-- Must provide clear selected-file and error feedback.
+- Upload trigger must be compact and attachment-style (icon + `Upload` label).
+- Upload control must appear below the text area.
+- Helper text near upload control must indicate limits (max 3 PDFs, 20 MB each).
+- Validation constraints remain unchanged: PDF-only, max 3 files, <= 20 MB each.
 
 ---
 

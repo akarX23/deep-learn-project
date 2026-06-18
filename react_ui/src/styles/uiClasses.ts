@@ -32,12 +32,14 @@ export const uiClasses = {
   input: {
     label: "mb-2 block text-sm font-medium text-slate-200",
     textarea: "w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3 py-2 text-slate-100 outline-none transition-colors placeholder:text-slate-500 focus:border-amber-300",
-    submit: "mt-3 inline-flex items-center rounded-lg border border-amber-300/40 bg-amber-300/15 px-4 py-2 text-sm font-semibold text-amber-100 transition-colors hover:bg-amber-300/25 disabled:cursor-not-allowed disabled:opacity-50"
+    submit: "inline-flex items-center rounded-lg border border-amber-300/40 bg-amber-300/15 px-4 py-2 text-sm font-semibold text-amber-100 transition-colors hover:bg-amber-300/25 disabled:cursor-not-allowed disabled:opacity-50"
   },
   uploader: {
-    shell: "mb-4",
-    label: "mb-2 block text-sm font-medium text-slate-200",
-    picker: "inline-flex cursor-pointer items-center rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100 transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50",
+    shell: "mb-4 mt-3",
+    row: "flex items-center gap-3",
+    picker: "inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-slate-600 bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-100 transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50",
+    icon: "text-sm",
+    helper: "text-sm text-slate-400",
     hiddenInput: "sr-only",
     list: "mt-3 space-y-2",
     fileItem: "flex items-center justify-between rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-200",

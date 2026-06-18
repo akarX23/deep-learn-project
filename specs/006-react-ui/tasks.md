@@ -1,95 +1,100 @@
-# Tasks: React UI Streaming-State Refactor
+# Tasks: React UI Stream Completion Persistence + Upload Control Refinement
 
 **Input**: Design documents from `/specs/006-react-ui/`  
 **Prerequisites**: `plan.md` (required), `spec.md` (required), `research.md`, `data-model.md`, `contracts/`, `quickstart.md`
 
-**Tests**: No explicit test tasks are generated because the current specification does not explicitly request TDD or test-first execution for this iteration.
+**Tests**: No explicit test tasks are generated because the current specification does not explicitly request test-first/TDD execution for this iteration.
 
 **Organization**: Tasks are grouped by user story so each story can be implemented and validated independently.
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-**Purpose**: Ensure baseline dependencies/config support the stream refactor work.
+**Purpose**: Confirm baseline frontend setup supports the clarified stream-persistence and compact-upload changes.
 
-- [X] T001 Verify streaming-related dependencies are declared in `react_ui/package.json`
-- [X] T002 Verify Tailwind + PostCSS build pipeline config in `react_ui/tailwind.config.js` and `react_ui/postcss.config.js`
-- [X] T003 Verify global stylesheet setup for utility classes in `react_ui/src/index.css` and `react_ui/src/main.tsx`
+- [X] T001 Verify stream-related dependencies and scripts in `react_ui/package.json`
+- [X] T002 Verify Tailwind + PostCSS configuration in `react_ui/tailwind.config.js` and `react_ui/postcss.config.js`
+- [X] T003 Verify shared stylesheet wiring in `react_ui/src/index.css` and `react_ui/src/main.tsx`
+- [X] T004 Verify environment variable contract placeholders in `react_ui/.env.example` and `react_ui/src/config.ts`
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-**Purpose**: Align shared types/contracts/components around explicit completion and local stream ownership.
+**Purpose**: Establish core schemas, component contracts, and shared styling needed by all user stories.
 
-**⚠️ CRITICAL**: No user story work should proceed until this phase is complete.
+**⚠️ CRITICAL**: No user story work should begin until this phase is complete.
 
-- [X] T004 Update stream event TypeScript contracts for `done` and `tokens_used` in `react_ui/src/schemas.ts`
-- [X] T005 [P] Refine reusable stream/loading style tokens in `react_ui/src/styles/theme.ts` and `react_ui/src/styles/uiClasses.ts`
-- [X] T006 [P] Refactor `StreamResponseBox` props/state contract for local stream ownership in `react_ui/src/components/Chat/StreamResponseBox.tsx`
-- [X] T007 [P] Refine `LoadingIndicator` display support for stream placeholder/usage context in `react_ui/src/components/Chat/LoadingIndicator.tsx`
-- [X] T008 Remove batched token hook usage path from architecture and imports in `react_ui/src/components/Chat/ChatWindow.tsx` and `react_ui/src/hooks/useBatchedTokens.ts`
+- [X] T005 Update stream and message schema types (including `ChatMessage.tokens_used`) in `react_ui/src/schemas.ts`
+- [X] T006 Define completion payload typing (`messageId`, `fullContent`, `tokens_used`) in `react_ui/src/schemas.ts`
+- [X] T007 [P] Refine shared stream/upload style tokens in `react_ui/src/styles/theme.ts` and `react_ui/src/styles/uiClasses.ts`
+- [X] T008 [P] Update `StreamResponseBox` prop contract for payload-based `onDone` callback in `react_ui/src/components/Chat/StreamResponseBox.tsx`
+- [X] T009 [P] Update `MessageList` contract to pass stable stream identity and callback payload in `react_ui/src/components/Chat/MessageList.tsx`
+- [X] T010 Remove deprecated non-owned stream paths from `react_ui/src/components/Chat/ChatWindow.tsx` and `react_ui/src/hooks/useBatchedTokens.ts`
 
-**Checkpoint**: Shared contracts and stream primitives are ready for user-story implementation.
+**Checkpoint**: Shared contracts and architecture boundaries are ready for story work.
 
 ---
 
 ## Phase 3: User Story 1 - Send a Chat Message with PDF Upload (Priority: P1) 🎯 MVP
 
-**Goal**: Deliver direct per-token markdown rendering in `StreamResponseBox` with explicit completion and `tokens_used` display while preserving chat submit/upload flow.
+**Goal**: Deliver stable explicit-completion stream persistence and refined chat input/upload UX while preserving PDF request flow.
 
-**Independent Test**: Submit a prompt with optional PDFs and observe immediate token-by-token markdown updates in `StreamResponseBox`, completion only on `done: true`, and `tokens_used` shown beneath the response when provided.
+**Independent Test**: Submit a prompt with optional PDFs, stream a teaching-agent response, confirm done-only completion, persisted final markdown content (no reset), and `tokens_used` display, using compact upload control below textarea.
 
-- [X] T009 [US1] Implement local `stream-tokens-skt` subscription/handling inside `react_ui/src/components/Chat/StreamResponseBox.tsx`
-- [X] T010 [US1] Implement explicit completion logic (`data.done === true`) in `react_ui/src/components/Chat/StreamResponseBox.tsx`
-- [X] T011 [US1] Render `tokens_used` below each streamed response box in `react_ui/src/components/Chat/StreamResponseBox.tsx`
-- [X] T012 [US1] Keep progress placeholder behavior inside `react_ui/src/components/Chat/StreamResponseBox.tsx`
-- [X] T013 [US1] Refactor `MessageList` to pass stable message identity/sid into stream boxes in `react_ui/src/components/Chat/MessageList.tsx`
-- [X] T014 [US1] Refactor `ChatWindow` to manage message list structure only (no streamed token content updates) in `react_ui/src/components/Chat/ChatWindow.tsx`
-- [X] T015 [US1] Remove timer-driven stream completion path in `react_ui/src/components/Chat/ChatWindow.tsx`
-- [X] T016 [US1] Preserve user attachment chip rendering in `react_ui/src/components/Chat/UserMessage.tsx` and `react_ui/src/components/Chat/MessageList.tsx`
-- [X] T017 [US1] Keep multipart submit + sid wiring stable during stream refactor in `react_ui/src/components/Chat/ChatWindow.tsx` and `react_ui/src/services/api.ts`
+- [X] T011 [US1] Implement token accumulation and done-only completion handling inside `react_ui/src/components/Chat/StreamResponseBox.tsx`
+- [X] T012 [US1] Emit completion payload `{ messageId, fullContent, tokens_used }` from `react_ui/src/components/Chat/StreamResponseBox.tsx`
+- [X] T013 [US1] Persist completion payload into message-list state in `react_ui/src/components/Chat/ChatWindow.tsx`
+- [X] T014 [US1] Ensure stream completion updates `isStreaming` and persisted `tokens_used` in `react_ui/src/components/Chat/ChatWindow.tsx`
+- [X] T015 [US1] Render finalized usage metadata beneath streamed assistant content in `react_ui/src/components/Chat/StreamResponseBox.tsx` and `react_ui/src/components/Chat/MessageList.tsx`
+- [X] T016 [US1] Remove redundant in-panel "Ask AI Tutor" heading from `react_ui/src/components/Chat/ChatWindow.tsx`
+- [X] T017 [US1] Refine prompt area to rely on textarea placeholder guidance in `react_ui/src/components/Chat/InputArea.tsx`
+- [X] T018 [US1] Implement compact attachment-style upload trigger and helper text below textarea in `react_ui/src/components/Chat/FileUploader.tsx` and `react_ui/src/components/Chat/InputArea.tsx`
+- [X] T019 [US1] Preserve PDF validation behavior (type/count/size) in `react_ui/src/hooks/usePdfValidator.ts` and `react_ui/src/components/Chat/FileUploader.tsx`
+- [X] T020 [US1] Preserve multipart submit + sid + file wiring in `react_ui/src/services/api.ts` and `react_ui/src/components/Chat/ChatWindow.tsx`
+- [X] T021 [US1] Preserve submitted attachment chip rendering in `react_ui/src/components/Chat/UserMessage.tsx` and `react_ui/src/components/Chat/MessageList.tsx`
 
-**Checkpoint**: US1 is independently demoable with explicit done-driven stream completion and tokens-used rendering.
+**Checkpoint**: US1 is independently demoable and satisfies completion-persistence + compact-upload requirements.
 
 ---
 
 ## Phase 4: User Story 2 - Receive User Level Clarification Prompt (Priority: P2)
 
-**Goal**: Keep clarification behavior correct while stream handling shifts fully into `StreamResponseBox`.
+**Goal**: Keep clarification behavior correct with new stream completion payload persistence.
 
-**Independent Test**: Simulate `clarify-user-level-skt` and verify info bubble rendering remains intact while non-teaching stream packets remain ignored.
+**Independent Test**: Simulate `clarify-user-level-skt` and non-teaching `stream-tokens-skt`; clarification messages render properly and non-teaching stream packets remain ignored.
 
-- [X] T018 [US2] Preserve clarification event insertion behavior in `react_ui/src/components/Chat/ChatWindow.tsx`
-- [X] T019 [US2] Ensure non-teaching stream packets are ignored in `react_ui/src/components/Chat/StreamResponseBox.tsx`
-- [X] T020 [US2] Keep clarification/info visual presentation consistent in `react_ui/src/components/Chat/MessageList.tsx`
+- [X] T022 [US2] Preserve clarification event insertion into chat history in `react_ui/src/components/Chat/ChatWindow.tsx`
+- [X] T023 [US2] Ensure non-teaching stream packets are ignored in `react_ui/src/components/Chat/StreamResponseBox.tsx`
+- [X] T024 [US2] Maintain clarification/info message styling consistency in `react_ui/src/components/Chat/MessageList.tsx` and `react_ui/src/styles/uiClasses.ts`
 
-**Checkpoint**: US2 remains independently verifiable with mocked socket events.
+**Checkpoint**: US2 remains independently verifiable with mocked socket payloads.
 
 ---
 
 ## Phase 5: User Story 3 - Scaffold Navigation for Future Sections (Priority: P3)
 
-**Goal**: Preserve polished app shell/navigation while stream architecture changes are introduced.
+**Goal**: Preserve polished app shell and placeholder navigation behavior after chat refactor updates.
 
-**Independent Test**: Navbar and section switching continue to work with no regressions in Quiz/Evaluation placeholders.
+**Independent Test**: Navbar remains visible, section switching works, and Quiz/Evaluation placeholders remain stable.
 
-- [X] T021 [US3] Verify navbar integration remains stable with refactored chat section in `react_ui/src/App.tsx` and `react_ui/src/components/Navbar.tsx`
-- [X] T022 [US3] Verify section navigation behavior/style integrity in `react_ui/src/components/Navigation.tsx`
-- [X] T023 [US3] Verify placeholder section rendering remains intact in `react_ui/src/components/Quiz/QuizPlaceholder.tsx` and `react_ui/src/components/Evaluation/EvaluationPlaceholder.tsx`
+- [X] T025 [US3] Verify navbar and chat-shell integration in `react_ui/src/App.tsx` and `react_ui/src/components/Navbar.tsx`
+- [X] T026 [US3] Verify section navigation behavior remains intact in `react_ui/src/components/Navigation.tsx`
+- [X] T027 [US3] Verify placeholder rendering continuity in `react_ui/src/components/Quiz/QuizPlaceholder.tsx` and `react_ui/src/components/Evaluation/EvaluationPlaceholder.tsx`
 
-**Checkpoint**: US3 shell behavior is independently intact.
+**Checkpoint**: US3 shell and placeholder behavior is independently intact.
 
 ---
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-**Purpose**: Sync docs/contracts and run final quality validation.
+**Purpose**: Keep docs/contracts synchronized and complete non-test validation gates.
 
-- [X] T024 [P] Sync stream completion and tokens-used semantics in `specs/006-react-ui/contracts/api-contracts.md`
-- [X] T025 [P] Sync `StreamResponseBox` ownership contract and props in `specs/006-react-ui/contracts/ui-component-contracts.md`
-- [X] T026 [P] Sync verification steps for explicit `done` completion in `specs/006-react-ui/quickstart.md`
-- [X] T027 Validate accessibility of loading/secondary usage text in `react_ui/src/components/Chat/StreamResponseBox.tsx` and `react_ui/src/components/Chat/LoadingIndicator.tsx`
-- [ ] T028 Run local quality gates from `react_ui/package.json` scripts and resolve issues across `react_ui/src/`
+- [X] T028 [P] Sync completion persistence semantics in `specs/006-react-ui/contracts/api-contracts.md`
+- [X] T029 [P] Sync UI component callback and compact-upload contract details in `specs/006-react-ui/contracts/ui-component-contracts.md`
+- [X] T030 [P] Sync data model for `ChatMessage.tokens_used` and completion payload in `specs/006-react-ui/data-model.md`
+- [X] T031 [P] Sync manual verification flow in `specs/006-react-ui/quickstart.md`
+- [X] T032 Validate loading/status accessibility semantics in `react_ui/src/components/Chat/LoadingIndicator.tsx` and `react_ui/src/components/Chat/StreamResponseBox.tsx`
+- [ ] T033 Run non-test quality gates and resolve issues in `react_ui/` via `npm run lint` and `npm run build`
 
 ---
 
@@ -99,41 +104,40 @@
 
 - **Phase 1 (Setup)**: Starts immediately.
 - **Phase 2 (Foundational)**: Depends on Phase 1 and blocks all user stories.
-- **Phase 3 (US1)**: Depends on Phase 2 and defines MVP.
-- **Phase 4 (US2)**: Depends on Phase 2 and extends chat behavior correctness.
-- **Phase 5 (US3)**: Depends on Phase 2 and can proceed in parallel with US2.
+- **Phase 3 (US1)**: Depends on Phase 2 and defines MVP delivery.
+- **Phase 4 (US2)**: Depends on Phase 2 and extends chat correctness.
+- **Phase 5 (US3)**: Depends on Phase 2 and can run in parallel with US2.
 - **Phase 6 (Polish)**: Depends on completion of desired user stories.
 
 ### User Story Dependencies
 
 - **US1 (P1)**: No dependency on other stories after Foundational phase.
-- **US2 (P2)**: Depends on chat orchestration from US1 but remains independently verifiable.
-- **US3 (P3)**: Independent from streaming internals; depends only on app shell.
+- **US2 (P2)**: Depends on US1 stream/message orchestration surfaces but remains independently testable.
+- **US3 (P3)**: Depends on shared app shell only; independent of stream internals.
 
 ### Within Each User Story
 
-- Establish component/state ownership before final UI wiring.
-- Complete stream completion and usage-display logic before removing old paths.
-- Preserve API/socket integration contracts during refactor.
+- Establish schema and callback contracts before UI wiring.
+- Complete explicit completion + persistence path before removing old stream paths.
+- Preserve request and validation behavior while applying visual refinements.
 
 ---
 
 ## Parallel Opportunities
 
-- Foundational: `T005`, `T006`, and `T007` can run in parallel after `T004`.
-- US1: `T009` and `T016` can run in parallel; `T013` and `T015` can run in parallel once stream contract is stable.
-- US3: `T021`, `T022`, and `T023` can run in parallel.
-- Polish: `T024`, `T025`, and `T026` can run in parallel.
+- Foundational: `T007`, `T008`, and `T009` can run in parallel after `T005` and `T006`.
+- US1: `T016`, `T017`, and `T021` can run in parallel once completion payload contract is stable.
+- US3: `T025`, `T026`, and `T027` can run in parallel.
+- Polish: `T028`, `T029`, `T030`, and `T031` can run in parallel.
 
 ---
 
 ## Parallel Example: User Story 1
 
 ```bash
-Task T009: react_ui/src/components/Chat/StreamResponseBox.tsx
-Task T016: react_ui/src/components/Chat/UserMessage.tsx
-Task T013: react_ui/src/components/Chat/MessageList.tsx
-Task T015: react_ui/src/components/Chat/ChatWindow.tsx
+Task T016: react_ui/src/components/Chat/ChatWindow.tsx
+Task T017: react_ui/src/components/Chat/InputArea.tsx
+Task T021: react_ui/src/components/Chat/UserMessage.tsx and react_ui/src/components/Chat/MessageList.tsx
 ```
 
 ---
@@ -141,9 +145,9 @@ Task T015: react_ui/src/components/Chat/ChatWindow.tsx
 ## Parallel Example: User Story 3
 
 ```bash
-Task T021: react_ui/src/App.tsx and react_ui/src/components/Navbar.tsx
-Task T022: react_ui/src/components/Navigation.tsx
-Task T023: react_ui/src/components/Quiz/QuizPlaceholder.tsx and react_ui/src/components/Evaluation/EvaluationPlaceholder.tsx
+Task T025: react_ui/src/App.tsx and react_ui/src/components/Navbar.tsx
+Task T026: react_ui/src/components/Navigation.tsx
+Task T027: react_ui/src/components/Quiz/QuizPlaceholder.tsx and react_ui/src/components/Evaluation/EvaluationPlaceholder.tsx
 ```
 
 ---
@@ -152,30 +156,31 @@ Task T023: react_ui/src/components/Quiz/QuizPlaceholder.tsx and react_ui/src/com
 
 ### MVP First (User Story 1 Only)
 
-1. Complete Phase 1 and Phase 2.
-2. Complete Phase 3 (US1).
-3. Validate explicit `done` completion and `tokens_used` rendering.
-4. Demo/ship MVP.
+1. Complete Phase 1 (Setup).
+2. Complete Phase 2 (Foundational).
+3. Complete Phase 3 (US1).
+4. Validate done-only completion, payload persistence, and compact upload control behavior.
+5. Demo/ship MVP.
 
 ### Incremental Delivery
 
-1. Foundation complete (Phases 1-2).
-2. Deliver US1 stream refactor.
-3. Validate and deliver US2 clarification integrity.
-4. Validate and deliver US3 shell stability.
-5. Execute Phase 6 validation/docs sync.
+1. Setup + Foundational complete.
+2. Deliver US1 and validate independently.
+3. Deliver US2 and validate independently.
+4. Deliver US3 and validate independently.
+5. Complete Phase 6 docs sync and quality gates.
 
 ### Parallel Team Strategy
 
-1. Engineer A: Stream internals (`StreamResponseBox`, `LoadingIndicator`, contracts).
-2. Engineer B: Chat orchestration/messages (`ChatWindow`, `MessageList`, `UserMessage`).
-3. Engineer C: Shell and docs sync (`App`, `Navigation`, placeholders, quickstart/contracts).
+1. Engineer A: Stream and callback contracts (`StreamResponseBox`, `MessageList`, `schemas`).
+2. Engineer B: Chat orchestration and input/upload UX (`ChatWindow`, `InputArea`, `FileUploader`).
+3. Engineer C: Shell and docs sync (`App`, `Navigation`, placeholders, contracts, quickstart).
 
 ---
 
 ## Notes
 
 - `[P]` marks file-isolated tasks suitable for parallel execution.
-- Story labels appear only on user-story phases.
-- Each user story includes independent validation criteria.
-- Keep implementation minimal while enforcing explicit completion semantics.
+- Story labels are applied only to user story phases.
+- Each user story has independent validation criteria.
+- Keep boilerplate minimal and avoid adding features outside current spec scope.

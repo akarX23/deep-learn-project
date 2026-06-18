@@ -88,6 +88,8 @@ Content-Type: application/json
 
 **Usage rule**: If `data.tokens_used` is provided on completion payload, render it as a small secondary line beneath the related stream response.
 
+**Persistence rule (frontend orchestration)**: On `data.done === true`, the stream component must hand off `{ messageId, fullContent, tokens_used }` to chat-level message state so finalized content and usage metadata persist across rerenders.
+
 **Progress placeholder compatibility**: Placeholder text can remain static; no dedicated progress event fields are required in this iteration.
 
 ---
@@ -131,3 +133,17 @@ All variables must be present in `.env.example` (committed to repository) with p
 - No renamed event names.
 - No renamed payload fields.
 - Existing backend implementations remain compatible; completion metadata (`done`, `tokens_used`) is interpreted when present.
+
+## Frontend Internal Contract (Non-HTTP)
+
+The following callback contract is internal to the React app and is included for cross-component consistency:
+
+```typescript
+type StreamCompletionPayload = {
+  messageId: string;
+  fullContent: string;
+  tokens_used?: number;
+};
+```
+
+`StreamResponseBox` emits this payload to `ChatWindow` on explicit completion.

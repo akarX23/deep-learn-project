@@ -15,6 +15,7 @@
 - Q: Which loading indicator pattern should be used while streaming? → A: Option D - animated dots loader with placeholder progress text.
 - Q: How should uploaded files be shown after message submission? → A: Option B - compact attachment chips in the user message bubble, including filename display; user-message rendering extracted as a dedicated component.
 - Q: How should stream completion be determined and where should token-stream state live? → A: Use explicit backend completion (`data.done === true`) from `stream-tokens-skt`; keep teaching-agent stream state entirely inside `StreamResponseBox`; show `data.tokens_used` as a small message below each `StreamResponseBox`.
+- Q: How should completed stream content be persisted and how should uploader/input chrome be refined? → A: On completion, `StreamResponseBox` must pass `{ messageId, fullContent, tokens_used }` to `ChatWindow` so content does not reset and message-level metadata is persisted; `ChatMessage` includes `tokens_used`; remove the extra "Ask AI Tutor" chat heading; render a small attachment-style upload control (icon + `Upload`) below the text area with side text for file limits.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -34,6 +35,7 @@ A learner opens the AI Tutor web app, types a question about a topic, optionally
 4. **Given** the user tries to attach more than 3 PDF files, **When** they attempt to add a fourth, **Then** the UI prevents the selection and shows a clear error message.
 5. **Given** the user tries to upload a non-PDF file, **When** they attempt to attach it, **Then** the UI rejects the file and shows a descriptive error message.
 6. **Given** a single uploaded file exceeds 20 MB, **When** the user selects it, **Then** the UI rejects the file and displays a size limit error before submission.
+7. **Given** a teaching-agent stream completes with `data.done === true`, **When** `StreamResponseBox` finalizes, **Then** it sends `{ messageId, fullContent, tokens_used }` to `ChatWindow` and the final assistant message content remains stable on subsequent renders.
 
 ---
 
@@ -81,7 +83,7 @@ The application displays three section tabs — Chat, Quiz, and Evaluation. Only
 
 - **FR-001**: The application MUST provide three navigation sections: Chat, Quiz, and Evaluation.
 - **FR-002**: Only the Chat section MUST be fully functional in this iteration; Quiz and Evaluation MUST render placeholder content.
-- **FR-003**: The Chat section MUST display a header with the title "AI Tutor" and use a dark-blue theme with warm golden/amber accents.
+- **FR-003**: The Chat section MUST use a dark-blue theme with warm golden/amber accents and MUST not render a redundant in-panel "Ask AI Tutor" heading when the top navbar title is present.
 - **FR-004**: The Chat section MUST provide a message input field and a submit button for sending user prompts.
 - **FR-005**: The Chat section MUST support attaching up to 3 PDF files per request, with a maximum file size of 20 MB each.
 - **FR-006**: The application MUST reject non-PDF file attachments and display a descriptive error to the user.
@@ -108,10 +110,13 @@ The application displays three section tabs — Chat, Quiz, and Evaluation. Only
 - **FR-027**: Stream completion MUST be determined only by explicit backend payload `data.done === true` from `stream-tokens-skt` events; timeout-driven completion is out of scope.
 - **FR-028**: Teaching-agent stream state (`stream-tokens-skt` token accumulation, completion status, and progress placeholder rendering) MUST be owned by `StreamResponseBox`; `ChatWindow` MUST manage message-list structure but not streamed token content state updates.
 - **FR-029**: When a teaching-agent completion payload includes `data.tokens_used`, the UI MUST render this value as a small secondary message below the corresponding `StreamResponseBox`.
+- **FR-030**: On explicit stream completion (`data.done === true`), `StreamResponseBox` MUST send `{ messageId, fullContent, tokens_used }` to `ChatWindow` via its completion callback so finalized assistant content is persisted in message-list state.
+- **FR-031**: The `ChatMessage` schema MUST include an optional `tokens_used` field to persist usage metadata for completed assistant messages.
+- **FR-032**: The upload UI MUST be a compact attachment-style control rendered below the text area, using an attachment icon with `Upload` label; upload-limit guidance text (max 3 PDFs, 20 MB each) MUST appear as small adjacent helper text.
 
 ### Key Entities
 
-- **ChatMessage**: A single entry in the chat history; has a role (`user` or `assistant`), text content, a streaming-complete flag, and optional attachment metadata for user messages (at minimum filename).
+- **ChatMessage**: A single entry in the chat history; has a role (`user` or `assistant`), text content, a streaming-complete flag, optional `tokens_used` metadata for completed assistant messages, and optional attachment metadata for user messages (at minimum filename).
 - **WebSocket Session**: The live connection to the backend; carries a session ID (`sid`) used to correlate streaming events to the correct browser session.
 - **AttachedFile**: A PDF file selected by the user; has a name, size, and binary content to be submitted as form data.
 - **StreamTokensEventBody**: `{ from_service: string, sid: string, data: Record<string, any> }` — mirrors the Python schema; `data` carries token fragments during streaming and completion metadata (for example `done`, `tokens_used`) on finalization.
@@ -129,6 +134,7 @@ The application displays three section tabs — Chat, Quiz, and Evaluation. Only
 - **SC-006**: The initial page load and chat interaction are usable on a standard desktop browser at typical broadband speeds without noticeable lag.
 - **SC-007**: The refined UI includes a visible top navbar title, Tailwind-styled interactive controls, and a chat layout that uses a wider desktop container without clipping message content.
 - **SC-008**: For teaching-agent streams, completion is recognized from `data.done === true` and `tokens_used` is displayed beneath the related streamed response when provided.
+- **SC-009**: After explicit completion, the finalized assistant markdown content remains stable (no reset on rerender) because `ChatWindow` stores the completion payload `{ messageId, fullContent, tokens_used }`.
 
 ## Assumptions
 

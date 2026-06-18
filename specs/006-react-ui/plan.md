@@ -1,33 +1,33 @@
-# Implementation Plan: React UI Streaming-State Refactor
+# Implementation Plan: React UI Stream Completion Persistence + Upload Control Refinement
 
 **Branch**: `008-react-ui` | **Date**: 2026-06-18 | **Spec**: `specs/006-react-ui/spec.md`
 **Input**: Feature specification from `/specs/006-react-ui/spec.md`
 
 ## Summary
 
-Refine the React UI architecture to maximize streaming responsiveness by moving teaching-agent stream state ownership into `StreamResponseBox`, removing batched token buffering, and using explicit backend completion (`data.done === true`) with `tokens_used` rendering beneath each streamed response. Keep minimal boilerplate, Tailwind-based dark theme, and reusable class-token organization.
+Align the React chat UI with clarified behavior: `StreamResponseBox` owns live teaching-agent stream state, then sends `{ messageId, fullContent, tokens_used }` to `ChatWindow` on explicit `data.done === true` so final content is persisted and never reset on rerender. Keep boilerplate minimal while refining input/upload chrome to a compact attachment-style control below the text area and removing redundant in-panel heading text.
 
 ## Technical Context
 
 **Language/Version**: TypeScript 5.5 + React 18.3.1  
-**Primary Dependencies**: React, Vite, socket.io-client, Tailwind CSS, react-markdown  
-**Storage**: N/A (in-memory UI state only)  
-**Testing**: Vitest + React Testing Library for component behavior; lint/build for static quality gates  
-**Target Platform**: Modern desktop browsers, responsive fallback for smaller viewports  
+**Primary Dependencies**: Vite 5, socket.io-client 4.8, react-markdown 9, Tailwind CSS 3, ESLint 9  
+**Storage**: N/A (in-memory UI state)  
+**Testing**: Vitest + React Testing Library (planned), plus `npm run lint` and `npm run build` quality gates  
+**Target Platform**: Modern desktop browsers (with responsive fallback)  
 **Project Type**: Frontend web application within monorepo  
-**Performance Goals**: Immediate per-token UI updates without batching delays; completion tied to explicit `done` payload, not timers  
-**Constraints**: Minimal boilerplate, no additional UI libraries, centralized theme/class tokens, no timeout-driven stream completion  
-**Scale/Scope**: Single-session chat UI with three sections; chat is functional while quiz/evaluation remain placeholders
+**Performance Goals**: Immediate per-token rendering without batching delay; no timeout-driven completion; stable post-completion content across rerenders  
+**Constraints**: Minimal boilerplate, Tailwind-only styling approach, centralized class/token reuse, no extra UI libraries, strict explicit completion semantics  
+**Scale/Scope**: Single-session chat flow + placeholder quiz/evaluation sections
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- Code Quality Gate: PASS. Keep modular component ownership (`ChatWindow` structure vs `StreamResponseBox` stream state) and maintain lint/build compatibility.
-- Testing Gate: PASS WITH NOTE. Behavioral changes imply required automated coverage at implementation time (stream completion, tokens_used rendering, no batching).
-- UX Consistency Gate: PASS. Existing navigation, accessibility labels, and visual language remain; streaming feedback becomes more direct.
-- Performance Gate: PASS. Removing buffered token flushes and timeout completion aligns with responsiveness goals.
-- Maintainability Gate: PASS. Contracted ownership boundaries reduce cross-component state churn and simplify reasoning.
+- Code Quality Gate: PASS. Refactor keeps clean ownership boundaries (`ChatWindow` orchestration, `StreamResponseBox` stream state) and updates contracts/docs.
+- Testing Gate: PASS WITH FOLLOW-UP. Constitution expects automated behavior tests for stream-completion persistence and upload-control UX; implementation can proceed but tests must be restored in a later hardening pass.
+- UX Consistency Gate: PASS. Navbar remains canonical title; in-panel heading removal and compact upload control are explicitly specified and consistent with feature style direction.
+- Performance Gate: PASS. Eliminates timeout jitter and batched token delays; completion path is deterministic (`done === true`).
+- Maintainability Gate: PASS. Non-obvious stream completion handoff is documented in spec/data model/contracts/quickstart.
 
 ## Project Structure
 
@@ -56,47 +56,48 @@ react_ui/
 │   │   ├── Chat/
 │   │   │   ├── ChatWindow.tsx
 │   │   │   ├── MessageList.tsx
-│   │   │   ├── UserMessage.tsx
 │   │   │   ├── StreamResponseBox.tsx
-│   │   │   ├── LoadingIndicator.tsx
+│   │   │   ├── UserMessage.tsx
 │   │   │   ├── InputArea.tsx
-│   │   │   └── FileUploader.tsx
+│   │   │   ├── FileUploader.tsx
+│   │   │   └── LoadingIndicator.tsx
 │   │   ├── Quiz/QuizPlaceholder.tsx
 │   │   └── Evaluation/EvaluationPlaceholder.tsx
+│   ├── services/
+│   ├── hooks/
 │   ├── styles/
 │   │   ├── theme.ts
 │   │   └── uiClasses.ts
-│   ├── hooks/
-│   ├── services/
 │   ├── schemas.ts
 │   ├── App.tsx
 │   └── main.tsx
 └── package.json
 ```
 
-**Structure Decision**: Keep all frontend implementation changes inside `react_ui/`; backend event contract remains backward-compatible and additive (`done`, `tokens_used` in `data`).
+**Structure Decision**: Keep all implementation inside `react_ui/` and keep backend contracts additive/non-breaking (`done` and `tokens_used` metadata in existing event payload shape).
 
 ## Phase 0: Research Focus
 
-- Event-driven stream completion via explicit payload metadata instead of timer heuristics.
-- Component-local high-frequency stream rendering to minimize parent re-renders.
-- Stable mapping between streamed assistant messages and stream state in `StreamResponseBox`.
+- Determine robust explicit-completion persistence pattern for streamed markdown content.
+- Validate minimal-prop contract between `StreamResponseBox` and `ChatWindow` (`messageId`, `fullContent`, `tokens_used`).
+- Define compact upload-control UX that preserves validation clarity while reducing chrome.
 
 ## Phase 1: Design Outputs
 
-- `research.md`: capture rationale for removing `useBatchedTokens` and stream ownership refactor.
-- `data-model.md`: incorporate completion metadata (`done`, `tokens_used`) and per-response stream state ownership.
-- `contracts/api-contracts.md`: codify explicit completion payload semantics.
-- `contracts/ui-component-contracts.md`: define `StreamResponseBox` ownership boundaries and `tokens_used` display rule.
-- `quickstart.md`: include verification checklist for explicit completion and tokens-used rendering.
+- `research.md`: document decision rationale for completion handoff and compact upload control.
+- `data-model.md`: include `ChatMessage.tokens_used` and completion payload handoff model.
+- `contracts/api-contracts.md`: maintain explicit `done` / `tokens_used` backend contract semantics.
+- `contracts/ui-component-contracts.md`: update `StreamResponseBox` callback contract and input/upload UI presentation contract.
+- `quickstart.md`: add verification steps for persisted completed content, tokens display, and compact upload control UX.
+- Agent context update: `.github/copilot-instructions.md` remains correctly pointed at `specs/006-react-ui/plan.md`.
 
 ## Post-Design Constitution Check
 
-- Code Quality Gate: PASS. Ownership boundaries are explicit and reduce mutable shared state.
-- Testing Gate: PASS WITH NOTE. Implementation must include regression tests for explicit `done` completion and `tokens_used` rendering.
-- UX Consistency Gate: PASS. Chat remains consistent while improving responsiveness and completion correctness.
-- Performance Gate: PASS. Direct stream updates avoid batching delay and timeout jitter.
-- Maintainability Gate: PASS. Stream concerns are isolated in one component with clear contract.
+- Code Quality Gate: PASS. Architecture remains simple and bounded.
+- Testing Gate: PASS WITH FOLLOW-UP. Design explicitly calls out behavior that requires automated regression tests in subsequent tasks.
+- UX Consistency Gate: PASS. Clarified interaction details are encoded in contracts and quickstart checks.
+- Performance Gate: PASS. Event-driven completion and local stream handling reduce render churn.
+- Maintainability Gate: PASS. Updated artifacts preserve traceability from FR-030/FR-031/FR-032 to implementation expectations.
 
 ## Complexity Tracking
 
