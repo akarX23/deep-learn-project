@@ -119,7 +119,7 @@ async def run_consumer(settings: KafkaSettings) -> None:
                 try:
                     event, sid = _route_message(message.topic, message.value)
                     await emit_event(event, message.value, sid)
-                    logger.info("Forwarded %s to session %s", event.value, sid)
+                    logger.debug("Forwarded %s to session %s", event.value, sid)
                 except Exception:  # noqa: BLE001 - keep consumer alive
                     logger.exception(
                         "Failed to forward message from topic %s", message.topic

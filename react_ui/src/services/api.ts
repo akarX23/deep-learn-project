@@ -7,6 +7,12 @@ interface SubmitChatRequestArgs {
   files?: File[];
 }
 
+interface SubmitQuizRequestArgs {
+  sid: string;
+  userPrompt: string;
+  teachingMaterial: string;
+}
+
 export async function submitChatRequest({
   userPrompt,
   sid,
@@ -33,5 +39,28 @@ export async function submitChatRequest({
   if (!response.ok) {
     const message = await response.text();
     throw new Error(message || "Failed to submit chat request");
+  }
+}
+
+export async function submitQuizRequest({
+  sid,
+  userPrompt,
+  teachingMaterial
+}: SubmitQuizRequestArgs): Promise<void> {
+  const response = await fetch(`${config.apiBaseUrl}/api/quiz/request`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      sid,
+      user_prompt: userPrompt,
+      teaching_material: teachingMaterial
+    })
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || "Failed to submit quiz request");
   }
 }

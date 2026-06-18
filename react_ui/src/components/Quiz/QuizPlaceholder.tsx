@@ -14,6 +14,8 @@ import { uiClasses } from "../../styles/uiClasses";
 interface QuizPlaceholderProps {
   sid: string | null;
   hasInitiatedChat: boolean;
+  isRequestingQuiz: boolean;
+  onRequestQuiz: () => Promise<void>;
   onContextChange?: (context: QuizSectionContext) => void;
 }
 
@@ -45,7 +47,13 @@ function getQuestionMode(question: QuizQuestion): "single" | "multi" | "descript
   return correctCount > 1 ? "multi" : "single";
 }
 
-export function QuizPlaceholder({ sid, hasInitiatedChat, onContextChange }: QuizPlaceholderProps): JSX.Element {
+export function QuizPlaceholder({
+  sid,
+  hasInitiatedChat,
+  isRequestingQuiz,
+  onRequestQuiz,
+  onContextChange
+}: QuizPlaceholderProps): JSX.Element {
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [answers, setAnswers] = useState<SubmittedAnswer[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -107,6 +115,22 @@ export function QuizPlaceholder({ sid, hasInitiatedChat, onContextChange }: Quiz
     )
   );
 
+  const handleGenerateQuiz = useCallback(async (): Promise<void> => {
+    setError(null);
+    setIsLoading(true);
+
+    try {
+      await onRequestQuiz();
+    } catch (requestError) {
+      const message =
+        requestError instanceof Error
+          ? requestError.message
+          : "Failed to submit quiz request.";
+      setError(message);
+      setIsLoading(false);
+    }
+  }, [onRequestQuiz]);
+
   const handleSubmitAnswers = (): void => {
     console.log("Quiz submit placeholder payload:", answers);
   };
@@ -161,7 +185,12 @@ export function QuizPlaceholder({ sid, hasInitiatedChat, onContextChange }: Quiz
       <h2 className={uiClasses.placeholder.title}>Quiz</h2>
 
       <div className="mt-3">
-        <button type="button" className={uiClasses.input.submit} disabled={!hasInitiatedChat}>
+        <button
+          type="button"
+          className={uiClasses.input.submit}
+          disabled={!hasInitiatedChat || isRequestingQuiz || isLoading}
+          onClick={handleGenerateQuiz}
+        >
           {hasReceivedQuizEvent ? "Refresh Questions" : "Generate Quiz from Chat"}
         </button>
       </div>

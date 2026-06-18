@@ -6,7 +6,7 @@ import { Navigation } from "./components/Navigation";
 import { QuizPlaceholder } from "./components/Quiz/QuizPlaceholder";
 import type { ChatWindowContext } from "./components/Chat/ChatWindow";
 import type { QuizSectionContext } from "./components/Quiz/QuizPlaceholder";
-import { submitChatRequest } from "./services/api";
+import { submitChatRequest, submitQuizRequest } from "./services/api";
 import { getSocket } from "./services/socket";
 import { uiClasses } from "./styles/uiClasses";
 
@@ -21,6 +21,7 @@ interface SectionContexts {
 export default function App(): JSX.Element {
   const [currentSection, setCurrentSection] = useState<Section>("chat");
   const [socketId, setSocketId] = useState<string | null>(null);
+  const [isRequestingQuiz, setIsRequestingQuiz] = useState(false);
   const [sectionContexts, setSectionContexts] = useState<SectionContexts>({
     chat: null,
     quiz: null,
@@ -68,6 +69,46 @@ export default function App(): JSX.Element {
     }));
   }, []);
 
+  const handleQuizRequest = useCallback(async (): Promise<void> => {
+    if (!socketId) {
+      throw new Error("Socket is not connected yet.");
+    }
+
+    const messages = sectionContexts.chat?.messages ?? [];
+    const firstUserMessage = messages.find(
+      (message) => message.role === "user" && message.content.trim().length > 0
+    );
+
+    if (!firstUserMessage) {
+      throw new Error("No user prompt found to generate quiz.");
+    }
+
+    const teachingMaterial = messages
+      .filter(
+        (message) =>
+          message.role === "assistant" &&
+          !message.info &&
+          message.content.trim().length > 0
+      )
+      .map((message) => message.content.trim())
+      .join("\n\n");
+
+    if (teachingMaterial.length === 0) {
+      throw new Error("No teaching material found in chat yet.");
+    }
+
+    setIsRequestingQuiz(true);
+    try {
+      await submitQuizRequest({
+        sid: socketId,
+        userPrompt: firstUserMessage.content.trim(),
+        teachingMaterial
+      });
+    } finally {
+      setIsRequestingQuiz(false);
+    }
+  }, [sectionContexts.chat?.messages, socketId]);
+
   return (
     <main className={uiClasses.layout.page}>
       <div className={uiClasses.layout.container}>
@@ -93,6 +134,8 @@ export default function App(): JSX.Element {
             <QuizPlaceholder
               sid={socketId}
               hasInitiatedChat={hasInitiatedChat}
+              isRequestingQuiz={isRequestingQuiz}
+              onRequestQuiz={handleQuizRequest}
               onContextChange={handleQuizContextChange}
             />
           </div>

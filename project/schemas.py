@@ -230,6 +230,21 @@ class UserRequest(BaseModel):
     sid: str
 
 
+class QuizContentRequest(BaseModel):
+    """Inbound request used by backend to trigger quiz generation."""
+
+    sid: str
+    user_prompt: str
+    teaching_material: str
+
+    @field_validator("sid", "user_prompt", "teaching_material")
+    @classmethod
+    def validate_non_empty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value cannot be empty")
+        return value
+
+
 class StreamTokensEventBody(BaseModel):
     """Kafka payload for the ``stream-tokens`` topic, forwarded to Socket.IO.
 
