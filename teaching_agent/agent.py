@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
 from collections.abc import Callable
 from typing import Any
 
@@ -24,17 +23,18 @@ from teaching_agent.config import (
     get_max_reflection_iterations,
     get_reflection_config,
 )
-from teaching_agent.helpers import build_error_output, build_messages, parse_llm_response
-from teaching_agent.llm_client import call_llm
+from teaching_agent.helpers import (
+    build_error_output,
+    build_messages,
+    parse_llm_response,
+    parse_markdown_response,
+)
+from teaching_agent.llm_client import call_llm, call_llm_stream
 from teaching_agent.prompts import (
     PROMPT_BY_MODE,
     REFLECTION_PROMPT_BY_MODE,
     REVISION_PROMPT_BY_MODE,
 )
-from teaching_agent.config import get_llm_config
-from teaching_agent.helpers import build_error_output, build_messages, parse_markdown_response
-from teaching_agent.llm_client import call_llm, call_llm_stream
-from teaching_agent.prompts import PROMPT_BY_MODE
 from teaching_agent.stream_parser import StreamingFieldExtractor
 from teaching_agent.validators import validate_mermaid
 
