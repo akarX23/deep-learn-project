@@ -13,10 +13,23 @@ from pydantic import ValidationError
 
 from project.schemas import (
     OutputMode,
+    ReflectionCritique,
     TeachingAgentInput,
     TeachingAgentOutput,
     TeachingContent,
     TeachingMetadata,
+)
+from teaching_agent.config import (
+    get_llm_config,
+    get_max_reflection_iterations,
+    get_reflection_config,
+)
+from teaching_agent.helpers import build_error_output, build_messages, parse_llm_response
+from teaching_agent.llm_client import call_llm
+from teaching_agent.prompts import (
+    PROMPT_BY_MODE,
+    REFLECTION_PROMPT_BY_MODE,
+    REVISION_PROMPT_BY_MODE,
 )
 from teaching_agent.config import get_llm_config
 from teaching_agent.helpers import build_error_output, build_messages, parse_markdown_response
@@ -105,7 +118,7 @@ class TeachingAgent:
         if diagram:
             token_callback("diagram", diagram)
 
-        # Step 6: Assemble and return the successful output.
+        # Step 6: Assemble the initial (pre-reflection) content.
         try:
             content = TeachingContent(
                 explanation=parsed["explanation"],
@@ -116,14 +129,53 @@ class TeachingAgent:
         except (ValidationError, KeyError):
             return build_error_output(topic, output_mode, model), ""
 
+        # Step 7: Reflection loop (Phase 3). Runs after the initial content is
+        # assembled, before the final response. N=0 (or any critique/revision
+        # failure) leaves the initial content unchanged. tokens_used accrues over
+        # every LLM call that returns; reflection_iterations counts only fully
+        # completed (critique + revision) cycles.
+        tokens_accumulator = [tokens_used]
+        current_content = content
+        completed_iterations = 0
+
+        try:
+            max_iterations = get_max_reflection_iterations(output_mode)
+        except ValueError:
+            max_iterations = 0  # misconfigured env var -> reflection disabled (no crash)
+
+        if max_iterations > 0:
+            try:
+                reflection_config = get_reflection_config(output_mode)
+            except RuntimeError:
+                reflection_config = None
+
+            if reflection_config is not None:
+                for _ in range(max_iterations):
+                    critique = self._reflect(
+                        current_content, topic, output_mode,
+                        reflection_config, tokens_accumulator,
+                    )
+                    if critique is None:
+                        break
+                    revised = self._revise(
+                        current_content, critique, topic, output_mode,
+                        context, config, tokens_accumulator,
+                    )
+                    if revised is None:
+                        break
+                    current_content = revised
+                    completed_iterations += 1
+
+        # Step 8: Assemble and return the final output.
         return TeachingAgentOutput(
             status="ok",
             output_mode=OutputMode(output_mode),
-            content=content,
+            content=current_content,
             metadata=TeachingMetadata(
                 topic=topic,
-                tokens_used=tokens_used,
+                tokens_used=sum(tokens_accumulator),
                 model=model,
+                reflection_iterations=completed_iterations,
             ),
         ), raw_markdown
 
@@ -158,6 +210,82 @@ class TeachingAgent:
             pass
 
         return _BEGINNER_FALLBACK_DIAGRAM
+
+    def _reflect(
+        self,
+        current_content: TeachingContent,
+        topic: str,
+        output_mode: str,
+        config: Any,
+        tokens_accumulator: list[int],
+    ) -> ReflectionCritique | None:
+        """Critique the current content (Phase 3); None on any failure.
+
+        Any LLM call that returns is counted in tokens_accumulator (SC-013 counts
+        all calls in the lifecycle), even if the response later fails to parse.
+        """
+        prompt = REFLECTION_PROMPT_BY_MODE[output_mode].format(
+            topic=topic,
+            output_mode=output_mode,
+            current_output=current_content.model_dump_json(),
+        )
+        messages = build_messages(prompt)
+        try:
+            raw_response, tokens_used = call_llm(messages, config)
+        except RuntimeError:
+            return None
+        tokens_accumulator.append(tokens_used)
+        try:
+            parsed = parse_llm_response(raw_response, required_fields=())
+        except ValueError:
+            return None
+        try:
+            return ReflectionCritique(**parsed)
+        except ValidationError:
+            return None
+
+    def _revise(
+        self,
+        current_content: TeachingContent,
+        critique: ReflectionCritique,
+        topic: str,
+        output_mode: str,
+        context: str,
+        config: Any,
+        tokens_accumulator: list[int],
+    ) -> TeachingContent | None:
+        """Produce a revised TeachingContent from the critique (Phase 3).
+
+        Uses the generation config (same model + ceiling). Applies the same
+        diagram rules as initial generation. Returns None on any failure.
+        """
+        prompt = REVISION_PROMPT_BY_MODE[output_mode].format(
+            topic=topic,
+            output_mode=output_mode,
+            context=context,
+            current_output=current_content.model_dump_json(),
+            revision_instructions=critique.revision_instructions,
+        )
+        messages = build_messages(prompt)
+        try:
+            raw_response, tokens_used = call_llm(messages, config)
+        except RuntimeError:
+            return None
+        tokens_accumulator.append(tokens_used)
+        try:
+            parsed = parse_llm_response(raw_response)
+        except ValueError:
+            return None
+        diagram = self._resolve_diagram(parsed.get("diagram"), output_mode, messages, config)
+        try:
+            return TeachingContent(
+                explanation=parsed["explanation"],
+                diagram=diagram,
+                notes=parsed["notes"],
+                example=parsed.get("example"),
+            )
+        except (ValidationError, KeyError):
+            return None
 
 
 if __name__ == "__main__":

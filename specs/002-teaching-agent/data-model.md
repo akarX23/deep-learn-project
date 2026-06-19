@@ -38,11 +38,15 @@
 - Description: Audit record for the Teaching Agent response.
 - Fields:
   - `topic`: str — mirrored from input
-  - `tokens_used`: int — actual token consumption reported by the LLM response
+  - `tokens_used`: int — total completion tokens across every LLM call in the request
+    lifecycle (generation + each critique + each revision), per SC-013
   - `model`: str — model identifier used for the generation (e.g., `claude-sonnet-4-6`)
+  - `reflection_iterations`: int — completed reflection cycles; 0 when disabled or none
+    completed; default 0 (Phase 3)
 - Validation rules:
   - `tokens_used` must be >= 0.
   - `model` must be non-empty.
+  - `reflection_iterations` must be >= 0.
 
 ### TeachingAgentOutput
 - Description: Output payload returned by the Teaching Agent to the Planner Agent.
@@ -105,6 +109,27 @@
   with the pattern used by `PlannerTopics.RAG` for the RAG Agent.
 - `TeachingTopics.TEACHING_COMPLETE` and `PlannerTopics.TEACHING` are both included in
   `get_all_topic_names()` so the backend service bootstraps them at startup.
+
+### ReflectionIssue (Phase 3 — internal)
+
+- Description: One weakness flagged by the critique step. Internal to the reflection
+  loop; never serialized into `TeachingAgentOutput` or `TeachingCompletionEvent`.
+- Fields:
+  - `field`: str — one of `explanation`, `diagram`, `notes`, `example`
+  - `issue`: str — the specific weakness
+  - `severity`: str — one of `low`, `medium`, `high`
+
+### ReflectionCritique (Phase 3 — internal)
+
+- Description: Structured self-critique produced between generation and revision.
+  Internal only; defined in `project/schemas.py`.
+- Fields:
+  - `quality_score`: int — holistic score, 1–10
+  - `issues`: list[ReflectionIssue] — may be empty
+  - `revision_instructions`: str — instructions passed to the revision call
+- Validation rules:
+  - `quality_score` within [1, 10].
+  - `revision_instructions` non-empty when `issues` is non-empty.
 
 ## Relationships
 
