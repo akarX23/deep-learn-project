@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class PageExtractionStatus(str, Enum):
@@ -412,6 +412,7 @@ class TeachingMetadata(BaseModel):
     topic: str
     tokens_used: int = Field(ge=0)
     model: str
+    reflection_iterations: int = Field(default=0, ge=0)
 
     @field_validator("model")
     @classmethod
@@ -437,29 +438,38 @@ class TeachingAgentOutput(BaseModel):
         return value
 
 
-# class TeachingCompletionEvent(BaseModel):
-#     """Kafka completion payload published by the Teaching Agent to 'teaching-complete'."""
+# --- Reflection (Phase 3) — internal models -------------------------------
+# ReflectionIssue / ReflectionCritique are used ONLY inside TeachingAgent.run();
+# they are never serialized into TeachingAgentOutput or TeachingCompletionEvent.
 
-#     request_id: str
-#     session_ctx: dict[str, Any]
-#     topic: str
-#     output_mode: str
-#     status: str
-#     content: Optional[TeachingContent] = None
-#     tokens_used: int = Field(default=0, ge=0)
-#     model: str
-#     started_at: str
-#     completed_at: str
-#     duration_ms: int = Field(default=0, ge=0)
-#     errors: List[str] = Field(default_factory=list)
-#     source: str = "teaching-agent"
 
-#     @field_validator("request_id", "topic", "output_mode", "model", "started_at", "completed_at")
-#     @classmethod
-#     def validate_non_empty_fields(cls, value: str) -> str:
-#         if not value.strip():
-#             raise ValueError("value cannot be empty")
-#         return value
+class ReflectionIssue(BaseModel):
+    """A single weakness in the current output, flagged by the critique step."""
+
+    field: str  # explanation | diagram | notes | example
+    issue: str
+    severity: Literal["low", "medium", "high"]
+
+
+class ReflectionCritique(BaseModel):
+    """Internal critique produced by the reflection step (Phase 3).
+
+    Consumed only within TeachingAgent.run() to drive the revision call;
+    not part of any external contract.
+    """
+
+    quality_score: int = Field(ge=1, le=10)
+    issues: List[ReflectionIssue] = Field(default_factory=list)
+    revision_instructions: str = ""
+
+    @model_validator(mode="after")
+    def require_instructions_when_issues_present(self) -> "ReflectionCritique":
+        if self.issues and not self.revision_instructions.strip():
+            raise ValueError(
+                "revision_instructions cannot be empty when issues are present"
+            )
+        return self
+
 
 # ---------------------------------------------------------------------------
 # Quiz Agent schemas

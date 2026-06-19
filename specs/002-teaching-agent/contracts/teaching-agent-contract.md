@@ -111,7 +111,8 @@ Published by the Teaching Agent to topic `"teaching-complete"` after every reque
   "metadata": {
     "topic": "Binary Search Tree",
     "tokens_used": 847,
-    "model": "claude-sonnet-4-6"
+    "model": "claude-sonnet-4-6",
+    "reflection_iterations": 1
   }
 }
 ```
@@ -126,7 +127,8 @@ Published by the Teaching Agent to topic `"teaching-complete"` after every reque
   "metadata": {
     "topic": "Binary Search Tree",
     "tokens_used": 0,
-    "model": "claude-sonnet-4-6"
+    "model": "claude-sonnet-4-6",
+    "reflection_iterations": 0
   }
 }
 ```
@@ -143,8 +145,9 @@ Published by the Teaching Agent to topic `"teaching-complete"` after every reque
 | content.notes           | string            | Non-empty markdown                                             |
 | content.example         | string or null    | Non-null in all three modes; markdown with code or plain prose |
 | metadata.topic          | string            | Mirrors input `topic`                                          |
-| metadata.tokens_used    | integer           | >= 0; actual LLM consumption for this request                  |
+| metadata.tokens_used    | integer           | >= 0; total LLM consumption (generation + critiques + revisions) |
 | metadata.model          | string            | Non-empty model identifier                                     |
+| metadata.reflection_iterations | integer    | >= 0; completed reflection cycles (Phase 3)                    |
 
 ---
 
@@ -166,7 +169,9 @@ Published by the Teaching Agent to topic `"teaching-complete"` after every reque
 | intermediate | 4096 (default; configurable via `TEACHING_INTERMEDIATE_MAX_TOKENS`) |
 | advanced     | 4096 (default; configurable via `TEACHING_ADVANCED_MAX_TOKENS`) |
 
-`metadata.tokens_used` MUST NOT exceed the ceiling for the given mode.
+Each LLM call's completion is capped at the per-mode ceiling (`max_tokens` at the call
+boundary). With reflection enabled, `metadata.tokens_used` aggregates across all calls
+(generation + critiques + revisions) and may exceed a single-call ceiling.
 
 ---
 

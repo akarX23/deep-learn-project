@@ -453,3 +453,56 @@ def _make_completion_event():
         user_level="beginner",
         content="",
     )
+
+
+def test_reflection_enabled_publishes_exactly_once(monkeypatch) -> None:
+    """SC-014: with reflection on (N>=1), one consumed request -> exactly one
+    TeachingCompletionEvent published to "teaching-complete". Reflection lives
+    inside TeachingAgent.run(); it must not change the publish-once contract.
+    (The handler also streams token events to "stream-tokens" — those are separate
+    and not counted here.)
+    """
+    import json
+
+    import teaching_agent.agent as agent_module
+
+    monkeypatch.setenv("TEACHING_MODEL", "test/model")
+    monkeypatch.setenv("TEACHING_MAX_REFLECTION_ITERATIONS", "1")
+    monkeypatch.delenv("TEACHING_BEGINNER_MAX_REFLECTION_ITERATIONS", raising=False)
+
+    # generation streams markdown; critique + revision are JSON via call_llm
+    gen_md = "**Explanation**\ng\n\n**Diagram**\ngraph TD\n  A --> B\n\n**Notes**\nn\n\n**Example**\ne"
+    crit = json.dumps({"quality_score": 6, "issues": [], "revision_instructions": "looks ok"})
+    rev = json.dumps({"explanation": "r", "diagram": "graph TD\n  A --> B", "notes": "n2", "example": "e2"})
+
+    def _gen_stream(messages, config):
+        yield gen_md, 100
+
+    monkeypatch.setattr(agent_module, "call_llm_stream", _gen_stream)
+    scripted = iter([(crit, 50), (rev, 120)])
+    monkeypatch.setattr(agent_module, "call_llm", lambda messages, config: next(scripted))
+
+    sent = []
+
+    class _FakeProducer:
+        def send(self, topic, payload):
+            sent.append((topic, payload))
+
+        def flush(self):
+            pass
+
+    handler = TeachingRequestEventHandler()  # real agent + real publishers
+    handler.process_request(
+        {
+            "request_id": "req-reflect-1",
+            "sid": "s-1",
+            "user_prompt": "What is a loop?",
+            "user_level": "beginner",
+            "rag_compiled": "",
+        },
+        producer=_FakeProducer(),
+    )
+
+    completions = [payload for topic, payload in sent if topic == "teaching-complete"]
+    assert len(completions) == 1                       # exactly one completion event (SC-014)
+    assert completions[0]["request_id"] == "req-reflect-1"

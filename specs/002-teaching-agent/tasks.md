@@ -3,13 +3,13 @@
 **Input**: Design documents from `/specs/002-teaching-agent/`
 **Prerequisites**: plan.md ✓, spec.md ✓, research.md ✓, data-model.md ✓, contracts/ ✓, quickstart.md ✓
 
-**Organization**: Phase 1 (core pipeline, complete) + Phase 2 (Kafka integration, open).
-All Phase 2 tasks are reviewed and approved individually before implementation.
+**Organization**: Phase 1 (core pipeline) + Phase 2 (Kafka integration) + Phase 3 (reflection layer).
+All Phase 2 and Phase 3 tasks are reviewed and approved individually before implementation.
 
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel (different files, no blocking dependencies)
-- **[Story]**: User story from spec.md (US1–US4 = core pipeline; US5 = Kafka integration)
+- **[Story]**: User story from spec.md (US1–US4 = core pipeline; US5 = Kafka integration; US6 = reflection)
 
 ---
 
@@ -134,16 +134,16 @@ Backend service will auto-bootstrap `"teaching"` and `"teaching-complete"` on ne
 - [x] T021 Create `teaching_agent/handlers.py`:
       - `TeachingRequestEventHandler` class with injectable dependencies:
         `agent_factory` (default: `TeachingAgent`), `publisher` (default:
-        `publish_teaching_complete`)
+        `publish_teaching_complete`) — no `clock` (completion event has no timing fields)
       - `parse_event(payload: dict) → TeachingRequestEvent` — validates inbound payload
       - `build_completion_event(event, result) → TeachingCompletionEvent`
-        — maps agent output to new completion schema: `content = result.content.model_dump_json()
-        if result.content else ""`; passes through `request_id`, `sid`, `user_level`
+        — copies `request_id`, `sid`, `user_level` from the event; serializes
+        `result.content` to JSON (`""` when content is None)
       - `process_request(payload: dict, producer=None) → TeachingCompletionEvent | None`:
-        parse event → map `user_prompt→topic`, `user_level→output_mode`, `rag_compiled→context`
-        → `agent.run()` → build completion event → publish; on parse failure: log error
-        and return None (no publish); on agent failure: still publish error completion
-        event with `content: ""` (always-publish rule)
+        parse event → map `user_prompt → topic`, `user_level → output_mode`,
+        `rag_compiled → context` → `agent.run()` → build completion event → publish;
+        on parse failure: log error and return None (no publish);
+        on agent failure: still publish completion event with empty `content` (always-publish rule)
       - `_extract_request_id(payload: dict) → str` — returns `"unknown"` if absent
 
 **Checkpoint**: Unit-testable without Kafka — `TeachingRequestEventHandler` instantiates with fake `agent_factory` and `publisher` lambda
@@ -236,11 +236,14 @@ Backend service will auto-bootstrap `"teaching"` and `"teaching-complete"` on ne
       - effort: `TEACHING_{MODE}_EFFORT` → no fallback (optional; `None` when unset)
       No hardcoded values remain in config.py; all defaults resolve from env/config files only.
 
-- [x] T030 Update `.env.local` — add per-mode env var stubs (commented out) under Teaching Agent section:
+- [~] T030 Update `.env.local` — add per-mode env var stubs (commented out) under Teaching Agent section:
       `TEACHING_BEGINNER_MODEL`, `TEACHING_BEGINNER_API_KEY`, `TEACHING_BEGINNER_MAX_TOKENS`,
       same for `INTERMEDIATE` and `ADVANCED`; shared `TEACHING_MODEL` / `TEACHING_API_KEY`
       remain as the active fallback defaults. Stubs are commented out so they act as
       in-place documentation without overriding the shared fallbacks.
+      NOTE: documentation-only — these per-mode stubs are NOT currently present in `.env.local`;
+      `get_llm_config()` resolves them at runtime regardless, and the shared `TEACHING_*`
+      fallbacks are the active config. Re-add the stubs only if per-mode tuning is needed.
 
 - [x] T031 Update `CLAUDE.md` env var table — add per-mode override rows
       (`TEACHING_{MODE}_MODEL`, `TEACHING_{MODE}_API_KEY`, `TEACHING_{MODE}_MAX_TOKENS`)
@@ -259,6 +262,15 @@ Backend service will auto-bootstrap `"teaching"` and `"teaching-complete"` on ne
       section: `TEACHING_BEGINNER_TEMPERATURE`, `TEACHING_INTERMEDIATE_TEMPERATURE`,
       `TEACHING_ADVANCED_TEMPERATURE`, `TEACHING_BEGINNER_EFFORT`, `TEACHING_INTERMEDIATE_EFFORT`,
       `TEACHING_ADVANCED_EFFORT`; variables go in `.env.local` (not `.env.local.example`)
+      NOTE: documentation-only — these stubs are NOT currently present in `.env.local`.
+      `get_llm_config()` reads `TEACHING_{MODE}_TEMPERATURE` (fallback `TEACHING_TEMPERATURE`,
+      default 0.7) and `TEACHING_{MODE}_EFFORT` (optional, `None` when unset) at runtime
+      regardless. Re-add the stubs only if per-mode tuning is needed.
+
+- [x] T034 Remove the dead commented-out `TeachingCompletionEvent` block in
+      `project/schemas.py` (Teaching Agent section, ~lines 411–433). It was superseded by the
+      active planner-aligned `TeachingCompletionEvent` in the Planner Agent section and is now
+      obsolete. Constitution Principle V — remove obsolete code paths.
 
 - [x] T034 Update `teaching_agent/handlers.py` for new `TeachingRequestEvent` /
       `TeachingCompletionEvent` schema (post-master-merge Planner Agent contract change):
@@ -462,7 +474,9 @@ registered in `project/topics.py`; worker boots and processes messages end-to-en
 - **P2-C (T021)**: Depends on P2-A + P2-B (needs Kafka types and event schemas)
 - **P2-D (T022)**: Depends on P2-B + P2-C (needs kafka.py and handlers.py)
 - **P2-E (T023–T024)**: Depends on P2-B + P2-C + P2-D (tests all three files)
-- **P2-F (T025–T027)**: Depends on P2-E completion
+- **P2-F (T025–T034)**: Depends on P2-E completion
+- **Phase 3 (T035–T053)**: P3-A→P3-E built per the Phase 3 Dependencies block;
+  P3-F (T047–T053) are doc-reconciliation / added-coverage tasks, mostly independent
 
 ### Within P2-A
 
@@ -478,6 +492,7 @@ T021 → [checkpoint]
 T022 → [checkpoint]
 T023 → T024 → [checkpoint]
 T025 → T026 → T027
+(Phase 3) T035 → T036 → T037/T038 → T039/T040 → T041 → T042 → T043–T053
 ```
 
 ---
