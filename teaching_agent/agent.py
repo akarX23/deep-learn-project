@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
+from collections.abc import Callable
 from typing import Any
 
 from pydantic import ValidationError
@@ -29,6 +31,11 @@ from teaching_agent.prompts import (
     REFLECTION_PROMPT_BY_MODE,
     REVISION_PROMPT_BY_MODE,
 )
+from teaching_agent.config import get_llm_config
+from teaching_agent.helpers import build_error_output, build_messages, parse_markdown_response
+from teaching_agent.llm_client import call_llm, call_llm_stream
+from teaching_agent.prompts import PROMPT_BY_MODE
+from teaching_agent.stream_parser import StreamingFieldExtractor
 from teaching_agent.validators import validate_mermaid
 
 # Maximum characters allowed in the context field before truncation.
@@ -51,8 +58,14 @@ class TeachingAgent:
     No unhandled exceptions propagate to the caller.
     """
 
-    def run(self, raw_input: dict[str, Any]) -> TeachingAgentOutput:
-        """Execute the teaching pipeline for a single request."""
+    def run(
+        self, raw_input: dict[str, Any], token_callback: Callable[[str, str], None]
+    ) -> tuple[TeachingAgentOutput, str]:
+        """Execute the teaching pipeline for a single request.
+
+        Returns (TeachingAgentOutput, raw_markdown). raw_markdown is the complete
+        LLM response string; empty string on any error path.
+        """
 
         # Step 1: Validate input. On failure, return error before any LLM call.
         try:
@@ -63,7 +76,7 @@ class TeachingAgent:
             raw_mode = raw_input.get("output_mode", "") if isinstance(raw_input, dict) else ""
             safe_mode = raw_mode if raw_mode in ("beginner", "intermediate", "advanced") else "beginner"
             model = os.getenv("TEACHING_MODEL", "unknown")
-            return build_error_output(str(topic), safe_mode, model)
+            return build_error_output(str(topic), safe_mode, model), ""
 
         topic = agent_input.topic
         output_mode = agent_input.output_mode.value
@@ -73,7 +86,7 @@ class TeachingAgent:
         try:
             config = get_llm_config(output_mode)
         except RuntimeError:
-            return build_error_output(topic, output_mode, os.getenv("TEACHING_MODEL", "unknown"))
+            return build_error_output(topic, output_mode, os.getenv("TEACHING_MODEL", "unknown")), ""
 
         model = config.model
 
@@ -81,19 +94,29 @@ class TeachingAgent:
         prompt = PROMPT_BY_MODE[output_mode].format(topic=topic, context=context)
         messages = build_messages(prompt)
 
-        # Step 4: Call LLM and parse JSON response.
+        # Step 4: Stream LLM response through field extractor.
+        extractor = StreamingFieldExtractor(token_callback)
         try:
-            raw_response, tokens_used = call_llm(messages, config)
+            tokens_used = 0
+            for delta, chunk_tokens in call_llm_stream(messages, config):
+                extractor.feed(delta)
+                if chunk_tokens:
+                    tokens_used = chunk_tokens
         except RuntimeError:
-            return build_error_output(topic, output_mode, model)
+            return build_error_output(topic, output_mode, model), ""
+
+        raw_markdown, diagram_raw = extractor.finalize()
 
         try:
-            parsed = parse_llm_response(raw_response)
+            parsed = parse_markdown_response(raw_markdown)
         except ValueError:
-            return build_error_output(topic, output_mode, model)
+            return build_error_output(topic, output_mode, model), ""
 
         # Step 5: Validate the Mermaid diagram and apply mode-specific rules.
-        diagram = self._resolve_diagram(parsed.get("diagram"), output_mode, messages, config)
+        # Diagram is validated (and retried if needed) before being sent to the frontend.
+        diagram = self._resolve_diagram(diagram_raw, output_mode, messages, config)
+        if diagram:
+            token_callback("diagram", diagram)
 
         # Step 6: Assemble the initial (pre-reflection) content.
         try:
@@ -104,7 +127,7 @@ class TeachingAgent:
                 example=parsed.get("example"),
             )
         except (ValidationError, KeyError):
-            return build_error_output(topic, output_mode, model)
+            return build_error_output(topic, output_mode, model), ""
 
         # Step 7: Reflection loop (Phase 3). Runs after the initial content is
         # assembled, before the final response. N=0 (or any critique/revision
@@ -154,7 +177,7 @@ class TeachingAgent:
                 model=model,
                 reflection_iterations=completed_iterations,
             ),
-        )
+        ), raw_markdown
 
     def _resolve_diagram(
         self,
@@ -179,7 +202,7 @@ class TeachingAgent:
         # Beginner mode: diagram is required — attempt one retry.
         try:
             raw_retry, _ = call_llm(messages, config)
-            parsed_retry = parse_llm_response(raw_retry)
+            parsed_retry = parse_markdown_response(raw_retry)
             diagram_retry = parsed_retry.get("diagram")
             if diagram_retry and validate_mermaid(diagram_retry):
                 return diagram_retry
@@ -273,5 +296,5 @@ if __name__ == "__main__":
     with open(args.input, encoding="utf-8") as fh:
         raw = json.load(fh)
 
-    result = TeachingAgent().run(raw)
+    result, _ = TeachingAgent().run(raw, lambda f, t: None)
     print(result.model_dump_json(indent=2))

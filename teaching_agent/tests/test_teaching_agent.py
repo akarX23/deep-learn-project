@@ -6,16 +6,15 @@ Agent integration tests make real LLM API calls using the TEACHING_MODEL from .e
 
 from __future__ import annotations
 
-import json
-
 import pytest
 from pydantic import ValidationError
 
-import teaching_agent.agent as agent_module
 from project.schemas import OutputMode, TeachingAgentInput, TeachingAgentOutput
 from teaching_agent.agent import TeachingAgent
-from teaching_agent.helpers import parse_llm_response
+from teaching_agent.helpers import parse_markdown_response
 from teaching_agent.validators import validate_mermaid
+
+_noop = lambda f, t: None  # no-op token callback for all integration tests
 
 
 # ---------------------------------------------------------------------------
@@ -84,65 +83,71 @@ class TestValidateMermaid:
 
 
 # ---------------------------------------------------------------------------
-# Helper: parse_llm_response
+# Helper: parse_markdown_response
 # ---------------------------------------------------------------------------
 
 
-class TestParseLlmResponse:
-    def test_clean_json(self):
-        raw = json.dumps({"explanation": "An explanation.", "notes": "A note."})
-        result = parse_llm_response(raw)
-        assert result["explanation"] == "An explanation."
-        assert result["notes"] == "A note."
+class TestParseMarkdownResponse:
+    def test_all_four_sections(self):
+        raw = (
+            "**Explanation**\nA clear explanation.\n\n"
+            "**Diagram**\ngraph TD\n  A --> B\n\n"
+            "**Notes**\n- Key point\n\n"
+            "**Example**\nHere is an example."
+        )
+        result = parse_markdown_response(raw)
+        assert result["explanation"] == "A clear explanation."
+        assert "graph TD" in result["diagram"]
+        assert result["notes"] == "- Key point"
+        assert result["example"] == "Here is an example."
 
-    def test_fenced_json_with_language_tag(self):
-        inner = {"explanation": "An explanation.", "notes": "A note."}
-        raw = "```json\n" + json.dumps(inner) + "\n```"
-        result = parse_llm_response(raw)
-        assert result["notes"] == "A note."
+    def test_diagram_absent_returns_none(self):
+        raw = "**Explanation**\nA clear explanation.\n\n**Notes**\n- Key point"
+        result = parse_markdown_response(raw)
+        assert result["diagram"] is None
 
-    def test_fenced_json_without_language_tag(self):
-        inner = {"explanation": "An explanation.", "notes": "A note."}
-        raw = "```\n" + json.dumps(inner) + "\n```"
-        result = parse_llm_response(raw)
-        assert result["explanation"] == "An explanation."
+    def test_example_absent_returns_none(self):
+        raw = "**Explanation**\nA clear explanation.\n\n**Notes**\n- Key point"
+        result = parse_markdown_response(raw)
+        assert result["example"] is None
 
-    def test_code_fence_inside_json_string_not_stripped(self):
-        # A ```python block inside the 'example' field must NOT trigger fence-stripping
-        raw = json.dumps({
-            "explanation": "Explanation here.",
-            "notes": "Notes here.",
-            "example": "```python\nprint('hello')\n```",
-        })
-        result = parse_llm_response(raw)
+    def test_code_fence_inside_example_preserved(self):
+        raw = (
+            "**Explanation**\nExplanation here.\n\n"
+            "**Notes**\nNotes here.\n\n"
+            "**Example**\n```python\nprint('hello')\n```"
+        )
+        result = parse_markdown_response(raw)
         assert "```python" in result["example"]
 
     def test_empty_string_raises(self):
         with pytest.raises(ValueError, match="empty"):
-            parse_llm_response("")
+            parse_markdown_response("")
 
     def test_whitespace_only_raises(self):
         with pytest.raises(ValueError, match="empty"):
-            parse_llm_response("   ")
+            parse_markdown_response("   ")
 
     def test_missing_explanation_raises(self):
-        raw = json.dumps({"notes": "A note."})
+        raw = "**Notes**\nSome notes.\n\n**Example**\nSome example."
         with pytest.raises(ValueError, match="explanation"):
-            parse_llm_response(raw)
+            parse_markdown_response(raw)
 
     def test_missing_notes_raises(self):
-        raw = json.dumps({"explanation": "An explanation."})
+        raw = "**Explanation**\nSome explanation.\n\n**Example**\nSome example."
         with pytest.raises(ValueError, match="notes"):
-            parse_llm_response(raw)
+            parse_markdown_response(raw)
 
     def test_empty_explanation_raises(self):
-        raw = json.dumps({"explanation": "   ", "notes": "ok"})
+        raw = "**Explanation**\n   \n\n**Notes**\nSome notes."
         with pytest.raises(ValueError, match="explanation"):
-            parse_llm_response(raw)
+            parse_markdown_response(raw)
 
-    def test_non_object_json_raises(self):
-        with pytest.raises(ValueError, match="not an object"):
-            parse_llm_response('["list", "not", "object"]')
+    def test_case_insensitive_headers(self):
+        raw = "**explanation**\nA clear explanation.\n\n**NOTES**\n- Key point"
+        result = parse_markdown_response(raw)
+        assert result["explanation"] == "A clear explanation."
+        assert result["notes"] == "- Key point"
 
 
 # ---------------------------------------------------------------------------
@@ -152,7 +157,8 @@ class TestParseLlmResponse:
 
 class TestTeachingAgentRun:
     def test_beginner_success(self):
-        result = TeachingAgent().run({"topic": "What is a loop?", "output_mode": "beginner"})
+        result, raw_markdown = TeachingAgent().run(
+            {"topic": "What is a loop?", "output_mode": "beginner"}, _noop)
         assert result.status == "ok"
         assert result.output_mode == OutputMode.BEGINNER
         assert result.content is not None
@@ -160,9 +166,11 @@ class TestTeachingAgentRun:
         assert result.content.notes
         assert result.content.diagram is not None  # required in beginner mode
         assert result.metadata.tokens_used > 0
+        assert "**Explanation**" in raw_markdown
 
     def test_intermediate_success(self):
-        result = TeachingAgent().run({"topic": "Recursion", "output_mode": "intermediate"})
+        result, raw_markdown = TeachingAgent().run(
+            {"topic": "Recursion", "output_mode": "intermediate"}, _noop)
         assert result.status == "ok"
         assert result.output_mode == OutputMode.INTERMEDIATE
         assert result.content is not None
@@ -170,7 +178,8 @@ class TestTeachingAgentRun:
         assert result.content.notes
 
     def test_advanced_success(self):
-        result = TeachingAgent().run({"topic": "Concurrency", "output_mode": "advanced"})
+        result, raw_markdown = TeachingAgent().run(
+            {"topic": "Concurrency", "output_mode": "advanced"}, _noop)
         assert result.status == "ok"
         assert result.output_mode == OutputMode.ADVANCED
         assert result.content is not None
@@ -179,42 +188,50 @@ class TestTeachingAgentRun:
 
     def test_invalid_input_empty_topic_returns_error(self):
         # Fails at Pydantic validation — no LLM call made
-        result = TeachingAgent().run({"topic": "", "output_mode": "beginner"})
+        result, raw_markdown = TeachingAgent().run(
+            {"topic": "", "output_mode": "beginner"}, _noop)
         assert result.status == "error"
         assert result.content is None
         assert result.metadata.tokens_used == 0
+        assert raw_markdown == ""
 
     def test_invalid_input_missing_topic_returns_error(self):
         # Fails at Pydantic validation — no LLM call made
-        result = TeachingAgent().run({"output_mode": "beginner"})
+        result, raw_markdown = TeachingAgent().run(
+            {"output_mode": "beginner"}, _noop)
         assert result.status == "error"
         assert result.content is None
+        assert raw_markdown == ""
 
     def test_llm_failure_returns_error(self, monkeypatch):
         # Force LiteLLM to fail by pointing at a nonexistent model
         monkeypatch.setenv("TEACHING_MODEL", "openai/nonexistent-model-xyz-9999")
-        result = TeachingAgent().run({"topic": "Loops", "output_mode": "beginner"})
+        result, raw_markdown = TeachingAgent().run(
+            {"topic": "Loops", "output_mode": "beginner"}, _noop)
         assert result.status == "error"
         assert result.content is None
+        assert raw_markdown == ""
 
     def test_large_context_handled_without_error(self):
         # 5000-char context is silently truncated to 4000 before the LLM call
-        result = TeachingAgent().run({
+        result, raw_markdown = TeachingAgent().run({
             "topic": "What is a variable?",
             "output_mode": "beginner",
             "context": "x" * 5000,
-        })
+        }, _noop)
         assert result.status == "ok"
         assert result.content is not None
 
     def test_output_is_valid_pydantic_model(self):
-        result = TeachingAgent().run({"topic": "Binary Search", "output_mode": "intermediate"})
+        result, _ = TeachingAgent().run(
+            {"topic": "Binary Search", "output_mode": "intermediate"}, _noop)
         assert isinstance(result, TeachingAgentOutput)
         dumped = result.model_dump_json()
         assert "status" in dumped
 
     def test_metadata_reflects_correct_topic_and_model(self):
-        result = TeachingAgent().run({"topic": "Binary Search", "output_mode": "advanced"})
+        result, _ = TeachingAgent().run(
+            {"topic": "Binary Search", "output_mode": "advanced"}, _noop)
         assert result.metadata.topic == "Binary Search"
         assert result.metadata.model  # non-empty model string
 

@@ -68,9 +68,8 @@ All Phase 2 and Phase 3 tasks are reviewed and approved individually before impl
 
 ---
 
-## Phase 2: Kafka Integration (US5) — Open
+## Phase 2: Kafka Integration (US5) — Complete ✅
 
-**Each task is reviewed and approved before implementation.**
 **All Kafka dependencies are injectable — no real Kafka connection required in tests.**
 
 ---
@@ -90,17 +89,16 @@ Backend service will auto-bootstrap `"teaching"` and `"teaching-complete"` on ne
       returning `[PlannerTopics.TEACHING, TeachingTopics.TEACHING_COMPLETE]` — used by
       `TeachingWorker.start()` for startup topic presence check (mirrors `get_rag_topic_names()`)
 
-- [x] T018 Add `TeachingRequestEvent` to `project/schemas.py` (Planner Agent section, shared with the Planner):
-      fields: `request_id` (str, required, non-empty), `sid` (str, session identifier),
-      `user_prompt` (str, the topic), `user_level` (str, the learner level),
-      `rag_compiled` (str, RAG-compiled context, default `""`);
-      the worker maps these onto the core pipeline's `topic` / `output_mode` / `context` (see T021)
+- [x] T018 Add `TeachingRequestEvent` to `project/schemas.py` (Teaching Agent section):
+      fields: `request_id` (str, required, non-empty), `user_prompt` (str),
+      `user_level` (str), `rag_compiled` (str, default `""`), `sid` (str, non-empty
+      Socket.IO session ID for frontend WebSocket routing);
+      no validators beyond Pydantic field types
 
-- [x] T019 Add `TeachingCompletionEvent` to `project/schemas.py` (Planner Agent section, shared with the Planner):
-      fields: `request_id` (str, non-empty), `sid` (str), `user_level` (str, non-empty),
-      `content` (str, default `""` — the serialized `TeachingContent` JSON, or `""` on error);
-      validators: `request_id` / `user_level` non-empty. No `status`, timing, `tokens_used`,
-      `model`, `errors`, or `source` fields — the completion event carries content only
+- [x] T019 Add `TeachingCompletionEvent` to `project/schemas.py` (Teaching Agent section):
+      fields: `request_id` (str), `sid` (str), `user_level` (str),
+      `content` (str, default `""`);
+      validators: `request_id` and `user_level` non-empty
 
 **Checkpoint**: `python -c "from project.topics import get_all_topic_names; assert 'teaching' in get_all_topic_names()"` passes
 
@@ -260,7 +258,7 @@ Backend service will auto-bootstrap `"teaching"` and `"teaching-complete"` on ne
         `"opus-4-6"`, pass `output_config={"effort": config.effort}` as a kwarg to
         `litellm.completion()`; silently skip for all other models
 
-- [~] T033 Update `.env.local` — add per-mode temperature and effort stubs under Teaching Agent
+- [x] T033 Update `.env.local` — add per-mode temperature and effort stubs under Teaching Agent
       section: `TEACHING_BEGINNER_TEMPERATURE`, `TEACHING_INTERMEDIATE_TEMPERATURE`,
       `TEACHING_ADVANCED_TEMPERATURE`, `TEACHING_BEGINNER_EFFORT`, `TEACHING_INTERMEDIATE_EFFORT`,
       `TEACHING_ADVANCED_EFFORT`; variables go in `.env.local` (not `.env.local.example`)
@@ -274,326 +272,195 @@ Backend service will auto-bootstrap `"teaching"` and `"teaching-complete"` on ne
       active planner-aligned `TeachingCompletionEvent` in the Planner Agent section and is now
       obsolete. Constitution Principle V — remove obsolete code paths.
 
+- [x] T034 Update `teaching_agent/handlers.py` for new `TeachingRequestEvent` /
+      `TeachingCompletionEvent` schema (post-master-merge Planner Agent contract change):
+      remove `clock` / timing fields; map `user_prompt→topic`, `user_level→output_mode`,
+      `rag_compiled→context` for `agent.run()`; build completion event with `sid`,
+      `user_level`, `content` (JSON string). Update `test_kafka_integration.py`: all 7 tests
+      updated for new schema fields; old field usage commented out (not deleted) for reference.
+
 **Checkpoint**: All Phase 2 tests pass; `"teaching"` and `"teaching-complete"` topics
 registered in `project/topics.py`; worker boots and processes messages end-to-end
 
 ---
 
-## Phase 3: Reflection Layer — Open
+---
 
-**Spec gate**: Phase 3 spec items (User Story 6, FR-029–FR-037, SC-011–SC-014) are a
-PROPOSAL pending team sign-off — see the proposal section in `spec.md`. Do not implement
-until ratified.
-**Phase gate**: All Phase 2 tasks (T017–T034) complete before starting Phase 3.
-**Each task reviewed and approved individually before implementation.**
-**N=0 env var setting restores exact Phase 1 behavior at any time.**
-**Task numbering**: Phase 3 starts at T035 (T034 is the Phase 2 schema-cleanup task).
+## Phase 4: Token Streaming (US6) — Complete ✅
+
+**Goal**: Stream LLM output tokens field-by-field to the frontend via `"stream-tokens"` Kafka topic in real time, while continuing to deliver the complete response via `"teaching-complete"`. LLM output format switches from JSON to markdown with bold section headers.
+
+**All Phase 4 tasks require explicit user approval before implementation. One task at a time.**
 
 ---
 
-### P3-A: Schema & Config (Blocking Prerequisites)
+### P4-A: LLM Output Format Change (Blocking Prerequisite)
 
-- [x] T035 Add `ReflectionCritique` to `project/schemas.py` (Teaching Agent section,
-      internal models):
-      fields: `quality_score` (int, ge=1, le=10), `issues` (list of dicts with keys
-      `field: str`, `issue: str`, `severity: Literal["low","medium","high"]`),
-      `revision_instructions` (str);
-      validator: `revision_instructions` non-empty if `issues` is non-empty.
-      Add `reflection_iterations` (int, ge=0, default=0) field to `TeachingMetadata`.
-      **Note**: `ReflectionCritique` is internal — it MUST NOT appear in `TeachingAgentOutput`
-      or `TeachingCompletionEvent`.
+**Purpose**: Switch LLM from JSON mode to markdown bold-header format. All downstream Phase 4 tasks depend on this output format.
 
-- [x] T036 Update `teaching_agent/config.py`:
-      - Keep `LLMConfig` generic — NO new fields (T047-reconciled design); reflection
-        settings are produced by the helper functions below
-      - Add `get_reflection_config(output_mode: str) → LLMConfig` function:
-        - `model`: `TEACHING_{MODE}_REFLECTION_MODEL` → `TEACHING_REFLECTION_MODEL`
-          → `TEACHING_MODEL` (required if nothing else set)
-        - `api_key`: `TEACHING_{MODE}_API_KEY` → `TEACHING_API_KEY` (same as generation)
-        - `max_tokens`: `TEACHING_REFLECTION_MAX_TOKENS` → default 512
-        - `temperature`: same resolution as generation (no separate reflection temperature)
-        - `effort`: `None` (reflection calls do not use effort config)
-      - Add `get_max_reflection_iterations(output_mode: str) → int` function:
-        resolves `TEACHING_{MODE}_MAX_REFLECTION_ITERATIONS` →
-        `TEACHING_MAX_REFLECTION_ITERATIONS` → default 1; clamps to ≥ 0
+- [x] T035 Update `teaching_agent/prompts.py`:
+      Replace JSON output instruction with markdown bold-header format in all 3 prompts.
+      Each prompt now instructs the LLM to use `**Explanation**`, `**Diagram**`, `**Notes**`,
+      `**Example**` as section headers with a blank line before each header.
+      Remove the "Return ONLY a JSON object" instruction and JSON template from each prompt.
+      Keep all per-mode content requirements (5-part structure, diagram rules, etc.) unchanged.
 
-      **Checkpoint**: `get_reflection_config("beginner")` and
-      `get_max_reflection_iterations("advanced")` return correctly with env vars set.
+- [x] T036 Update `teaching_agent/llm_client.py`:
+      - Remove `response_format={"type": "json_object"}` from `call_llm()` kwargs
+      - Add `call_llm_stream(messages, config) → Iterator[tuple[str, int]]`:
+        uses `stream=True`; yields `(delta: str, tokens_used: int)` tuples;
+        `tokens_used` is `0` for all chunks except the last (populated from `usage.completion_tokens`
+        in the final chunk via `stream_options={"include_usage": True}`);
+        wraps all LiteLLM exceptions as `RuntimeError`
 
----
+- [x] T037 Update `teaching_agent/helpers.py`:
+      - Remove `parse_llm_response()`, `_JSON_FENCE_OPEN_RE`, and `import json`
+      - Add `parse_markdown_response(raw: str) → dict`:
+        splits on `**SectionName**` bold headers (case-insensitive);
+        returns dict with keys `explanation`, `diagram`, `notes`, `example`;
+        raises `ValueError` if `explanation` or `notes` sections are absent or empty;
+        `diagram` and `example` default to `None` if section absent or empty
+      - `build_messages()` and `build_error_output()` unchanged
 
-### P3-B: Prompt Templates
-
-- [x] T037 [P] Add `REFLECTION_PROMPT_BY_MODE` to `teaching_agent/prompts.py`:
-      Three constants (`BEGINNER_REFLECTION_PROMPT`, `INTERMEDIATE_REFLECTION_PROMPT`,
-      `ADVANCED_REFLECTION_PROMPT`) + `REFLECTION_PROMPT_BY_MODE` dict.
-      Each template:
-      - Placeholders: `{topic}`, `{output_mode}`, `{current_output}` (TeachingContent as JSON)
-      - Instructs the LLM to return ONLY a JSON object with:
-        `quality_score` (int 1–10), `issues` (list of `{field, issue, severity}`),
-        `revision_instructions` (string: what to fix, direct instructions for the revision call)
-      - Mode-specific critique focus:
-        - beginner: clarity of analogy, jargon level, diagram simplicity, example accessibility
-        - intermediate: technical accuracy, code correctness, trade-off completeness
-        - advanced: formal correctness, edge-case coverage, depth of internals discussion
-      - Same JSON-only rules as generation prompts (no markdown fences, escape newlines)
-
-- [x] T038 [P] Add `REVISION_PROMPT_BY_MODE` to `teaching_agent/prompts.py`:
-      Three constants (`BEGINNER_REVISION_PROMPT`, `INTERMEDIATE_REVISION_PROMPT`,
-      `ADVANCED_REVISION_PROMPT`) + `REVISION_PROMPT_BY_MODE` dict.
-      Each template:
-      - Placeholders: `{topic}`, `{output_mode}`, `{context}`, `{current_output}`,
-        `{revision_instructions}`
-      - Instructs the LLM to return a JSON object with the same structure as the generation
-        prompt response: `explanation`, `diagram`, `notes`, `example`
-      - Emphasises: "Improve the following output based on the revision instructions.
-        Preserve what works. Do not reinvent from scratch."
-      - Mode-specific rules mirror the corresponding generation prompt (beginner diagram
-        required, intermediate/advanced diagram conditional, etc.)
-
-      **Checkpoint**: Both dicts have keys `"beginner"`, `"intermediate"`, `"advanced"`.
+**Checkpoint**: `python -m pytest teaching_agent/tests/test_teaching_agent.py -q -k "parse"` — all parse tests pass with updated markdown format
 
 ---
 
-### P3-C: Agent Logic
+### P4-B: Streaming Field Extractor
 
-- [x] T039 Add `_reflect()` method to `TeachingAgent` in `teaching_agent/agent.py`:
-      ```
-      _reflect(
-          current_content: TeachingContent,
-          topic: str,
-          output_mode: str,
-          config: LLMConfig,          # reflection config from get_reflection_config()
-          tokens_accumulator: list[int]  # mutable; append critique tokens_used here
-      ) → ReflectionCritique | None
-      ```
-      - Serialise `current_content` to JSON string
-      - Render `REFLECTION_PROMPT_BY_MODE[output_mode]` with `{topic}`, `{output_mode}`,
-        `{current_output}`
-      - Call `call_llm(messages, config)` — wrap in try/except RuntimeError → return None
-      - Parse response with `parse_llm_response()` — wrap in try/except ValueError → return None
-      - Validate: `quality_score` is int 1–10, `revision_instructions` is non-empty string;
-        on validation failure → return None
-      - Append `tokens_used` from this call to `tokens_accumulator`
-      - Return `ReflectionCritique(**parsed)`
+**Purpose**: New component that processes raw LLM delta chunks and emits field-keyed token events.
 
-- [x] T040 Add `_revise()` method to `TeachingAgent` in `teaching_agent/agent.py`:
-      ```
-      _revise(
-          current_content: TeachingContent,
-          critique: ReflectionCritique,
-          topic: str,
-          output_mode: str,
-          context: str,
-          config: LLMConfig,          # generation config (same model and ceiling as initial)
-          tokens_accumulator: list[int]
-      ) → TeachingContent | None
-      ```
-      - Serialise `current_content` to JSON string
-      - Render `REVISION_PROMPT_BY_MODE[output_mode]` with all placeholders
-      - Call `call_llm(messages, config)` — wrap in try/except RuntimeError → return None
-      - Parse with `parse_llm_response()` — wrap in try/except ValueError → return None
-      - Validate and resolve diagram via `_resolve_diagram()` (same rules as initial generation)
-      - Assemble revised `TeachingContent` — wrap in try/except (ValidationError, KeyError)
-        → return None
-      - Append `tokens_used` from this call to `tokens_accumulator`
-      - Return revised `TeachingContent`
+- [x] T038 Create `teaching_agent/stream_parser.py`:
+      - `StreamingFieldExtractor` class:
+        - `__init__(self, token_callback: Callable[[str, str], None])`:
+          `token_callback(field, token)` called for each token event
+        - `feed(self, chunk: str) → None`:
+          appends chunk to internal buffer; detects `**SectionName**` bold headers;
+          on header detection: transitions state; for previous completed section that
+          was being buffered (diagram): calls `token_callback("diagram", buffer)`;
+          for streaming sections (explanation, notes, example): calls
+          `token_callback(field, chunk)` immediately for each chunk
+        - `finalize(self) → str`:
+          flushes any remaining buffered content (diagram if stream ended without
+          another header following); returns the complete raw markdown buffer
+          (all chunks concatenated, including headers) for use as `TeachingCompletionEvent.content`
+        - Internal state: `_current_field`, `_diagram_buffer`, `_raw_buffer`, `_chunk_buffer`
+          (small lookahead for split headers)
+      - Sections detected: `**Explanation**`, `**Diagram**`, `**Notes**`, `**Example**`
+        (case-insensitive match on the header line)
 
-- [x] T041 Update `TeachingAgent.run()` in `teaching_agent/agent.py` to orchestrate the
-      reflection loop:
-      - After step 6 (assembling the initial content), run the loop (step 7) before
-        the final assembly (step 8):
-        ```python
-        tokens_accumulator = [tokens_used]        # start with generation tokens
-        current_content = content
-        completed_iterations = 0
-        max_iterations = get_max_reflection_iterations(output_mode)
-        reflection_cfg = get_reflection_config(output_mode)
-
-        for _ in range(max_iterations):
-            critique = self._reflect(current_content, topic, output_mode,
-                                     reflection_cfg, tokens_accumulator)
-            if critique is None:
-                break
-            revised = self._revise(current_content, critique, topic, output_mode,
-                                   context, config, tokens_accumulator)
-            if revised is None:
-                break
-            current_content = revised
-            completed_iterations += 1
-        ```
-      - Replace `tokens_used` with `sum(tokens_accumulator)` when assembling `TeachingMetadata`
-      - Add `reflection_iterations=completed_iterations` to `TeachingMetadata` construction
-
-      **Checkpoint**: `TeachingAgent().run({"topic": "binary search", "output_mode": "beginner",
-      "context": ""})` with `TEACHING_MAX_REFLECTION_ITERATIONS=0` produces identical output
-      to Phase 1; with `=1` adds one reflection cycle.
+**Checkpoint**: Unit tests in T042 pass for `StreamingFieldExtractor`
 
 ---
 
-### P3-D: Tests
+### P4-C: Agent and Kafka Updates
 
-- [x] T042 Add reflection tests to `teaching_agent/tests/test_teaching_agent.py`:
-      (monkeypatch `call_llm` as in existing tests; no real LLM required)
+**Purpose**: Wire streaming into the agent pipeline and add the `stream-tokens` publisher.
 
-      - `test_reflection_disabled_when_iterations_zero` — set env
-        `TEACHING_MAX_REFLECTION_ITERATIONS=0`; verify `call_llm` called exactly once;
-        `metadata.reflection_iterations == 0`
+- [x] T039 Update `teaching_agent/agent.py`:
+      - Add `token_callback: Callable[[str, str], None]` parameter to `run()` (required,
+        no default — callers always provide it; tests provide a no-op lambda)
+      - Replace main LLM call (Step 4) with `call_llm_stream()` + `StreamingFieldExtractor`:
+        instantiate extractor with `token_callback`; iterate `call_llm_stream()` feeding
+        each `(delta, tokens_used)` to `extractor.feed(delta)`; capture final `tokens_used`
+        from last chunk; call `extractor.finalize()` to get `raw_markdown` and flush diagram
+      - Call `parse_markdown_response(raw_markdown)` instead of `parse_llm_response()`
+      - Pass `raw_markdown` back to caller alongside `TeachingAgentOutput`:
+        `run()` returns `tuple[TeachingAgentOutput, str]`
+        (second element is `raw_markdown`; empty string `""` on any error path)
+      - `_resolve_diagram()` retry stays as `call_llm()` (non-streaming); unchanged
 
-      - `test_reflection_runs_one_iteration_by_default` — monkeypatch `call_llm` to return
-        valid generation JSON on first call, valid critique JSON on second call, valid
-        revision JSON on third call; verify `call_llm` called exactly 3 times;
-        `metadata.reflection_iterations == 1`; output is revision, not initial
+- [x] T040 Update `teaching_agent/kafka.py`:
+      - Add import: `StreamTokensEventBody` from `project.schemas`;
+        `BackendStreamTopics` from `project.topics`
+      - Add `publish_stream_token(producer: KafkaProducerProtocol, event: StreamTokensEventBody) → None`:
+        serializes event with `event.model_dump()`;
+        sends to `BackendStreamTopics.STREAM_TOKENS.value`;
+        does NOT call `producer.flush()` (tokens are high-frequency; flush only on stream-complete)
 
-      - `test_reflection_falls_back_on_critique_failure` — monkeypatch: first call returns
-        valid generation JSON; second call raises RuntimeError; verify `call_llm` called
-        exactly 2 times; `metadata.reflection_iterations == 0`; `status == "ok"`;
-        output is initial generation
+- [x] T041 Update `teaching_agent/handlers.py`:
+      - Add injectable `stream_publisher` dependency:
+        `stream_publisher: Callable[[KafkaProducerProtocol, StreamTokensEventBody], None] = publish_stream_token`
+      - In `process_request()`: build `token_callback` closure that publishes
+        `StreamTokensEventBody(from_service="teaching-agent", sid=event.sid, data={"field": field, "token": token})`
+        via `stream_publisher`
+      - Update call to `agent.run()`: pass `token_callback`; unpack tuple result
+        `(result, raw_markdown) = agent.run({...}, token_callback)`
+      - After `agent.run()` returns (success or error): publish stream-complete sentinel:
+        `StreamTokensEventBody(from_service="teaching-agent", sid=event.sid, data={"done": True, "tokens_used": N})`
+        then call `producer.flush()` once
+      - Update `build_completion_event()`: `content = raw_markdown if result.status == "ok" else ""`
+        (replaces `result.content.model_dump_json()`)
 
-      - `test_reflection_falls_back_on_revision_failure` — monkeypatch: generation OK;
-        critique OK; revision raises RuntimeError; verify `call_llm` called exactly 3 times;
-        `metadata.reflection_iterations == 0`; `status == "ok"`; output is initial generation
-
-      - `test_reflection_tokens_accumulated_across_all_calls` — monkeypatch: generation
-        returns 100 tokens; critique returns 50 tokens; revision returns 120 tokens;
-        verify `metadata.tokens_used == 270`
-
-      - `test_reflection_two_iterations` — set env
-        `TEACHING_MAX_REFLECTION_ITERATIONS=2`; monkeypatch 5 calls (gen + critique1 +
-        rev1 + critique2 + rev2); verify `metadata.reflection_iterations == 2`;
-        output is revision2
-
-      - `test_reflection_preserves_diagram_rules_in_revision` — beginner mode; revision
-        returns invalid Mermaid; verify fallback template applied; `diagram` is non-null
-
-      - `test_metadata_reflection_iterations_is_zero_when_disabled` — N=0;
-        verify `metadata.reflection_iterations == 0`
-
-- [~] T043 Update `.env.local` — add reflection env var stubs (commented out) under
-      Teaching Agent section:
-      `TEACHING_MAX_REFLECTION_ITERATIONS`, `TEACHING_REFLECTION_MODEL`,
-      `TEACHING_REFLECTION_MAX_TOKENS`; per-mode:
-      `TEACHING_BEGINNER_MAX_REFLECTION_ITERATIONS`,
-      `TEACHING_INTERMEDIATE_MAX_REFLECTION_ITERATIONS`,
-      `TEACHING_ADVANCED_MAX_REFLECTION_ITERATIONS`,
-      `TEACHING_BEGINNER_REFLECTION_MODEL`, etc.
-      Active default: `TEACHING_MAX_REFLECTION_ITERATIONS=1` (uncommented)
-      NOTE: documentation-only — `.env.local` does not exist in the repo and is
-      git-ignored. Reflection resolves via code defaults (N=1, critique ceiling 512)
-      regardless. Add stubs locally only if per-mode tuning is needed (consistent
-      with T030/T033).
-
-- [~] T044 Update `CLAUDE.md` — add Reflection section under Teaching Agent:
-      - Reflection env vars and defaults
-      - How to disable: `TEACHING_MAX_REFLECTION_ITERATIONS=0`
-      - `metadata.reflection_iterations` interpretation
-      - Wall-clock budget table updated for reflection-on vs reflection-off
-      NOTE: deferred — the repo's `CLAUDE.md` currently has NO Teaching Agent section
-      (it is RAG-only; Teaching is still listed as "not yet implemented"). A reflection
-      subsection has nothing to attach to. Adding a full Teaching Agent section is out of
-      scope here; tracked separately as a pre-existing CLAUDE.md gap.
+**Checkpoint**: `python -m pytest teaching_agent/tests/test_kafka_integration.py -q` — all tests pass
 
 ---
 
-### P3-E: Validation
+### P4-D: Tests
 
-- [x] T045 Run full test suite: `pytest teaching_agent/tests/ -q` — all tests must pass
-      including new reflection tests (T042); existing Phase 1 and Phase 2 tests unaffected
+**Purpose**: Full test coverage for Phase 4 changes.
 
-- [ ] T046 Manual quality validation (requires real LLM):
-      Run `run_samples.py` (or equivalent) for all 3 topics × 3 modes with reflection
-      enabled and disabled. Compare outputs. Confirm revised outputs score higher on the
-      structured rubric (clarity, structure adherence, example completeness) in ≥ 80% of
-      the 9 topic/mode pairs.
+- [x] T042 Create `teaching_agent/tests/test_stream_parser.py`:
+      - `test_explanation_tokens_emitted_immediately` — chunks before `**Diagram**` header go to `explanation`
+      - `test_diagram_buffered_and_emitted_complete` — diagram chunks buffered; emitted as one event on next header
+      - `test_header_split_across_chunks` — `**Explan` + `ation**` across two chunks correctly detected
+      - `test_finalize_flushes_trailing_diagram` — diagram at end of stream (no trailing header) emitted on `finalize()`
+      - `test_notes_and_example_stream_immediately` — notes and example chunks forwarded per chunk
+      - `test_finalize_returns_complete_raw_markdown` — full buffer including headers returned by `finalize()`
+      - `test_empty_stream_no_callback` — empty input produces no callback calls
 
----
+- [x] T043 Update `teaching_agent/tests/test_teaching_agent.py`:
+      - Replace 10 `parse_llm_response` tests with `parse_markdown_response` tests using markdown-format inputs
+      - Update all mock LLM responses from JSON strings to markdown bold-header strings
+      - Update monkeypatch target: `teaching_agent.agent.call_llm` → `teaching_agent.agent.call_llm_stream`
+        (mock must yield `(delta, 0)` tuples for intermediate chunks and `(delta, N)` for final chunk)
+      - All integration tests pass a no-op `token_callback=lambda f, t: None` to `agent.run()`
+      - `agent.run()` now returns a tuple — update all assertions to unpack `(result, raw_markdown)`
 
-### P3-F: Plan/Tasks Reconciliation & Added Coverage
+- [x] T044 Update `teaching_agent/tests/test_kafka_integration.py`:
+      - Add `_FakeStreamPublisher`: captures all `StreamTokensEventBody` events in a list
+      - Add `stream_publisher=fake_stream_publisher` to handler construction
+      - Add `test_streaming_tokens_published_before_completion_event`
+      - Add `test_stream_complete_sentinel_published_on_success`
+      - Add `test_stream_complete_sentinel_published_on_error`
+      - Add `test_diagram_field_in_stream_events`
+      - Update `test_completion_event_preserves_request_correlation`: verify `content` is raw markdown string
 
-These tasks resolve plan.md ↔ tasks.md consistency gaps found in the plan-vs-tasks audit
-and add missing validation coverage. T047/T049/T050/T051/T053 are documentation
-reconciliations (no production code); T048 and T052 add test/validation coverage and depend
-on the T041 implementation existing.
-
-- [x] T047 [Gap A] Reconcile reflection config design — keep `LLMConfig` generic.
-      `LLMConfig` retains only its existing fields (`model`, `api_base`, `api_key`,
-      `temperature`, `max_tokens`, `effort`). Reflection settings are produced by helper
-      functions, NOT added as `LLMConfig` fields:
-      - `get_reflection_config(output_mode) → LLMConfig` returns a config whose `model` and
-        `max_tokens` ARE the reflection model and reflection ceiling (default 512).
-      - `get_max_reflection_iterations(output_mode) → int` returns the iteration count.
-      Doc fixes: update **T036** to DROP the "add `reflection_model`, `reflection_max_tokens`,
-      `max_reflection_iterations` fields to `LLMConfig`" line; update **plan.md**'s `config.py`
-      Project-Structure entry to DROP "add … reflection_max_tokens field" (the `effort` field
-      already exists from T032). No new `LLMConfig` fields are introduced.
-
-- [~] T048 [Gap B] Add a performance-budget validation task (FR-018-proposed, SC-007;
-      Constitution Principle IV — budgets MUST be validated). Measure wall-clock per mode
-      (beginner / intermediate / advanced) at N=0 and N=1 against a single pinned model +
-      endpoint (FR-018 requires same-model comparison). Easiest path: extend `run_samples.py`
-      to time each run and execute both passes.
-      - Record results as a documented table (mode × N × seconds), e.g. written to
-        `teaching_agent/tests/outputs/perf_<timestamp>.md` — satisfies plan.md's "measured at
-        both settings … and documented" clause.
-      - Flag budget breaches: N=1 beginner ≤15s / intermediate ≤25s / advanced ≤45s;
-        N=0 ≤5 / 10 / 20s. Treat as regression-vs-Phase-1-baseline, not hard pass/fail on a
-        slow free-tier endpoint.
-      - Confirm no timeout at the advanced 4096-token ceiling on BOTH the generation and
-        revision calls.
-      Requires a reachable LLM endpoint (gated like T046).
-      NOTE: harness implemented as a dedicated dev script `teaching_agent/tests/perf_reflection.py`
-      (chosen over extending `run_samples.py` for clarity); function-based with a `__main__`
-      guard, ruff-clean, not collected by pytest. Execution + the recorded
-      `outputs/perf_<timestamp>.md` table are pending a live LLM endpoint.
-
-- [x] T049 [Gap C] Update `data-model.md` and `contracts/teaching-agent-contract.md` for
-      Phase 3: add the internal `ReflectionCritique` entity (`quality_score`, `issues`,
-      `revision_instructions`) and the new `TeachingMetadata.reflection_iterations` field.
-      Note both are internal/metadata only — the external `TeachingAgentOutput` /
-      `TeachingCompletionEvent` contract is otherwise unchanged.
-      NOTE: while editing, also reconcile any residual stale Kafka-event shapes in those two
-      docs left over from the planner-alignment schema change (separate pre-existing drift).
-
-- [x] T050 [Gap D] Reconcile `_reflect()` / `_revise()` signatures between plan.md and
-      tasks.md. T039/T040 pass an explicit `tokens_accumulator: list[int]`; plan.md's
-      "Agent Changes" section omits it. Adopt the explicit `tokens_accumulator` parameter as
-      the canonical signature and update plan.md's "Agent Changes" to match (one consistent
-      choice across both docs).
-
-- [x] T051 [Gap E] Fix T041's `run()` integration description: the reflection loop runs
-      AFTER diagram resolution (step 5) and BEFORE final assembly (step 6) — not "after
-      step 6". Replace the `initial_content` placeholder with the actual variable name used
-      in `agent.py` (`content`), and align the snippet with the real `run()` structure.
-
-- [x] T052 [Gap F] Add an SC-014 regression test: with reflection enabled (N≥1), a single
-      consumed `TeachingRequestEvent` results in exactly one `TeachingCompletionEvent`
-      published. Add to `test_kafka_integration.py` (or T042) using the fake producer
-      (assert exactly one `send()` call) with a monkeypatched multi-call `call_llm`. Confirms
-      reflection — which lives inside `run()` — does not change the publish-once contract.
-
-- [x] T053 [Gap G] Refresh stale global sections of tasks.md now that Phase 3 exists:
-      - Header **Organization** line — add Phase 3 (Reflection layer).
-      - **[Story]** legend — add US6 = Reflection.
-      - **Dependencies & Execution Order → Phase Dependencies** — fix "P2-F (T025–T027)" to
-        "T025–T034" and add a Phase 3 entry.
-      - **Implementation Order** block — extend beyond T027 (or reference the Phase 3
-        Dependencies sub-block).
+- [x] T045 Update `teaching_agent/tests/conftest.py`:
+      - Patch `teaching_agent.agent.call_llm_stream` instead of `teaching_agent.agent.call_llm`
+      - Mock yields tuples: intermediate chunks `(delta, 0)`, final chunk `(last_delta, tokens_used)`
+      - Table output still captures `model`, `tokens_used`, `time_s`
 
 ---
 
-### Phase 3 Dependencies
+### P4-E: Validation
 
-```
-T035 (schema) → T036 (config) → T037 (reflection prompts) → T039 (_reflect method)
-T035 (schema) → T038 (revision prompts) → T040 (_revise method)
-T039 + T040 → T041 (run() orchestration)
-T041 → T042 (tests) → T045 (full suite)
-T041 → T043 (.env.local) → T044 (CLAUDE.md)
-T046 depends on T041 + real LLM env
-```
+- [x] T046 Run full test suite: `python -m pytest teaching_agent/tests/ -q` — all tests pass
+- [x] T047 Run sample outputs: `PYTHONPATH=. python teaching_agent/tests/run_samples.py` —
+      verify all 9 outputs are in markdown format with correct bold section headers
+- [x] T048 Manual end-to-end validation (requires worker running + Kafka up):
+      publish a `TeachingRequestEvent`; verify `StreamTokensEventBody` events on `"stream-tokens"`
+      with correct `field` keys; verify `TeachingCompletionEvent.content` is raw markdown on
+      `"teaching-complete"`
 
-T037 and T038 can run in parallel (different constants in the same file).
-T039 and T040 can be developed in parallel (different methods) but both block T041.
+---
+
+---
+
+### P4-F: RAG Context Priority Correction
+
+**Purpose**: Correct an implementation error from Phase 1 where `context` was labelled and treated as "prior session history" rather than RAG-compiled course material. The fix updates all three prompt templates so the LLM is instructed to treat `context` as the primary reference source.
+
+- [x] T049 Update `teaching_agent/prompts.py` — fix RAG context handling across all three mode prompts (FR-036):
+      - Rename label from `"Prior session context: {context}"` to `"Reference material (compiled from course documents):\n{context}"`
+      - Add explicit priority instruction immediately after the label (before the structure section):
+        `"When reference material is provided above, use it as your PRIMARY source. Ground your explanation in that content. Only draw on general knowledge where the reference material is silent or incomplete."`
+      - Replace trailing rule in Rules section:
+        - Beginner: `"If prior session context is provided, briefly connect it to the new topic."` → `"If no reference material is provided above, explain from general knowledge."`
+        - Intermediate: `"If prior session context is provided, build on it explicitly."` → `"If no reference material is provided above, explain from general knowledge."`
+        - Advanced: `"If prior session context is provided, reference it where directly relevant."` → `"If no reference material is provided above, explain from general knowledge."`
+
+**Checkpoint**: Run `PYTHONPATH=. python teaching_agent/tests/verify_phase4.py` with a non-empty `rag_compiled` context and verify the explanation draws from the provided material.
 
 ---
 

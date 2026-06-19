@@ -21,6 +21,21 @@ class _FakeConsumer:
         return records
 
 
+class _FakeProducer:
+    def __init__(self):
+        self.sent = []
+        self.flush_count = 0
+
+    def send(self, topic, payload):
+        self.sent.append((topic, payload))
+
+    def flush(self):
+        self.flush_count += 1
+
+    def close(self):
+        pass
+
+
 def _make_ok_output(topic: str, output_mode: str) -> TeachingAgentOutput:
     return TeachingAgentOutput(
         status="ok",
@@ -67,10 +82,12 @@ def test_request_handler_dispatches_to_teaching_agent() -> None:
     captured = {}
 
     class _FakeAgent:
-        def run(self, raw_input):
+        def run(self, raw_input, token_callback):
             captured["raw_input"] = raw_input
-            # handler maps user_prompt->topic, user_level->output_mode before calling run
-            return _make_ok_output(raw_input["topic"], raw_input["output_mode"])
+            return (
+                _make_ok_output(raw_input["topic"], raw_input["output_mode"]),
+                "**Explanation**\nExplanation of the topic\n\n**Notes**\nKey points",
+            )
 
     published = {}
 
@@ -80,6 +97,7 @@ def test_request_handler_dispatches_to_teaching_agent() -> None:
     handler = TeachingRequestEventHandler(
         agent_factory=_FakeAgent,
         publisher=_capture_publish,
+        stream_publisher=lambda p, e: None,
     )
     output = handler.process_request(
         {
@@ -108,8 +126,11 @@ def test_request_handler_dispatches_to_teaching_agent() -> None:
 
 def test_ingest_to_dispatch_flow_preserves_request_id() -> None:
     class _FakeAgent:
-        def run(self, raw_input):
-            return _make_ok_output(raw_input["topic"], raw_input["output_mode"])
+        def run(self, raw_input, token_callback):
+            return (
+                _make_ok_output(raw_input["topic"], raw_input["output_mode"]),
+                "**Explanation**\nExplanation\n\n**Notes**\nNotes",
+            )
 
     published = {}
 
@@ -119,6 +140,7 @@ def test_ingest_to_dispatch_flow_preserves_request_id() -> None:
     handler = TeachingRequestEventHandler(
         agent_factory=_FakeAgent,
         publisher=_capture_publish,
+        stream_publisher=lambda p, e: None,
     )
     consumer = _FakeConsumer(
         {
@@ -173,28 +195,21 @@ def test_publish_teaching_complete_sends_to_correct_topic() -> None:
 
 def test_completion_event_preserves_request_correlation() -> None:
     class _FakeAgent:
-        def run(self, raw_input):
-            return _make_ok_output(raw_input["topic"], raw_input["output_mode"])
+        def run(self, raw_input, token_callback):
+            return (
+                _make_ok_output(raw_input["topic"], raw_input["output_mode"]),
+                "**Explanation**\nGradient descent explanation\n\n**Notes**\nKey points",
+            )
 
-    # Old: used clock param to test timing fields (removed from new schema)
-    # fixed_times = iter([
-    #     datetime(2026, 6, 13, 10, 0, 0, tzinfo=timezone.utc),
-    #     datetime(2026, 6, 13, 10, 0, 2, tzinfo=timezone.utc),
-    # ])
     handler = TeachingRequestEventHandler(
         agent_factory=_FakeAgent,
         publisher=lambda _producer, _event: None,
-        # clock=lambda: next(fixed_times),  # removed: new schema has no timing fields
+        stream_publisher=lambda p, e: None,
     )
 
     output = handler.process_request(
         {
             "request_id": "req-3",
-            # Old fields (pre-master-merge schema):
-            # "session_ctx": {"session_id": "s-3", "trace_id": "trace-1"},
-            # "topic": "What is gradient descent?",
-            # "output_mode": "advanced",
-            # "context": "",
             "sid": "s-3",
             "user_prompt": "What is gradient descent?",
             "user_level": "advanced",
@@ -204,24 +219,25 @@ def test_completion_event_preserves_request_correlation() -> None:
     )
 
     assert output.request_id == "req-3"
-    # Old assertions (fields removed from new TeachingCompletionEvent):
-    # assert output.session_ctx["trace_id"] == "trace-1"
-    # assert output.topic == "What is gradient descent?"
-    # assert output.duration_ms == 2000
     assert output.sid == "s-3"
     assert output.user_level == "advanced"
+    assert isinstance(output.content, str)  # Phase 4: raw markdown, not JSON-serialized TeachingContent
 
 
 def test_lifecycle_logging_covers_consume_process_and_publish(caplog) -> None:
     import logging
 
     class _FakeAgent:
-        def run(self, raw_input):
-            return _make_ok_output(raw_input["topic"], raw_input["output_mode"])
+        def run(self, raw_input, token_callback):
+            return (
+                _make_ok_output(raw_input["topic"], raw_input["output_mode"]),
+                "**Explanation**\nExplanation\n\n**Notes**\nNotes",
+            )
 
     handler = TeachingRequestEventHandler(
         agent_factory=_FakeAgent,
         publisher=lambda _producer, _event: None,
+        stream_publisher=lambda p, e: None,
     )
     consumer = _FakeConsumer(
         {
@@ -263,12 +279,13 @@ def test_error_stage_logged_when_processing_fails(caplog) -> None:
     import logging
 
     class _FailingAgent:
-        def run(self, raw_input):
+        def run(self, raw_input, token_callback):
             raise RuntimeError("synthetic processing failure")
 
     handler = TeachingRequestEventHandler(
         agent_factory=_FailingAgent,
         publisher=lambda _producer, _event: None,
+        stream_publisher=lambda p, e: None,
     )
     consumer = _FakeConsumer(
         {
@@ -303,6 +320,110 @@ def test_error_stage_logged_when_processing_fails(caplog) -> None:
     error_messages = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
     assert error_messages
     assert any("processing_failed" in m or "synthetic processing failure" in m for m in error_messages)
+
+
+def test_streaming_tokens_published_before_completion_event() -> None:
+    publish_order: list[str] = []
+
+    class _FakeAgent:
+        def run(self, raw_input, token_callback):
+            token_callback("explanation", "Hello world")
+            return (
+                _make_ok_output(raw_input["topic"], raw_input["output_mode"]),
+                "**Explanation**\nHello world\n\n**Notes**\nNotes",
+            )
+
+    handler = TeachingRequestEventHandler(
+        agent_factory=_FakeAgent,
+        publisher=lambda p, e: publish_order.append("completion"),
+        stream_publisher=lambda p, e: publish_order.append("stream"),
+    )
+    handler.process_request(
+        {"request_id": "r1", "sid": "s1", "user_prompt": "Loops", "user_level": "beginner", "rag_compiled": ""},
+        producer=_FakeProducer(),
+    )
+
+    stream_indices = [i for i, t in enumerate(publish_order) if t == "stream"]
+    completion_indices = [i for i, t in enumerate(publish_order) if t == "completion"]
+    assert stream_indices and completion_indices
+    assert max(stream_indices) < completion_indices[0]
+
+
+def test_stream_complete_sentinel_published_on_success() -> None:
+    stream_events = []
+
+    class _FakeAgent:
+        def run(self, raw_input, token_callback):
+            return (
+                _make_ok_output(raw_input["topic"], raw_input["output_mode"]),
+                "**Explanation**\nContent\n\n**Notes**\nNotes",
+            )
+
+    handler = TeachingRequestEventHandler(
+        agent_factory=_FakeAgent,
+        publisher=lambda p, e: None,
+        stream_publisher=lambda p, e: stream_events.append(e),
+    )
+    handler.process_request(
+        {"request_id": "r2", "sid": "s2", "user_prompt": "Trees", "user_level": "beginner", "rag_compiled": ""},
+        producer=_FakeProducer(),
+    )
+
+    last = stream_events[-1]
+    assert last.data.get("done") is True
+    assert last.data.get("tokens_used") == 300  # matches _make_ok_output metadata
+    assert last.from_service == "teaching-agent"
+
+
+def test_stream_complete_sentinel_published_on_error() -> None:
+    stream_events = []
+
+    class _FailingAgent:
+        def run(self, raw_input, token_callback):
+            raise RuntimeError("agent failure")
+
+    handler = TeachingRequestEventHandler(
+        agent_factory=_FailingAgent,
+        publisher=lambda p, e: None,
+        stream_publisher=lambda p, e: stream_events.append(e),
+    )
+    handler.process_request(
+        {"request_id": "r3", "sid": "s3", "user_prompt": "Trees", "user_level": "beginner", "rag_compiled": ""},
+        producer=_FakeProducer(),
+    )
+
+    sentinel = stream_events[-1]
+    assert sentinel.data.get("done") is True
+    assert sentinel.data.get("tokens_used") == 0  # error path: no tokens consumed
+
+
+def test_diagram_field_in_stream_events() -> None:
+    stream_events = []
+
+    class _FakeAgent:
+        def run(self, raw_input, token_callback):
+            token_callback("explanation", "Some text")
+            token_callback("diagram", "graph TD\n  A-->B")
+            token_callback("notes", "Key notes")
+            return (
+                _make_ok_output(raw_input["topic"], raw_input["output_mode"]),
+                "**Explanation**\nSome text\n\n**Diagram**\ngraph TD\n  A-->B\n\n**Notes**\nKey notes",
+            )
+
+    handler = TeachingRequestEventHandler(
+        agent_factory=_FakeAgent,
+        publisher=lambda p, e: None,
+        stream_publisher=lambda p, e: stream_events.append(e),
+    )
+    handler.process_request(
+        {"request_id": "r4", "sid": "s4", "user_prompt": "Trees", "user_level": "beginner", "rag_compiled": ""},
+        producer=_FakeProducer(),
+    )
+
+    fields = [e.data.get("field") for e in stream_events if "field" in e.data]
+    assert "explanation" in fields
+    assert "diagram" in fields
+    assert "notes" in fields
 
 
 def _make_completion_event():

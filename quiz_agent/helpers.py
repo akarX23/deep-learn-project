@@ -118,6 +118,25 @@ def parse_grading_response(raw: str) -> dict[str, Any]:
     return parsed
 
 
+def parse_swot_response(raw: str) -> dict[str, Any]:
+    """Parse the LLM's SWOT analysis response into a dict.
+
+    Raises:
+        ValueError: If the response is not valid JSON or lacks required SWOT keys.
+    """
+    if not raw or not raw.strip():
+        raise ValueError("LLM returned an empty SWOT response")
+    text = _strip_fences(raw)
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"SWOT response is not valid JSON: {exc}") from exc
+    for key in ("strengths", "weaknesses", "opportunities", "threats"):
+        if key not in parsed:
+            raise ValueError(f"SWOT response missing '{key}' key")
+    return parsed
+
+
 # ---------------------------------------------------------------------------
 # Quiz assembly
 # ---------------------------------------------------------------------------

@@ -5,10 +5,9 @@
 ### OutputMode (Enum)
 - Description: The target learner level. Determines explanation structure, vocabulary register, diagram rules, and token ceiling.
 - Allowed values:
-  - `beginner` — no prior knowledge assumed; analogies, required diagram
-  - `intermediate` — basics known; technical terminology, optional diagram
-  - `advanced` — practitioner level; formal definitions, internals, optional diagram
-- Token ceiling: per-mode via `TEACHING_{MODE}_MAX_TOKENS`, default 4096 each (FR-008).
+  - `beginner` — no prior knowledge assumed; analogies, required diagram, 4096-token ceiling (default; configurable via `TEACHING_BEGINNER_MAX_TOKENS`)
+  - `intermediate` — basics known; technical terminology, optional diagram, 4096-token ceiling (default; configurable via `TEACHING_INTERMEDIATE_MAX_TOKENS`)
+  - `advanced` — practitioner level; formal definitions, internals, optional diagram, 4096-token ceiling (default; configurable via `TEACHING_ADVANCED_MAX_TOKENS`)
 
 ### TeachingAgentInput
 - Description: Input payload received from the Planner Agent.
@@ -67,30 +66,39 @@
 - Description: Inbound Kafka payload published by the Planner Agent to the `"teaching"` topic. Triggers the Teaching Agent worker.
 - Fields:
   - `request_id`: str — unique per request, assigned by Planner; non-empty
-  - `sid`: str — session identifier for correlation
-  - `user_prompt`: str — maps to `TeachingAgentInput.topic`
-  - `user_level`: str — maps to `TeachingAgentInput.output_mode`
-  - `rag_compiled`: str — maps to `TeachingAgentInput.context`; defaults to `""`
+  - `sid`: str — Socket.IO session ID for frontend WebSocket routing; passed through unchanged
+  - `user_prompt`: str — the question or topic to explain; maps to `TeachingAgentInput.topic`
+  - `user_level`: str — learner level; maps to `TeachingAgentInput.output_mode`
+  - `rag_compiled`: str — RAG output to use as context; maps to `TeachingAgentInput.context`; defaults to `""`
 - Validation rules:
   - `request_id` must be non-empty.
-  - the worker maps `user_prompt`/`user_level`/`rag_compiled` onto the core pipeline's
-    `topic`/`output_mode`/`context` (FR-020).
+  - `user_level` must be non-empty and one of `"beginner"`, `"intermediate"`, `"advanced"`.
 
-### TeachingCompletionEvent (Phase 2 — Kafka outbound)
+### TeachingCompletionEvent (Phase 2 — Kafka outbound; updated Phase 4)
 
 - Description: Outbound Kafka payload published by the Teaching Agent to `"teaching-complete"` after every request, including failures.
 - Fields:
   - `request_id`: str — passed through verbatim from `TeachingRequestEvent`
-  - `sid`: str — passed through verbatim from `TeachingRequestEvent`
-  - `user_level`: str — from the request
-  - `content`: str — serialized `TeachingContent` JSON on success; empty string `""` on error
+  - `sid`: str — passed through verbatim from `TeachingRequestEvent`; used by backend for WebSocket routing
+  - `user_level`: str — passed through verbatim from `TeachingRequestEvent`
+  - `content`: str — (Phase 4) complete raw markdown string produced by the LLM (all four sections: `**Explanation**`, `**Diagram**`, `**Notes**`, `**Example**`); empty string `""` on error. Prior to Phase 4, this was a JSON-serialized `TeachingContent` string.
 - Validation rules:
-  - `request_id` and `sid` must match the originating `TeachingRequestEvent`.
   - `request_id` and `user_level` must be non-empty.
-- Note: this event carries no `status`, timing, `tokens_used`, `model`, or `errors`
-  fields — an error outcome is conveyed as empty `content`. Audit detail
-  (`tokens_used`, `model`, `reflection_iterations`) lives on the internal
-  `TeachingMetadata`, not on this external event.
+  - `content` must not be null (empty string is valid on error).
+
+### StreamTokensEventBody (Phase 4 — Kafka streaming outbound)
+
+- Description: Outbound Kafka payload published by the Teaching Agent to `"stream-tokens"` for every token chunk during LLM generation. Consumed by the backend service and forwarded to the frontend via Socket.IO.
+- Fields:
+  - `from_service`: str — always `"teaching-agent"`
+  - `sid`: str — passed through from `TeachingRequestEvent`; used by backend to route to the correct WebSocket session
+  - `data`: dict — payload varies by event type:
+    - Token event: `{"field": "<section>", "token": "<chunk>"}` where `field` is one of `explanation`, `diagram`, `notes`, `example`
+    - Stream-complete sentinel: `{"done": true, "tokens_used": N}`
+- Streaming rules:
+  - `explanation`, `notes`, `example`: emitted chunk by chunk as tokens arrive from the LLM stream
+  - `diagram`: buffered until the section is complete; emitted as a single event with the complete Mermaid string
+  - Stream-complete sentinel: always the last event published per request, including on error paths
 
 ### TeachingTopics (Phase 2 — Kafka topic registry)
 
@@ -128,10 +136,10 @@
 - One `TeachingAgentInput` maps to one `TeachingAgentOutput`.
 - One `TeachingAgentOutput` contains exactly one `TeachingContent` (when `status: "ok"`) and exactly one `TeachingMetadata`.
 - `OutputMode` determines per-mode content rules applied to `TeachingContent`.
-- One `TeachingRequestEvent` produces exactly one `TeachingCompletionEvent`. `request_id` and `sid` are invariant across both — the Teaching Agent never modifies them.
-- `TeachingRequestEvent` carries `user_prompt`/`user_level`/`rag_compiled`, which the worker maps onto `TeachingAgentInput` (`topic`/`output_mode`/`context`) plus correlation fields (`request_id`, `sid`).
-- `TeachingCompletionEvent` carries only the serialized `content` (plus `request_id`/`sid`/`user_level`); audit detail (`tokens_used`, `model`, `reflection_iterations`) stays on the internal `TeachingMetadata`.
-- Reflection (Phase 3) runs entirely inside `TeachingAgent.run()` — exactly one completion event per request regardless of the iteration count N.
+- One `TeachingRequestEvent` produces exactly one `TeachingCompletionEvent`. `request_id`, `sid`, and `user_level` are invariant across both — the Teaching Agent never modifies them.
+- `TeachingRequestEvent` carries `user_prompt` (→`topic`), `user_level` (→`output_mode`), `rag_compiled` (→`context`) plus Kafka tracking fields `request_id` and `sid`. The handler maps these before calling `TeachingAgent.run()`.
+- `TeachingCompletionEvent` carries `request_id`, `sid`, `user_level` (correlation/routing) and `content` (Phase 4: complete raw markdown string; empty string on error).
+- One `TeachingRequestEvent` also produces N `StreamTokensEventBody` events (one per LLM token chunk) plus one stream-complete sentinel, all published to `"stream-tokens"` before the `TeachingCompletionEvent` is published. `TeachingContent` is assembled internally in `agent.py` for Mermaid validation only — it is not serialized to any Kafka event in Phase 4.
 
 ## State Transitions
 
@@ -164,4 +172,4 @@
 | diagram     | Required; `graph TD` or `sequenceDiagram` | Optional; more detailed than beginner | Optional; only if prose insufficient     |
 | notes       | Jargon-free bullet list            | Structured markdown with subheadings   | Dense technical reference / cheat sheet   |
 | example     | Concrete worked example (plain English commentary) | Python snippet with inline comments | Non-trivial usage (optimization/arch pattern) |
-| max_tokens  | 4096 (default)                    | 4096 (default)                        | 4096 (default)                             |
+| max_tokens  | 4096 (`TEACHING_BEGINNER_MAX_TOKENS`) | 4096 (`TEACHING_INTERMEDIATE_MAX_TOKENS`) | 4096 (`TEACHING_ADVANCED_MAX_TOKENS`) |

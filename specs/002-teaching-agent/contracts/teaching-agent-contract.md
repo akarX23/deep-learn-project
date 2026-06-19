@@ -18,7 +18,7 @@ Published by the Planner Agent to topic `"teaching"`.
 ```json
 {
   "request_id": "550e8400-e29b-41d4-a716-446655440000",
-  "sid": "sess-abc-123",
+  "sid": "abc123xyz",
   "user_prompt": "Binary Search Tree",
   "user_level": "intermediate",
   "rag_compiled": "User previously studied arrays and linked lists in this session."
@@ -30,10 +30,10 @@ Published by the Planner Agent to topic `"teaching"`.
 | Field | Type | Required | Constraints |
 |---|---|---|---|
 | request_id | string | Yes | Non-empty; unique per request; assigned by Planner |
-| sid | string | Yes | Session identifier for correlation |
-| user_prompt | string | Yes | The topic; maps to `TeachingAgentInput.topic` |
-| user_level | string | Yes | One of `"beginner"`/`"intermediate"`/`"advanced"`; maps to `output_mode` |
-| rag_compiled | string | Yes | RAG context; maps to `context`; may be empty; default `""` |
+| sid | string | Yes | Non-empty; Socket.IO session ID for frontend WebSocket routing |
+| user_prompt | string | Yes | Non-empty; the question or topic to explain |
+| user_level | string | Yes | One of: `"beginner"`, `"intermediate"`, `"advanced"` |
+| rag_compiled | string | No | RAG output to use as context; defaults to `""` |
 
 ---
 
@@ -46,9 +46,9 @@ Published by the Teaching Agent to topic `"teaching-complete"` after every reque
 ```json
 {
   "request_id": "550e8400-e29b-41d4-a716-446655440000",
-  "sid": "sess-abc-123",
+  "sid": "abc123xyz",
   "user_level": "intermediate",
-  "content": "{\"explanation\": \"## Binary Search Tree...\", \"diagram\": \"graph TD\\n  A[Root: 8] --> B[Left: 3]\", \"notes\": \"## Key Properties...\", \"example\": \"```python\\nclass Node: ...\\n```\"}"
+  "content": "**Explanation**\nA Binary Search Tree (BST) is a node-based data structure...\n\n**Diagram**\ngraph TD\n  A[Root: 8] --> B[Left: 3]\n  A --> C[Right: 10]\n\n**Notes**\n- BST property: left < node < right\n\n**Example**\n```python\nclass Node:\n    def __init__(self, val):\n        self.val = val\n```"
 }
 ```
 
@@ -57,7 +57,7 @@ Published by the Teaching Agent to topic `"teaching-complete"` after every reque
 ```json
 {
   "request_id": "550e8400-e29b-41d4-a716-446655440000",
-  "sid": "sess-abc-123",
+  "sid": "abc123xyz",
   "user_level": "beginner",
   "content": ""
 }
@@ -67,13 +67,10 @@ Published by the Teaching Agent to topic `"teaching-complete"` after every reque
 
 | Field | Type | Constraints |
 |---|---|---|
-| request_id | string | Verbatim from `TeachingRequestEvent`; non-empty |
-| sid | string | Verbatim from `TeachingRequestEvent` |
-| user_level | string | From request; non-empty |
-| content | string | Serialized `TeachingContent` JSON on success; empty string on error |
-
-No `status` / timing / `tokens_used` / `model` / `errors` fields — an error outcome is
-conveyed as empty `content`. Reflection is internal and does not change this contract.
+| request_id | string | Verbatim from `TeachingRequestEvent`; never modified |
+| sid | string | Verbatim from `TeachingRequestEvent`; used for WebSocket routing |
+| user_level | string | Verbatim from `TeachingRequestEvent`; non-empty |
+| content | string | Complete raw markdown string (all four sections); empty string `""` on error. Phase 4 change: previously carried JSON-serialized `TeachingContent`. |
 
 ---
 
@@ -168,9 +165,9 @@ conveyed as empty `content`. Reflection is internal and does not change this con
 
 | output_mode  | max tokens |
 |--------------|------------|
-| beginner     | 4096 (default) |
-| intermediate | 4096 (default) |
-| advanced     | 4096 (default) |
+| beginner     | 4096 (default; configurable via `TEACHING_BEGINNER_MAX_TOKENS`) |
+| intermediate | 4096 (default; configurable via `TEACHING_INTERMEDIATE_MAX_TOKENS`) |
+| advanced     | 4096 (default; configurable via `TEACHING_ADVANCED_MAX_TOKENS`) |
 
 Each LLM call's completion is capped at the per-mode ceiling (`max_tokens` at the call
 boundary). With reflection enabled, `metadata.tokens_used` aggregates across all calls
@@ -188,12 +185,70 @@ boundary). With reflection enabled, `metadata.tokens_used` aggregates across all
 
 ---
 
+---
+
+## Streaming Contract (Phase 4)
+
+The Teaching Agent publishes real-time token events to the `"stream-tokens"` Kafka topic
+using `StreamTokensEventBody`. These events are consumed by the backend service and forwarded
+to the frontend via Socket.IO. Streaming events are published **before** `TeachingCompletionEvent`.
+
+### Token event (explanation, notes, example — one per LLM chunk)
+
+```json
+{
+  "from_service": "teaching-agent",
+  "sid": "abc123xyz",
+  "data": { "field": "explanation", "token": "A Binary Search Tree is" }
+}
+```
+
+### Diagram event (one complete event per request, when diagram is non-null)
+
+```json
+{
+  "from_service": "teaching-agent",
+  "sid": "abc123xyz",
+  "data": { "field": "diagram", "token": "graph TD\n  A[Root: 8] --> B[Left: 3]\n  A --> C[Right: 10]" }
+}
+```
+
+### Stream-complete sentinel (always last, including on error)
+
+```json
+{
+  "from_service": "teaching-agent",
+  "sid": "abc123xyz",
+  "data": { "done": true, "tokens_used": 847 }
+}
+```
+
+### Streaming field constraints
+
+| Event type | `data` keys | Notes |
+|---|---|---|
+| Token event | `field`, `token` | `field` is one of: `explanation`, `diagram`, `notes`, `example` |
+| Diagram event | `field`, `token` | `field` is always `"diagram"`; `token` is the complete Mermaid string |
+| Stream-complete | `done`, `tokens_used` | `done` is always `true`; `tokens_used` is the final LLM completion token count |
+
+### Ordering guarantee
+
+For every `TeachingRequestEvent`, the event order on `"stream-tokens"` is:
+1. Zero or more token events with `field: "explanation"`
+2. Zero or one event with `field: "diagram"` (absent if diagram is null)
+3. Zero or more token events with `field: "notes"`
+4. Zero or more token events with `field: "example"`
+5. Exactly one stream-complete sentinel
+
+The `TeachingCompletionEvent` on `"teaching-complete"` is published after the sentinel.
+
+---
+
 ## Caller assumptions
 
-- The Planner Agent always provides `request_id`, `sid`, `user_prompt`, `user_level`, and `rag_compiled` in the `TeachingRequestEvent`; the worker maps the latter three onto the core pipeline (`topic`/`output_mode`/`context`).
+- The Planner Agent always provides `request_id`, `sid`, `user_prompt`, `user_level`, and `rag_compiled` in the `TeachingRequestEvent`; the Teaching Agent never falls back to defaults for missing fields.
 - `request_id` is assigned by the Planner before publishing; it is opaque to the Teaching Agent and passed through unchanged.
-- `sid` is the Planner's session identifier; the Teaching Agent never interprets it — it is passed through unchanged.
-- `rag_compiled` is assembled by the Planner Agent (from RAG / Memory output) and maps to the pipeline's `context`; the Teaching Agent treats it as opaque text.
-- The Planner Agent validates `user_level` before publishing; the Teaching Agent re-validates the mapped `output_mode` and, on an invalid value, still publishes a `TeachingCompletionEvent` (with empty `content`).
-- Reflection (Phase 3) is internal to `TeachingAgent.run()` and invisible to the Planner: the external event contract is unchanged and exactly one completion event is published per request.
+- `sid` is the Socket.IO session ID assigned by the backend when the user's browser connects. The Teaching Agent never reads or validates its contents — it is passed through unchanged to `TeachingCompletionEvent` so the backend can route the result to the correct WebSocket session.
+- The `rag_compiled` field is assembled by the Planner Agent from RAG Agent output; the Teaching Agent treats it as opaque text passed as `context` to the core pipeline.
+- The Planner Agent validates `output_mode` before publishing; the Teaching Agent re-validates and returns `status: "error"` (and still publishes a `TeachingCompletionEvent`) if the value is invalid.
 - The `"teaching"` and `"teaching-complete"` topics exist before the worker starts — they are bootstrapped by the backend service at startup. `"teaching"` is registered under `PlannerTopics.TEACHING` in `project/topics.py`; `"teaching-complete"` is registered under `TeachingTopics.TEACHING_COMPLETE`.
