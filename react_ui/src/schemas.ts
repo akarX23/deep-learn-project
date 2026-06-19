@@ -1,13 +1,7 @@
 export interface StreamTokensEventBody {
   from_service: string;
   sid: string;
-  data: {
-    field?: string;
-    token?: string;
-    done?: boolean;
-    tokens_used?: number;
-    [key: string]: unknown;
-  };
+  data: Record<string, unknown>;
 }
 
 export interface ClarifyUserLevelEvent {
@@ -89,7 +83,7 @@ export interface QuizAgentMetadata {
 export interface QuizAgentOutput {
   status: "generated" | "evaluated" | "error";
   quiz?: Quiz;
-  result?: Record<string, unknown>;
+  result?: QuizResult;
   metadata?: QuizAgentMetadata;
   errors?: string[];
 }
@@ -98,6 +92,48 @@ export interface SubmittedAnswer {
   question_id: string;
   selected_option_ids: string[];
   free_text: string;
+}
+
+export interface PerOptionExplanation {
+  option_id: string;
+  explanation_type: "wrong-selected" | "missed-correct" | string;
+  explanation: string;
+}
+
+export interface QuestionResult {
+  question_id: string;
+  score: number;
+  max_score: number;
+  is_correct?: boolean;
+  wrong_answer_explanation?: string;
+  topic_deep_dive?: string;
+  per_option_explanations?: PerOptionExplanation[];
+  model_answer?: string;
+  feedback?: string;
+  confidence_score?: number;
+}
+
+export interface QuizResult {
+  overall_score: number;
+  max_score: number;
+  overall_percentage: number;
+  mcq_subtotal: number;
+  descriptive_subtotal: number;
+  question_results: QuestionResult[];
+  weak_sub_concepts: string[];
+  recommended_action: "re-teach" | "practice-more" | "advance";
+}
+
+export interface SWOTAnalysis {
+  strengths: string[];
+  weaknesses: string[];
+  opportunities: string[];
+  threats: string[];
+}
+
+export interface QuizEvaluationStreamPayload {
+  result: QuizResult;
+  swot: SWOTAnalysis;
 }
 
 export const WebSocketEvents = {

@@ -1,4 +1,5 @@
 import { config } from "../config";
+import type { Quiz, SubmittedAnswer } from "../schemas";
 
 interface SubmitChatRequestArgs {
   userPrompt: string;
@@ -11,6 +12,12 @@ interface SubmitQuizRequestArgs {
   sid: string;
   userPrompt: string;
   teachingMaterial: string;
+}
+
+interface SubmitQuizEvaluateRequestArgs {
+  sid: string;
+  quiz: Quiz;
+  answers: SubmittedAnswer[];
 }
 
 export async function submitChatRequest({
@@ -62,5 +69,28 @@ export async function submitQuizRequest({
   if (!response.ok) {
     const message = await response.text();
     throw new Error(message || "Failed to submit quiz request");
+  }
+}
+
+export async function submitQuizEvaluateRequest({
+  sid,
+  quiz,
+  answers
+}: SubmitQuizEvaluateRequestArgs): Promise<void> {
+  const response = await fetch(`${config.apiBaseUrl}/api/quiz/evaluate`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      sid,
+      quiz,
+      answers
+    })
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || "Failed to submit quiz evaluation request");
   }
 }

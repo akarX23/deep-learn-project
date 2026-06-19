@@ -15,7 +15,9 @@ interface QuizPlaceholderProps {
   sid: string | null;
   hasInitiatedChat: boolean;
   isRequestingQuiz: boolean;
+  isSubmittingEvaluation?: boolean;
   onRequestQuiz: () => Promise<void>;
+  onSubmitEvaluation?: (payload: { quiz: Quiz; answers: SubmittedAnswer[] }) => Promise<void>;
   onContextChange?: (context: QuizSectionContext) => void;
 }
 
@@ -23,6 +25,7 @@ export interface QuizSectionContext {
   quiz: Quiz | null;
   answers: SubmittedAnswer[];
   isLoading: boolean;
+  isSubmittingEvaluation: boolean;
   error: string | null;
 }
 
@@ -51,7 +54,9 @@ export function QuizPlaceholder({
   sid,
   hasInitiatedChat,
   isRequestingQuiz,
+  isSubmittingEvaluation = false,
   onRequestQuiz,
+  onSubmitEvaluation,
   onContextChange
 }: QuizPlaceholderProps): JSX.Element {
   const [quiz, setQuiz] = useState<Quiz | null>(null);
@@ -69,9 +74,10 @@ export function QuizPlaceholder({
       quiz,
       answers,
       isLoading,
+      isSubmittingEvaluation,
       error
     });
-  }, [answers, error, isLoading, onContextChange, quiz]);
+  }, [answers, error, isLoading, isSubmittingEvaluation, onContextChange, quiz]);
 
   useSocketEvent<StreamTokensEventBody>(
     WebSocketEvents.STREAM_TOKENS_SKT,
@@ -131,9 +137,22 @@ export function QuizPlaceholder({
     }
   }, [onRequestQuiz]);
 
-  const handleSubmitAnswers = (): void => {
-    console.log("Quiz submit placeholder payload:", answers);
-  };
+  const handleSubmitAnswers = useCallback(async (): Promise<void> => {
+    if (!quiz || !onSubmitEvaluation) {
+      return;
+    }
+
+    setError(null);
+    try {
+      await onSubmitEvaluation({ quiz, answers });
+    } catch (submitError) {
+      const message =
+        submitError instanceof Error
+          ? submitError.message
+          : "Failed to submit quiz answers.";
+      setError(message);
+    }
+  }, [answers, onSubmitEvaluation, quiz]);
 
   const answerByQuestionId = useMemo(() => {
     const entries = answers.map((answer) => [answer.question_id, answer] as const);
@@ -260,7 +279,14 @@ export function QuizPlaceholder({
           })}
 
           <div className="pt-2">
-            <button type="button" onClick={handleSubmitAnswers} className={uiClasses.input.submit}>
+            <button
+              type="button"
+              onClick={() => {
+                void handleSubmitAnswers();
+              }}
+              disabled={isSubmittingEvaluation || !onSubmitEvaluation}
+              className={uiClasses.input.submit}
+            >
               Submit Answers
             </button>
           </div>

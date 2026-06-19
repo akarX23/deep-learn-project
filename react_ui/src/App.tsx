@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { ChatWindow } from "./components/Chat/ChatWindow";
-import { EvaluationPlaceholder } from "./components/Evaluation/EvaluationPlaceholder";
+import {
+  EvaluationPlaceholder,
+  type EvaluationSectionContext
+} from "./components/Evaluation/EvaluationPlaceholder";
 import { Navbar } from "./components/Navbar";
 import { Navigation } from "./components/Navigation";
 import { QuizPlaceholder } from "./components/Quiz/QuizPlaceholder";
 import type { ChatWindowContext } from "./components/Chat/ChatWindow";
 import type { QuizSectionContext } from "./components/Quiz/QuizPlaceholder";
-import { submitChatRequest, submitQuizRequest } from "./services/api";
+import { submitChatRequest, submitQuizEvaluateRequest, submitQuizRequest } from "./services/api";
 import { getSocket } from "./services/socket";
 import { uiClasses } from "./styles/uiClasses";
 
@@ -15,7 +18,7 @@ type Section = "chat" | "quiz" | "evaluation";
 interface SectionContexts {
   chat: ChatWindowContext | null;
   quiz: QuizSectionContext | null;
-  evaluation: Record<string, never>;
+  evaluation: EvaluationSectionContext;
 }
 
 export default function App(): JSX.Element {
@@ -25,7 +28,11 @@ export default function App(): JSX.Element {
   const [sectionContexts, setSectionContexts] = useState<SectionContexts>({
     chat: null,
     quiz: null,
-    evaluation: {}
+    evaluation: {
+      status: "idle",
+      payload: null,
+      error: null
+    }
   });
 
   const hasInitiatedChat =
@@ -69,6 +76,13 @@ export default function App(): JSX.Element {
     }));
   }, []);
 
+  const handleEvaluationContextChange = useCallback((context: EvaluationSectionContext): void => {
+    setSectionContexts((prev) => ({
+      ...prev,
+      evaluation: context
+    }));
+  }, []);
+
   const handleQuizRequest = useCallback(async (): Promise<void> => {
     if (!socketId) {
       throw new Error("Socket is not connected yet.");
@@ -109,6 +123,53 @@ export default function App(): JSX.Element {
     }
   }, [sectionContexts.chat?.messages, socketId]);
 
+  const handleSubmitQuizEvaluation = useCallback(
+    async ({
+      quiz,
+      answers
+    }: {
+      quiz: NonNullable<QuizSectionContext["quiz"]>;
+      answers: QuizSectionContext["answers"];
+    }): Promise<void> => {
+      if (!socketId) {
+        throw new Error("Socket is not connected yet.");
+      }
+
+      setSectionContexts((prev) => ({
+        ...prev,
+        evaluation: {
+          status: "loading",
+          payload: null,
+          error: null
+        }
+      }));
+      setCurrentSection("evaluation");
+
+      try {
+        await submitQuizEvaluateRequest({
+          sid: socketId,
+          quiz,
+          answers
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Failed to submit quiz evaluation request.";
+        setSectionContexts((prev) => ({
+          ...prev,
+          evaluation: {
+            status: "error",
+            payload: null,
+            error: message
+          }
+        }));
+        throw error;
+      }
+    },
+    [socketId]
+  );
+
   return (
     <main className={uiClasses.layout.page}>
       <div className={uiClasses.layout.container}>
@@ -135,13 +196,20 @@ export default function App(): JSX.Element {
               sid={socketId}
               hasInitiatedChat={hasInitiatedChat}
               isRequestingQuiz={isRequestingQuiz}
+              isSubmittingEvaluation={sectionContexts.evaluation.status === "loading"}
               onRequestQuiz={handleQuizRequest}
+              onSubmitEvaluation={handleSubmitQuizEvaluation}
               onContextChange={handleQuizContextChange}
             />
           </div>
 
           <div className={currentSection === "evaluation" ? "block" : "hidden"}>
-            <EvaluationPlaceholder />
+            <EvaluationPlaceholder
+              sid={socketId}
+              context={sectionContexts.evaluation}
+              quizContext={sectionContexts.quiz}
+              onContextChange={handleEvaluationContextChange}
+            />
           </div>
         </div>
       </div>

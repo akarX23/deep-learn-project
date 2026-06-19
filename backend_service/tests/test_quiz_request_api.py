@@ -72,9 +72,52 @@ def _payload(sid: str = "sid-1") -> dict[str, str]:
     }
 
 
+def _evaluate_payload(sid: str = "sid-1") -> dict[str, object]:
+    return {
+        "sid": sid,
+        "quiz": {
+            "quiz_id": "quiz-1",
+            "topic": "Neural Networks",
+            "questions": [
+                {
+                    "id": "q1",
+                    "type": "mcq-single",
+                    "prompt": "Which activation is commonly used in hidden layers?",
+                    "sub_concept": "activation functions",
+                    "max_points": 1,
+                    "options": [
+                        {
+                            "id": "o1",
+                            "text": "ReLU",
+                            "is_correct": True,
+                            "explanation": "ReLU is widely used in hidden layers.",
+                        },
+                        {
+                            "id": "o2",
+                            "text": "Softmax",
+                            "is_correct": False,
+                            "explanation": "Softmax is generally used in output layers.",
+                        },
+                    ],
+                    "rubric": [],
+                }
+            ],
+            "metadata": {
+                "question_type_counts": {"mcq-single": 1, "mcq-multi": 0, "descriptive": 0},
+                "total_questions": 1,
+                "max_score": 1,
+                "mcq_max_score": 1,
+                "descriptive_max_score": 0,
+            },
+        },
+        "answers": [{"question_id": "q1", "selected_option_ids": ["o1"], "free_text": ""}],
+    }
+
+
 def test_quiz_request_route_registered() -> None:
     app = _build_app()
     assert any(route.path == "/api/quiz/request" for route in app.router.routes)
+    assert any(route.path == "/api/quiz/evaluate" for route in app.router.routes)
 
 
 def test_quiz_request_success_publishes_quiz_event() -> None:
@@ -119,6 +162,37 @@ def test_quiz_request_publish_failure_returns_500() -> None:
 
     with TestClient(app) as client:
         response = client.post("/api/quiz/request", json=_payload())
+
+    assert response.status_code == 500
+    body = response.json()
+    assert "error" in body
+
+
+def test_quiz_evaluate_success_publishes_evaluate_event() -> None:
+    producer = FakeProducer()
+    app = _build_app(producer=producer)
+
+    with TestClient(app) as client:
+        response = client.post("/api/quiz/evaluate", json=_evaluate_payload())
+
+    assert response.status_code == 200
+    assert response.json() == {"message": "Quiz evaluate request accepted and queued"}
+    assert len(producer.sent) == 1
+
+    topic, value = producer.sent[0]
+    assert topic == "quiz-evaluate"
+    assert isinstance(value["request_id"], str)
+    assert value["request_id"].startswith("quiz-eval-")
+    assert value["sid"] == "sid-1"
+    assert value["answers"][0]["question_id"] == "q1"
+
+
+def test_quiz_evaluate_publish_failure_returns_500() -> None:
+    producer = FakeProducer(error=RuntimeError("kafka down"))
+    app = _build_app(producer=producer)
+
+    with TestClient(app) as client:
+        response = client.post("/api/quiz/evaluate", json=_evaluate_payload())
 
     assert response.status_code == 500
     body = response.json()

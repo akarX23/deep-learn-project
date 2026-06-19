@@ -646,8 +646,8 @@ class QuizEvaluateRequestEvent(BaseModel):
 
     request_id: str
     sid: str
-    quiz: dict  # serialized Quiz object
-    answers: List[dict]  # serialized List[SubmittedAnswer]
+    quiz: Quiz  # serialized Quiz object
+    answers: List[SubmittedAnswer]  # serialized List[SubmittedAnswer]
 
 
 class QuizEvaluationStreamPayload(BaseModel):
@@ -658,7 +658,7 @@ class QuizEvaluationStreamPayload(BaseModel):
     one event.
     """
 
-    result: dict  # serialized QuizResult
+    result: QuizResult  # serialized QuizResult
     swot: SWOTAnalysis
 # ---------------------------------------------------------------------------
 # UI Frontend websocket schemas

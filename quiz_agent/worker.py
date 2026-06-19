@@ -26,13 +26,20 @@ logging.getLogger("LiteLLM").setLevel(logging.WARNING)
 
 
 def run() -> None:
-    """Start the quiz agent consumer loop for quiz generation requests."""
+    """Start the quiz agent consumer loop with routing based on message topic."""
+    from project.topics import PlannerAgentTopics, QuizAgentTopics
+
     producer = create_producer()
     consumer = create_consumer()
 
-    logger.info("quiz-agent worker started, listening on quiz-request")
+    # Subscribe to both topics
+    consumer.subscribe([PlannerAgentTopics.QUIZ_REQUEST.value, QuizAgentTopics.QUIZ_EVALUATE.value])
 
-    for message in consumer:
+    logger.info("quiz-agent worker started, listening on quiz-request and quiz-evaluate")
+
+    agent = QuizAgent()
+
+    def handle_quiz_request(message) -> None:
         payload: dict = message.value
         event = QuizRequestEvent.model_validate(payload)
 
@@ -42,7 +49,7 @@ def run() -> None:
             "teaching_content": teaching_content,
         }
 
-        result = QuizAgent().generate(raw_input)
+        result = agent.generate(raw_input)
 
         publish_stream_tokens(
             producer,
@@ -64,23 +71,12 @@ def run() -> None:
 
         logger.info("quiz request processed request_id=%s", event.request_id)
 
-
-def run_evaluation() -> None:
-    """Start the quiz agent consumer loop for answer evaluation requests."""
-    producer = create_producer()
-    consumer = create_evaluation_consumer()
-
-    logger.info("quiz-agent eval worker started, listening on quiz-evaluate")
-
-    agent = QuizAgent()
-
-    for message in consumer:
+    def handle_quiz_evaluate(message) -> None:
         payload: dict = message.value
         event = QuizEvaluateRequestEvent.model_validate(payload)
 
         eval_output = agent.evaluate(event.quiz, event.answers)
-
-        swot = agent.generate_swot(eval_output.result, event.quiz.get("topic", ""))
+        swot = agent.generate_swot(eval_output.result, getattr(event.quiz, "topic", ""))
 
         stream_payload = QuizEvaluationStreamPayload(
             result=eval_output.result.model_dump() if eval_output.result else {},
@@ -90,7 +86,7 @@ def run_evaluation() -> None:
         publish_stream_tokens(
             producer,
             StreamTokensEventBody(
-                from_service="quiz-agent",
+                from_service="eval-agent",
                 sid=event.sid,
                 data=stream_payload.model_dump(),
             ),
@@ -105,6 +101,13 @@ def run_evaluation() -> None:
         )
 
         logger.info("quiz evaluation processed request_id=%s", event.request_id)
+
+    # Poll single consumer and route based on topic
+    for message in consumer:
+        if message.topic == QuizAgentTopics.QUIZ_EVALUATE.value:
+            handle_quiz_evaluate(message)
+        elif message.topic == PlannerAgentTopics.QUIZ_REQUEST.value:
+            handle_quiz_request(message)
 
 
 if __name__ == "__main__":
