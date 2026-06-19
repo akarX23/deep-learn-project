@@ -254,11 +254,11 @@ def build_result(
     percentage = round(overall_score / max_score * 100, 1) if max_score > 0 else 0.0
 
     if percentage >= 75:
-        recommended_action = "advance"
+        recommended_action = "Move to next Topic"
     elif percentage >= 50:
-        recommended_action = "practice-more"
+        recommended_action = "Review Notes and Retake Quiz"
     else:
-        recommended_action = "re-teach"
+        recommended_action = "Retake the Course"
 
     return {
         "overall_score": overall_score,
