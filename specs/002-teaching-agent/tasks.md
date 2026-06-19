@@ -269,7 +269,7 @@ Backend service will auto-bootstrap `"teaching"` and `"teaching-complete"` on ne
       default 0.7) and `TEACHING_{MODE}_EFFORT` (optional, `None` when unset) at runtime
       regardless. Re-add the stubs only if per-mode tuning is needed.
 
-- [ ] T034 Remove the dead commented-out `TeachingCompletionEvent` block in
+- [x] T034 Remove the dead commented-out `TeachingCompletionEvent` block in
       `project/schemas.py` (Teaching Agent section, ~lines 411–433). It was superseded by the
       active planner-aligned `TeachingCompletionEvent` in the Planner Agent section and is now
       obsolete. Constitution Principle V — remove obsolete code paths.
