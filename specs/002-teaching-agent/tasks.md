@@ -527,7 +527,7 @@ on the T041 implementation existing.
       Project-Structure entry to DROP "add … reflection_max_tokens field" (the `effort` field
       already exists from T032). No new `LLMConfig` fields are introduced.
 
-- [ ] T048 [Gap B] Add a performance-budget validation task (FR-018-proposed, SC-007;
+- [~] T048 [Gap B] Add a performance-budget validation task (FR-018-proposed, SC-007;
       Constitution Principle IV — budgets MUST be validated). Measure wall-clock per mode
       (beginner / intermediate / advanced) at N=0 and N=1 against a single pinned model +
       endpoint (FR-018 requires same-model comparison). Easiest path: extend `run_samples.py`
@@ -541,6 +541,10 @@ on the T041 implementation existing.
       - Confirm no timeout at the advanced 4096-token ceiling on BOTH the generation and
         revision calls.
       Requires a reachable LLM endpoint (gated like T046).
+      NOTE: harness implemented as a dedicated dev script `teaching_agent/tests/perf_reflection.py`
+      (chosen over extending `run_samples.py` for clarity); function-based with a `__main__`
+      guard, ruff-clean, not collected by pytest. Execution + the recorded
+      `outputs/perf_<timestamp>.md` table are pending a live LLM endpoint.
 
 - [x] T049 [Gap C] Update `data-model.md` and `contracts/teaching-agent-contract.md` for
       Phase 3: add the internal `ReflectionCritique` entity (`quality_score`, `issues`,
