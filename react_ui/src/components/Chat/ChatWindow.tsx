@@ -84,7 +84,8 @@ export function ChatWindow({ sid, onSubmitRequest, onContextChange }: ChatWindow
               ...message,
               content: payload.fullContent,
               isStreaming: false,
-              tokens_used: payload.tokens_used
+              tokens_used: payload.tokens_used,
+              model: payload.model
             }
           : message
       )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+import os
 
 from project.schemas import (
     StreamTokensEventBody,
@@ -114,7 +115,7 @@ class TeachingRequestEventHandler:
                 self._stream_publisher(producer, StreamTokensEventBody(
                     from_service="teaching-agent",
                     sid=event.sid,
-                    data={"done": True, "tokens_used": tokens_used},
+                    data={"done": True, "tokens_used": tokens_used, "model": os.getenv("TEACHING_MODEL")},
                 ))
                 producer.flush()
             except Exception as exc:

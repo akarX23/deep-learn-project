@@ -43,6 +43,7 @@ export function MessageList({
               isActive={activeStreamMessageId === message.id}
               initialContent={message.content}
               initialTokensUsed={message.tokens_used}
+              initialModel={message.model}
               progressPlaceholder={progressPlaceholder}
               onDone={onAssistantStreamDone}
             />

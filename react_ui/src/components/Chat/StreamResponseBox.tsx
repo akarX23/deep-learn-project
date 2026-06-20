@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import type { Components } from "react-markdown";
 import { rehypeMermaid, MermaidBlock } from 'react-markdown-mermaid';
 import { useSocketEvent } from "../../hooks/useSocketEvent";
 import type { StreamCompletionPayload, StreamTokensEventBody } from "../../schemas";
@@ -14,6 +15,7 @@ interface StreamResponseBoxProps {
   isActive: boolean;
   initialContent: string;
   initialTokensUsed?: number;
+  initialModel?: string;
   progressPlaceholder: string;
   onDone: (payload: StreamCompletionPayload) => void;
 }
@@ -24,12 +26,15 @@ export function StreamResponseBox({
   isActive,
   initialContent,
   initialTokensUsed,
+  initialModel,
   progressPlaceholder,
   onDone
 }: StreamResponseBoxProps): JSX.Element {
+  const mermaidComponents = { MermaidBlock } as unknown as Components;
   const [markdownContent, setMarkdownContent] = useState(initialContent);
   const [isStreaming, setIsStreaming] = useState(isActive);
   const [tokensUsed, setTokensUsed] = useState<number | null>(initialTokensUsed ?? null);
+  const [model, setModel] = useState<string | null>(initialModel ?? null);
   const previousFieldRef = useRef<string | null>(null);
   const isDiagramField = (value: string): boolean => value.toLowerCase() === "diagram";
 
@@ -37,8 +42,9 @@ export function StreamResponseBox({
     setMarkdownContent(initialContent);
     setIsStreaming(isActive);
     setTokensUsed(initialTokensUsed ?? null);
+    setModel(initialModel ?? null);
     previousFieldRef.current = null;
-  }, [initialContent, initialTokensUsed, isActive, messageId]);
+  }, [initialContent, initialTokensUsed, initialModel, isActive, messageId]);
 
   useSocketEvent<StreamTokensEventBody>(
     WebSocketEvents.STREAM_TOKENS_SKT,
@@ -64,12 +70,18 @@ export function StreamResponseBox({
         if (payload.data.done === true) {
           const completionTokensUsed =
             typeof payload.data.tokens_used === "number" ? payload.data.tokens_used : undefined;
+          const completionModel =
+            typeof payload.data.model === "string" && payload.data.model.trim().length > 0
+              ? payload.data.model.trim()
+              : undefined;
           setIsStreaming(false);
           setTokensUsed(completionTokensUsed ?? null);
+          setModel(completionModel ?? null);
           onDone({
             messageId,
             fullContent: markdownContent,
-            tokens_used: completionTokensUsed
+            tokens_used: completionTokensUsed,
+            model: completionModel
           });
           return;
         }
@@ -81,7 +93,6 @@ export function StreamResponseBox({
         }
 
         const tokenAppend = `${sectionHeading}${token}`;
-        console.log("Token append: ", tokenAppend)
         if (tokenAppend) {
           setMarkdownContent((prev) => prev + tokenAppend);
         }
@@ -106,7 +117,7 @@ export function StreamResponseBox({
                   },
                 ],
               ]}
-              components={{ MermaidBlock: MermaidBlock }} >
+              components={mermaidComponents} >
             {markdownContent}</ReactMarkdown>
         </div>
       ) : (
@@ -115,7 +126,10 @@ export function StreamResponseBox({
 
       {isStreaming && <LoadingIndicator placeholderText={progressPlaceholder} />}
       {!isStreaming && tokensUsed !== null && (
-        <p className={uiClasses.loading.usage}>Tokens used: {tokensUsed}</p>
+        <p className={uiClasses.loading.usage}>
+          {model ? `Model: ${model}` : ""}
+          {tokensUsed !== null ? ` | Tokens used: ${tokensUsed}` : ""}
+        </p>
       )}
     </div>
   );

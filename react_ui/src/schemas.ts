@@ -28,6 +28,7 @@ export interface ChatMessage {
   content: string;
   isStreaming: boolean;
   tokens_used?: number;
+  model?: string;
   info?: boolean;
   attachments?: ChatAttachment[];
 }
@@ -36,6 +37,7 @@ export interface StreamCompletionPayload {
   messageId: string;
   fullContent: string;
   tokens_used?: number;
+  model?: string;
 }
 
 export type QuestionType = "mcq-single" | "mcq-multi" | "descriptive";
