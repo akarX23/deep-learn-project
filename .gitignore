@@ -39,3 +39,6 @@ chat_logs
 # Uploaded user files
 uploads/
 ./uploads
+
+# claude export files
+2026*.txt
