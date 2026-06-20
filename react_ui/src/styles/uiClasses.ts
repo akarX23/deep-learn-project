@@ -27,6 +27,9 @@ export const uiClasses = {
     infoBubble: `self-start border-amber-400/30 ${theme.infoBubble} text-amber-100`,
     attachmentChip: "inline-flex items-center rounded-md border border-amber-300/30 bg-amber-300/10 px-2 py-1 text-xs text-amber-100",
     markdownBox: `rounded-lg border ${theme.border} bg-slate-950/60 p-3 leading-relaxed`,
+    streamRevealBase: "transition-all duration-200 ease-out will-change-transform will-change-opacity",
+    streamRevealIdle: "opacity-100 translate-y-0",
+    streamRevealActive: "opacity-90 translate-y-0.5",
     errorText: "mt-2 text-sm text-rose-300"
   },
   input: {
@@ -47,10 +50,25 @@ export const uiClasses = {
     errorBox: "mt-2 rounded-lg border border-rose-400/40 bg-rose-500/10 p-2 text-sm text-rose-200"
   },
   loading: {
-    shell: "mt-2 flex items-center gap-2 text-sm text-slate-300",
+    shell: "mt-2 rounded-lg border border-slate-700 bg-slate-900/50 p-3 text-sm text-slate-300",
+    topRow: "flex items-center gap-2",
+    statusRow: "flex items-center gap-2",
     dots: "inline-flex items-center gap-1",
-    dot: "h-1.5 w-1.5 animate-pulse rounded-full bg-amber-300",
-    placeholder: "rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1 text-xs text-slate-300",
+    dotBase: "h-2 w-2 rounded-full bg-amber-300 animate-bounce [animation-duration:700ms] [animation-timing-function:cubic-bezier(0.2,0.8,0.2,1)]",
+    dotFirst: "[animation-delay:0ms]",
+    dotSecond: "[animation-delay:140ms]",
+    dotThird: "[animation-delay:280ms]",
+    placeholder: "rounded-md border border-slate-700 bg-slate-900/80 px-2 py-1 text-xs text-slate-200 animate-pulse [animation-duration:1.4s]",
+    expandButton: "h-6 w-6 rounded-md border border-slate-600 bg-slate-800/80 text-xs font-semibold text-slate-200 transition-colors hover:bg-slate-700",
+    expandButtonChevron: "inline-block transition-transform duration-300 ease-in-out",
+    expandButtonChevronExpanded: "rotate-90",
+    progressContainer: "overflow-hidden transition-[height,opacity,margin] duration-300 ease-in-out",
+    progressContainerExpanded: "mt-3 opacity-100",
+    progressContainerCollapsed: "mt-0 opacity-0",
+    progressViewport: "h-full overflow-y-auto rounded-md border border-slate-700 bg-slate-950/60 px-2 py-1",
+    progressList: "space-y-1",
+    progressItem: "text-xs text-slate-300",
+    progressItemMuted: "text-xs text-slate-500",
     usage: "mt-2 text-xs text-slate-400"
   },
   placeholder: {

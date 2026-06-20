@@ -130,7 +130,7 @@ export function QuizPlaceholder({
           return;
         }
 
-        console.log("Quiz", payload.update);
+        setIsLoading(true);
       },
       [sid]
     )
@@ -229,7 +229,13 @@ export function QuizPlaceholder({
         </button>
       </div>
 
-      {isLoading && <LoadingIndicator placeholderText="Waiting for quiz generation..." />}
+      {isLoading && (
+        <LoadingIndicator
+          sid={sid}
+          page="quiz"
+          placeholderText="Waiting for quiz generation..."
+        />
+      )}
       {error && <p className={uiClasses.chat.errorText}>{error}</p>}
 
       {!isLoading && !error && !quiz && (

@@ -4,8 +4,7 @@ import { useSocketEvent } from "../../hooks/useSocketEvent";
 import type {
   ChatMessage,
   ClarifyUserLevelEvent,
-  StreamCompletionPayload,
-  StreamProgressUpdateEventBody
+  StreamCompletionPayload
 } from "../../schemas";
 import { WebSocketEvents } from "../../schemas";
 import { uiClasses } from "../../styles/uiClasses";
@@ -78,20 +77,6 @@ export function ChatWindow({ sid, onSubmitRequest, onContextChange }: ChatWindow
       { id: uuid(), role: "assistant", content, isStreaming: false, info: true }
     ]);
   }, [sid]));
-
-  useSocketEvent<StreamProgressUpdateEventBody>(
-    WebSocketEvents.STREAM_PROGRESS_UPDATE_SKT,
-    useCallback(
-      (payload) => {
-        if (!sid || payload.sid !== sid || payload.for_page !== "chat") {
-          return;
-        }
-
-        console.log("Chat", payload.update);
-      },
-      [sid]
-    )
-  );
 
   const handleAssistantStreamDone = useCallback((payload: StreamCompletionPayload): void => {
     setIsSubmitting(false);

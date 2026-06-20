@@ -28,6 +28,10 @@ interface EvaluationPlaceholderProps {
   onContextChange: (context: EvaluationSectionContext) => void;
 }
 
+function formatTo2(value: number): string {
+  return Number.isFinite(value) ? value.toFixed(2) : "0.00";
+}
+
 function getScoreTone(percentage: number): { bar: string; text: string; chip: string } {
   if (percentage >= 85) {
     return {
@@ -137,7 +141,7 @@ function renderQuestionResult(
           {getQuestionTitle(quiz, questionResult.question_id, index)}
         </h4>
         <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${tone.chip}`}>
-          {questionResult.score}/{questionResult.max_score}
+          {formatTo2(questionResult.score)}/{formatTo2(questionResult.max_score)}
         </span>
       </div>
 
@@ -248,10 +252,17 @@ export function EvaluationPlaceholder({
         if (!sid || payload.sid !== sid || payload.for_page !== "eval") {
           return;
         }
+        if (context.status === "loading") {
+          return;
+        }
 
-        console.log("Eval", payload.update);
+        onContextChange({
+          status: "loading",
+          payload: null,
+          error: null
+        });
       },
-      [sid]
+      [context.status, onContextChange, sid]
     )
   );
 
@@ -280,7 +291,7 @@ export function EvaluationPlaceholder({
 
       {context.status === "loading" && (
         <div className="mt-3">
-          <LoadingIndicator placeholderText="Evaluating Quiz" />
+          <LoadingIndicator sid={sid} page="eval" placeholderText="Evaluating Quiz" />
         </div>
       )}
 
@@ -292,7 +303,7 @@ export function EvaluationPlaceholder({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h3 className="text-base font-semibold text-slate-100">Summary</h3>
               <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${scoreTone.chip}`}>
-                {score}/{maxScore}
+                {formatTo2(score)}/{formatTo2(maxScore)}
               </span>
             </div>
 
@@ -300,7 +311,7 @@ export function EvaluationPlaceholder({
               <div className={`h-2 rounded-full transition-all ${scoreTone.bar}`} style={{ width: `${safePercent}%` }} />
             </div>
 
-            <p className={`mt-2 text-sm font-medium ${scoreTone.text}`}>{safePercent.toFixed(1)}% overall</p>
+            <p className={`mt-2 text-sm font-medium ${scoreTone.text}`}>{formatTo2(safePercent)}% overall</p>
 
             <div className="mt-3 grid grid-cols-1 gap-2 text-sm text-slate-300 md:grid-cols-2">
               <p>MCQ subtotal: {mcqSubtotal.toFixed(2)}</p>
