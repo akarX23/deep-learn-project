@@ -51,6 +51,10 @@ def _ensure_chat_history() -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 def _on_event(event: AgentEvent) -> None:
+    print(
+        f"[frontend-debug] _on_event type={event.event_type.value} "
+        f"source={event.source_agent} payload_keys={list(event.payload.keys())}"
+    )
     session = _ensure_frontend_session()
     updated = route_event(session, event)
     _store_session(updated)
@@ -61,6 +65,11 @@ def _on_event(event: AgentEvent) -> None:
     if event_type == EventType.TEACHING_TOKEN:
         # Locate in-progress slot by stream_id to prevent duplicate bubbles.
         stream_id = updated.chat_state.stream_id
+        print(
+            f"[frontend-debug] teaching token applied stream_id={stream_id} "
+            f"rendered_len={len(updated.chat_state.rendered_text)} "
+            f"last_seq={updated.chat_state.last_sequence}"
+        )
         in_progress_idx = next(
             (i for i, m in enumerate(history)
              if m["role"] == "assistant"
@@ -144,16 +153,26 @@ def _drain_event_queue() -> bool:
         except queue.Empty:
             break
         kind = item[0]
+        print(f"[frontend-debug] queue item kind={kind}")
         if kind == "connected":
             _, sid = item
+            print(f"[frontend-debug] queue connected sid={sid}")
             st.session_state.socketio_sid = sid
             _on_connection_state_change(ConnectionLifecycleState.CONNECTED)
         elif kind == "state":
             _, state, error = item
+            print(f"[frontend-debug] queue state={state.value} error={error}")
             _on_connection_state_change(state, error)
         elif kind == "event":
             _, event = item
+            print(
+                f"[frontend-debug] queue event type={event.event_type.value} "
+                f"source={event.source_agent}"
+            )
             _on_event(event)
+        elif kind == "debug":
+            _, message = item
+            print(f"[frontend-debug] {message}")
         processed = True
     return processed
 

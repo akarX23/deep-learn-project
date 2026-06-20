@@ -149,6 +149,10 @@ def apply_teaching_token(
             "is_complete": payload.is_final,
         }
     )
+    print(
+        f"[frontend-debug] state apply_teaching_token stream_id={payload.stream_id} "
+        f"seq={payload.sequence} rendered_len={len(updated_chat_state.rendered_text)}"
+    )
     return session.model_copy(update={"chat_state": updated_chat_state})
 
 

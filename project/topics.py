@@ -31,6 +31,7 @@ class BackendStreamTopics(str, Enum):
     """Topics the backend consumes to forward events to Socket.IO sessions."""
 
     STREAM_TOKENS = "stream-tokens"
+    STREAM_PROGRESS_UPDATE = "stream-progress-update"
 
 
 class AgentCompletionTopics(str, Enum):
@@ -98,4 +99,5 @@ def get_backend_consumer_topic_names() -> list[str]:
     return [
         PlannerAgentTopics.CLARIFY_USER_LEVEL.value,
         BackendStreamTopics.STREAM_TOKENS.value,
+        BackendStreamTopics.STREAM_PROGRESS_UPDATE.value,
     ]

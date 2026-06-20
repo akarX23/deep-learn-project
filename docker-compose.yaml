@@ -86,23 +86,6 @@ services:
     environment:
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}
 
-  # planner-agent:
-  #   image: deep-learn/planner-agent:local
-  #   build:
-  #     context: .
-  #     dockerfile: planner_agent/Dockerfile
-  #   network_mode: host
-  #   restart: unless-stopped
-  #   depends_on:
-  #     kafka:
-  #       condition: service_healthy
-  #     backend-service:
-  #       condition: service_healthy
-  #   env_file:
-  #     - .env.local
-  #   environment:
-  #     PLANNER_KAFKA_BOOTSTRAP_SERVERS: ${PLANNER_KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}
-
   rag-agent:
     image: deep-learn/rag-agent:local
     build:
@@ -156,11 +139,11 @@ services:
     environment:
       BACKEND_KAFKA_BOOTSTRAP_SERVERS: ${BACKEND_KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}
 
-  ui-frontend:
-    image: deep-learn/ui-frontend:local
+  react-ui:
+    image: deep-learn/react-ui:local
     build:
       context: .
-      dockerfile: ui_frontend/Dockerfile
+      dockerfile: react_ui/Dockerfile
     network_mode: host
     restart: unless-stopped
     depends_on:
@@ -168,3 +151,4 @@ services:
         condition: service_healthy
     env_file:
       - .env.local
+    

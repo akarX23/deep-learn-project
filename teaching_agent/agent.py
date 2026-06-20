@@ -66,6 +66,8 @@ class TeachingAgent:
         Returns (TeachingAgentOutput, raw_markdown). raw_markdown is the complete
         LLM response string; empty string on any error path.
         """
+        # Store token_callback for use in _resolve_diagram for diagram retry progress.
+        self._token_callback = token_callback
 
         # Step 1: Validate input. On failure, return error before any LLM call.
         try:
@@ -202,6 +204,7 @@ class TeachingAgent:
             return None
 
         # Beginner mode: diagram is required — attempt one retry.
+        self._token_callback("_progress", "Retrying Mermaid diagram generation.")
         try:
             raw_retry, _ = call_llm(messages, config)
             parsed_retry = parse_markdown_response(raw_retry)

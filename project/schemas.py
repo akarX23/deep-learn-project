@@ -230,6 +230,21 @@ class UserRequest(BaseModel):
     sid: str
 
 
+class QuizContentRequest(BaseModel):
+    """Inbound request used by backend to trigger quiz generation."""
+
+    sid: str
+    user_prompt: str
+    teaching_material: str
+
+    @field_validator("sid", "user_prompt", "teaching_material")
+    @classmethod
+    def validate_non_empty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value cannot be empty")
+        return value
+
+
 class StreamTokensEventBody(BaseModel):
     """Kafka payload for the ``stream-tokens`` topic, forwarded to Socket.IO.
 
@@ -240,6 +255,29 @@ class StreamTokensEventBody(BaseModel):
     from_service: str
     sid: str
     data: dict[str, Any] = Field(default_factory=dict)
+
+
+class ProgressUpdatePage(str, Enum):
+    """Frontend section identifiers for stream progress updates."""
+
+    CHAT = "chat"
+    QUIZ = "quiz"
+    EVAL = "eval"
+
+
+class StreamProgressUpdateEventBody(BaseModel):
+    """Kafka payload for ``stream-progress-update``, forwarded to Socket.IO."""
+
+    sid: str
+    for_page: ProgressUpdatePage
+    update: str
+
+    @field_validator("sid", "update")
+    @classmethod
+    def validate_non_empty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value cannot be empty")
+        return value
 
 
 # ---------------------------------------------------------------------------
@@ -611,15 +649,6 @@ class QuizResult(BaseModel):
     weak_sub_concepts: List[str] = Field(default_factory=list)
     recommended_action: str  # "re-teach" | "practice-more" | "advance"
 
-    @field_validator("recommended_action")
-    @classmethod
-    def validate_recommended_action(cls, value: str) -> str:
-        if value not in {"re-teach", "practice-more", "advance"}:
-            raise ValueError(
-                "recommended_action must be one of: re-teach, practice-more, advance"
-            )
-        return value
-
 
 class QuizAgentMetadata(BaseModel):
     """Audit record for a Quiz Agent response."""
@@ -676,8 +705,8 @@ class QuizEvaluateRequestEvent(BaseModel):
 
     request_id: str
     sid: str
-    quiz: dict  # serialized Quiz object
-    answers: List[dict]  # serialized List[SubmittedAnswer]
+    quiz: Quiz  # serialized Quiz object
+    answers: List[SubmittedAnswer]  # serialized List[SubmittedAnswer]
 
 
 class QuizEvaluationStreamPayload(BaseModel):
@@ -688,7 +717,7 @@ class QuizEvaluationStreamPayload(BaseModel):
     one event.
     """
 
-    result: dict  # serialized QuizResult
+    result: QuizResult  # serialized QuizResult
     swot: SWOTAnalysis
 # ---------------------------------------------------------------------------
 # UI Frontend websocket schemas
@@ -799,6 +828,7 @@ class QuizEventPayload(BaseModel):
     choices: List[str] = Field(default_factory=list)
     feedback: Optional[str] = None
     score: Optional[float] = None
+    questions: List[dict] = Field(default_factory=list)
 
     @field_validator("quiz_id")
     @classmethod
@@ -905,6 +935,8 @@ class QuizState(BaseModel):
     choices: List[str] = Field(default_factory=list)
     feedback: Optional[str] = None
     score: Optional[float] = None
+    questions: List[dict] = Field(default_factory=list)
+    current_question_index: int = 0
 
 
 class EvaluationState(BaseModel):

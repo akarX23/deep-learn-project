@@ -426,104 +426,41 @@ def test_diagram_field_in_stream_events() -> None:
     assert "notes" in fields
 
 
-def test_handler_passes_chat_history_to_agent() -> None:
-    """Phase 5: handler maps event.chat_history into the agent.run() input dict."""
-    captured = {}
+def test_progress_updates_emitted_for_teaching_steps_to_chat() -> None:
+    progress_events = []
 
     class _FakeAgent:
         def run(self, raw_input, token_callback):
-            captured["raw_input"] = raw_input
+            token_callback("explanation", "Some explanation")
+            token_callback("notes", "Some notes")
+            token_callback("diagram", "graph TD\n  A-->B")
             return (
                 _make_ok_output(raw_input["topic"], raw_input["output_mode"]),
-                "**Explanation**\nFollow-up answer\n\n**Notes**\nNotes",
+                "**Explanation**\nSome explanation\n\n**Diagram**\ngraph TD\n  A-->B\n\n**Notes**\nSome notes",
             )
 
     handler = TeachingRequestEventHandler(
         agent_factory=_FakeAgent,
         publisher=lambda p, e: None,
         stream_publisher=lambda p, e: None,
+        progress_publisher=lambda p, e: progress_events.append(e),
     )
-    history = [
-        {"role": "user", "content": "What is gradient descent?"},
-        {"role": "assistant", "content": "It is an optimization method."},
-    ]
     handler.process_request(
         {
-            "request_id": "req-mt-1",
-            "sid": "s-mt",
-            "user_prompt": "How does momentum change it?",
-            "user_level": "intermediate",
-            "rag_compiled": "",
-            "chat_history": history,
-        },
-        producer=_FakeProducer(),
-    )
-
-    assert captured["raw_input"]["chat_history"] == history
-    assert captured["raw_input"]["topic"] == "How does momentum change it?"
-
-
-def test_handler_defaults_chat_history_when_absent() -> None:
-    """Backward compat: an event without chat_history yields [] into the agent."""
-    captured = {}
-
-    class _FakeAgent:
-        def run(self, raw_input, token_callback):
-            captured["raw_input"] = raw_input
-            return (
-                _make_ok_output(raw_input["topic"], raw_input["output_mode"]),
-                "**Explanation**\nAnswer\n\n**Notes**\nNotes",
-            )
-
-    handler = TeachingRequestEventHandler(
-        agent_factory=_FakeAgent,
-        publisher=lambda p, e: None,
-        stream_publisher=lambda p, e: None,
-    )
-    handler.process_request(
-        {"request_id": "req-mt-2", "sid": "s2", "user_prompt": "Loops",
-         "user_level": "beginner", "rag_compiled": ""},
-        producer=_FakeProducer(),
-    )
-
-    assert captured["raw_input"]["chat_history"] == []
-
-
-def test_multi_turn_request_publishes_completion_once() -> None:
-    """Phase 5: a request with chat_history still publishes exactly one
-    teaching-complete event (publish-once contract preserved)."""
-    sent = []
-
-    class _FakeProducerLocal:
-        def send(self, topic, payload):
-            sent.append((topic, payload))
-
-        def flush(self):
-            pass
-
-    class _FakeAgent:
-        def run(self, raw_input, token_callback):
-            return (
-                _make_ok_output(raw_input["topic"], raw_input["output_mode"]),
-                "**Explanation**\nFollow-up\n\n**Notes**\nNotes",
-            )
-
-    handler = TeachingRequestEventHandler(agent_factory=_FakeAgent)  # real publishers
-    handler.process_request(
-        {
-            "request_id": "req-mt-3",
-            "sid": "s3",
-            "user_prompt": "Follow up",
+            "request_id": "r-progress-1",
+            "sid": "s-progress-1",
+            "user_prompt": "Trees",
             "user_level": "beginner",
             "rag_compiled": "",
-            "chat_history": [{"role": "user", "content": "earlier"}],
         },
-        producer=_FakeProducerLocal(),
+        producer=_FakeProducer(),
     )
 
-    completions = [p for t, p in sent if t == "teaching-complete"]
-    assert len(completions) == 1
-    assert completions[0]["request_id"] == "req-mt-3"
+    updates = [event.update for event in progress_events]
+    assert any(update == "Generating explanation." for update in updates)
+    assert any(update == "Generating notes." for update in updates)
+    assert any(update == "Generating Mermaid diagram." for update in updates)
+    assert all(event.for_page.value == "chat" for event in progress_events)
 
 
 def _make_completion_event():

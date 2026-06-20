@@ -52,10 +52,12 @@ from project.schemas import (
     PlannerRequestEvent,
     QuizRequestEvent,
     RAGRequestEvent,
+    StreamProgressUpdateEventBody,
     TeachingRequestEvent,
     WorkflowCompleteEvent,
+    ProgressUpdatePage
 )
-from project.topics import PlannerAgentTopics, PlannerTopics
+from project.topics import BackendStreamTopics, PlannerAgentTopics, PlannerTopics
 
 logger = logging.getLogger(__name__)
 
@@ -179,6 +181,20 @@ class PlannerAgent:
                 "[%s] publish_failed topic=%s error=%s", request_id, topic, exc
             )
 
+    def _publish_progress_update(
+        self, request_id: str, sid: str, for_page: ProgressUpdatePage, update: str
+    ) -> None:
+        """Publish a lightweight frontend progress update for one workflow stage."""
+        self._publish(
+            BackendStreamTopics.STREAM_PROGRESS_UPDATE.value,
+            StreamProgressUpdateEventBody(
+                sid=sid,
+                for_page=for_page,
+                update=update,
+            ).model_dump(mode="json"),
+            request_id,
+        )
+
     # ── graph construction ────────────────────────────────────────────────
 
     def _build_graph(self) -> CompiledStateGraph:
@@ -252,6 +268,13 @@ class PlannerAgent:
         request_id = state.get("request_id", "?")
         user_prompt: str = state.get("user_prompt", "")
         updates: dict[str, Any] = {}
+        
+        self._publish_progress_update(
+            request_id,
+            state.get("sid", ""),
+            ProgressUpdatePage.CHAT,
+            "Understanding user level",
+        )
 
         # ── injection check (always first, rule-based) ────────────────────
         if classifier.contains_injection_pattern(user_prompt):
@@ -322,6 +345,13 @@ class PlannerAgent:
 
             updates["user_levels"] = [result.level.value]
             updates["quiz_requested"] = result.quiz_requested
+
+        self._publish_progress_update(
+            request_id,
+            state.get("sid", ""),
+            ProgressUpdatePage.CHAT,
+            "Rewriting query for better understanding"
+        )
 
         # ── query rewrite — Case 2: COMPLEX queries only (FR-022) ─────────
         complexity = classifier.detect_complexity(user_prompt)
@@ -418,6 +448,14 @@ class PlannerAgent:
             request_id,
             state.get("file_paths", []),
         )
+        
+        self._publish_progress_update(
+            request_id,
+            state.get("sid", ""),
+            ProgressUpdatePage.CHAT,
+            "Compiling uploaded materials with RAG",
+        )
+        
         self._publish(
             PlannerTopics.RAG.value,
             RAGRequestEvent(
@@ -485,6 +523,12 @@ class PlannerAgent:
             levels,
             bool(rag_compiled),
         )
+        self._publish_progress_update(
+            request_id,
+            state.get("sid", ""),
+            ProgressUpdatePage.CHAT,
+            "Generating teaching material",
+        )
 
         for level in levels:
             self._publish(
@@ -545,6 +589,12 @@ class PlannerAgent:
                 len(content),
                 outputs.get("status", "?"),
             )
+            self._publish_progress_update(
+                request_id,
+                state.get("sid", ""),
+                ProgressUpdatePage.CHAT,
+                f"Teaching material ready for {level}.",
+            )
             if outputs.get("status") == "failed":
                 logger.error(
                     "[%s] await_teaching: agent failure level=%s errors=%s",
@@ -567,6 +617,12 @@ class PlannerAgent:
         """
         request_id = state.get("request_id", "?")
         logger.info("[%s] run_quiz: dispatching quiz request", request_id)
+        self._publish_progress_update(
+            request_id,
+            state.get("sid", ""),
+            ProgressUpdatePage.QUIZ,
+            "Generating quiz",
+        )
         self._publish(
             PlannerAgentTopics.QUIZ_REQUEST.value,
             QuizRequestEvent(
@@ -606,6 +662,7 @@ class PlannerAgent:
             len(quiz_content),
             outputs.get("status", "?"),
         )
+        
         if outputs.get("status") == "failed":
             logger.error(
                 "[%s] await_quiz: quiz agent reported failure errors=%s",
@@ -770,6 +827,7 @@ class PlannerAgent:
                 "resume: unknown_workflow request_id=%s (completed or never started)",
                 request_id,
             )
+            return
 
         config: dict[str, Any] = {"configurable": {"thread_id": request_id}}
         logger.info(

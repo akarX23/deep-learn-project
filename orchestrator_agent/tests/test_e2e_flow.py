@@ -73,6 +73,10 @@ def _make_agent() -> tuple[PlannerAgent, FakeProducer]:
     return PlannerAgent(producer=producer), producer
 
 
+def _messages_for_topic(producer: FakeProducer, topic: str) -> list[dict[str, Any]]:
+    return [value for current_topic, value, _ in producer.sent if current_topic == topic]
+
+
 def _llm_response(level: str = "beginner", confidence: float = 0.92, quiz: bool = False) -> str:
     return json.dumps({
         "level": level,
@@ -130,8 +134,10 @@ def test_flow_teaching_only_run_then_resume() -> None:
     })
 
     final = _get_state(agent, request_id)
+    progress_updates = _messages_for_topic(producer, "stream-progress-update")
     assert final["workflow_status"] == "complete"
     assert "beginner" in final["teaching_materials"]
+    assert any(update["for_page"] == "chat" for update in progress_updates)
     assert request_id not in agent._active_requests
     assert "workflow-complete" in producer.topics()
 
@@ -223,8 +229,11 @@ def test_flow_quiz_three_resumes() -> None:
     })
 
     final = _get_state(agent, request_id)
+    progress_updates = _messages_for_topic(producer, "stream-progress-update")
     assert final["workflow_status"] == "complete"
     assert final.get("quiz_content") != ""
+    assert any(update["for_page"] == "chat" for update in progress_updates)
+    assert any(update["for_page"] == "quiz" for update in progress_updates)
     assert "workflow-complete" in producer.topics()
 
 
