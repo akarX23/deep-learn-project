@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { rehypeMermaid, MermaidBlock } from 'react-markdown-mermaid';
 import { useSocketEvent } from "../../hooks/useSocketEvent";
 import type { StreamCompletionPayload, StreamTokensEventBody } from "../../schemas";
 import { WebSocketEvents } from "../../schemas";
@@ -30,6 +31,7 @@ export function StreamResponseBox({
   const [isStreaming, setIsStreaming] = useState(isActive);
   const [tokensUsed, setTokensUsed] = useState<number | null>(initialTokensUsed ?? null);
   const previousFieldRef = useRef<string | null>(null);
+  const isDiagramField = (value: string): boolean => value.toLowerCase() === "diagram";
 
   useEffect(() => {
     setMarkdownContent(initialContent);
@@ -60,27 +62,26 @@ export function StreamResponseBox({
         }
 
         if (payload.data.done === true) {
-          const trailingToken = typeof payload.data.token === "string" ? payload.data.token : "";
-          const completionAppend = `${sectionHeading}${trailingToken}`;
-          const finalContent = completionAppend ? markdownContent + completionAppend : markdownContent;
-          if (completionAppend) {
-            setMarkdownContent(finalContent);
-          }
-
           const completionTokensUsed =
             typeof payload.data.tokens_used === "number" ? payload.data.tokens_used : undefined;
           setIsStreaming(false);
           setTokensUsed(completionTokensUsed ?? null);
           onDone({
             messageId,
-            fullContent: finalContent,
+            fullContent: markdownContent,
             tokens_used: completionTokensUsed
           });
           return;
         }
 
-        const token = typeof payload.data.token === "string" ? payload.data.token : "";
+        let token = typeof payload.data.token === "string" ? payload.data.token : "";
+
+        if (isDiagramField(field)) {
+          token = `\`\`\`mermaid\n${token}\n\`\`\``;
+        }
+
         const tokenAppend = `${sectionHeading}${token}`;
+        console.log("Token append: ", tokenAppend)
         if (tokenAppend) {
           setMarkdownContent((prev) => prev + tokenAppend);
         }
@@ -93,7 +94,20 @@ export function StreamResponseBox({
     <div className={uiClasses.chat.markdownBox}>
       {markdownContent ? (
         <div className="markdown-body">
-            <ReactMarkdown>{markdownContent}</ReactMarkdown>
+            <ReactMarkdown
+              rehypePlugins={[
+                [
+                  rehypeMermaid,
+                  {
+                    mermaidConfig: {
+                      theme: 'default',
+                      flowchart: { useMaxWidth: true },
+                    },
+                  },
+                ],
+              ]}
+              components={{ MermaidBlock: MermaidBlock }} >
+            {markdownContent}</ReactMarkdown>
         </div>
       ) : (
         <span className="text-slate-400">{isStreaming ? "Preparing response..." : "No response yet."}</span>

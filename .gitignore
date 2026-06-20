@@ -48,3 +48,5 @@ uploads/
 .vite
 *.lock
 *.tsbuildinfo
+
+package-lock.json
