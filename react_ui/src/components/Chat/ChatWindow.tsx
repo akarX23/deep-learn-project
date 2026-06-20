@@ -87,7 +87,7 @@ export function ChatWindow({ sid, onSubmitRequest, onContextChange }: ChatWindow
           return;
         }
 
-        console.log(payload.update);
+        console.log("Chat", payload.update);
       },
       [sid]
     )

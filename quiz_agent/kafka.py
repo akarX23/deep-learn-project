@@ -8,7 +8,7 @@ import os
 
 from kafka import KafkaConsumer, KafkaProducer
 
-from project.schemas import QuizCompletionEvent, StreamTokensEventBody
+from project.schemas import QuizCompletionEvent, StreamProgressUpdateEventBody, StreamTokensEventBody
 from project.topics import AgentCompletionTopics, BackendStreamTopics, PlannerAgentTopics, QuizAgentTopics
 
 logger = logging.getLogger(__name__)
@@ -59,4 +59,12 @@ def publish_stream_tokens(producer: KafkaProducer, event: StreamTokensEventBody)
 
 def publish_quiz_complete(producer: KafkaProducer, event: QuizCompletionEvent) -> None:
     producer.send(AgentCompletionTopics.QUIZ_COMPLETE.value, event.model_dump())
+    producer.flush()
+
+
+def publish_stream_progress_update(
+    producer: KafkaProducer,
+    event: StreamProgressUpdateEventBody,
+) -> None:
+    producer.send(BackendStreamTopics.STREAM_PROGRESS_UPDATE.value, event.model_dump())
     producer.flush()

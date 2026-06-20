@@ -10,6 +10,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Any
+from collections.abc import Callable
 
 # ---------------------------------------------------------------------------
 # Module-level logger — writes to logs/quiz_agent.log (created if missing)
@@ -96,7 +97,23 @@ class QuizAgent:
     # Phase 1: generate
     # ------------------------------------------------------------------
 
-    def generate(self, raw_input: dict[str, Any]) -> QuizAgentOutput:
+    @staticmethod
+    def _emit_progress(
+        progress_callback: Callable[[str], None] | None,
+        message: str,
+    ) -> None:
+        if progress_callback is None:
+            return
+        try:
+            progress_callback(message)
+        except Exception:  # noqa: BLE001 - progress failures must not break quiz flow
+            logger.warning("Progress callback failed for message=%r", message)
+
+    def generate(
+        self,
+        raw_input: dict[str, Any],
+        progress_callback: Callable[[str], None] | None = None,
+    ) -> QuizAgentOutput:
         """Generate a Quiz from teaching content.
 
         Returns QuizAgentOutput with status='generated' on success,
@@ -105,6 +122,7 @@ class QuizAgent:
         logger.info("================================================================")
         logger.info("PHASE 1 — generate() START")
         logger.info("================================================================")
+        self._emit_progress(progress_callback, "Validating quiz input.")
 
         # Step 1: validate input
         logger.info("[STEP 1] Validating QuizAgentInput schema")
@@ -144,6 +162,7 @@ class QuizAgent:
 
         # Step 4: load config
         logger.info("[STEP 4] Loading LLM generation config")
+        self._emit_progress(progress_callback, "Preparing quiz generation model.")
         try:
             config = get_generation_config()
         except RuntimeError as exc:
@@ -162,6 +181,7 @@ class QuizAgent:
         )
         messages = [{"role": "user", "content": stem_prompt}]
         logger.info("[STEP 5] Stem prompt assembled — prompt_chars=%d", len(stem_prompt))
+        self._emit_progress(progress_callback, "Generating question stems.")
         logger.debug("[STEP 5] Full stem prompt:\n%s", stem_prompt)
 
         tokens_used = 0
@@ -207,6 +227,10 @@ class QuizAgent:
                     "[STEP 5] Stem validation PASSED (%d questions)",
                     len(stem_parsed.get("questions", [])),
                 )
+                self._emit_progress(
+                    progress_callback,
+                    f"Question stems generated: {len(stem_parsed.get('questions', []))}.",
+                )
                 break
 
             logger.warning("[STEP 5] Stem validation errors: %s", errors)
@@ -228,12 +252,14 @@ class QuizAgent:
 
         # Step 6: parallel MCQ expansion (options + explanations + deep dive)
         logger.info("[STEP 6] Expanding MCQ questions in parallel")
+        self._emit_progress(progress_callback, "Generating MCQs with options and explanations.")
         try:
             parsed, mcq_expansion_tokens = self._expand_mcq_questions_parallel(
                 stem_parsed,
                 topic,
                 content,
                 config,
+                progress_callback,
             )
         except (RuntimeError, ValueError) as exc:
             logger.error("[STEP 6] MCQ expansion FAILED: %s", exc)
@@ -255,6 +281,7 @@ class QuizAgent:
 
         # Step 7: assemble Quiz
         logger.info("[STEP 7] Assembling Quiz schema object")
+        self._emit_progress(progress_callback, "Assembling quiz payload.")
         try:
             quiz = build_quiz_from_parsed(parsed, topic)
         except (ValidationError, KeyError, ValueError) as exc:
@@ -274,6 +301,7 @@ class QuizAgent:
         logger.info("================================================================")
         logger.info("PHASE 1 — generate() DONE  status=generated  tokens_used=%d", tokens_used)
         logger.info("================================================================")
+        self._emit_progress(progress_callback, "Quiz generation ready.")
         return output
 
     # ------------------------------------------------------------------
@@ -284,6 +312,7 @@ class QuizAgent:
         self,
         quiz_data: dict[str, Any] | Quiz,
         answers: list[dict[str, Any] | SubmittedAnswer],
+        progress_callback: Callable[[str], None] | None = None,
     ) -> QuizAgentOutput:
         """Evaluate submitted answers against the Quiz and return a QuizResult.
 
@@ -293,6 +322,7 @@ class QuizAgent:
         logger.info("================================================================")
         logger.info("PHASE 2 — evaluate() START")
         logger.info("================================================================")
+        self._emit_progress(progress_callback, "Validating quiz submission.")
 
         # Step 1: normalise inputs
         logger.info("[STEP 1] Normalising Quiz and SubmittedAnswer inputs")
@@ -319,6 +349,7 @@ class QuizAgent:
 
         # Step 2: grade MCQ questions locally
         logger.info("[STEP 2] Grading MCQ questions locally")
+        self._emit_progress(progress_callback, "Evaluating MCQ answers.")
         question_results: list[QuestionResult] = []
         mcq_subtotal = 0.0
         descriptive_questions: list[Question] = []
@@ -400,12 +431,14 @@ class QuizAgent:
 
         logger.info("[STEP 2] MCQ grading done — mcq_subtotal=%.2f (%d descriptive deferred)",
                     mcq_subtotal, len(descriptive_questions))
+        self._emit_progress(progress_callback, "MCQ evaluation complete.")
         for qr in question_results:
             logger.debug("[STEP 2] MCQ result — question_id=%s score=%.2f/%d is_correct=%s",
                          qr.question_id, qr.score, qr.max_score, qr.is_correct)
 
         # Step 3: grade descriptive questions via one LLM call
         logger.info("[STEP 3] Loading LLM grading config")
+        self._emit_progress(progress_callback, "Preparing descriptive evaluation model.")
         try:
             config = get_grading_config()
         except RuntimeError as exc:
@@ -419,6 +452,10 @@ class QuizAgent:
 
         if descriptive_questions:
             logger.info("[STEP 3] Grading %d descriptive question(s) via LLM", len(descriptive_questions))
+            self._emit_progress(
+                progress_callback,
+                f"Evaluating descriptive answers ({len(descriptive_questions)} questions).",
+            )
             answers_block = self._build_answers_block(
                 descriptive_questions, answers_by_qid
             )
@@ -470,9 +507,11 @@ class QuizAgent:
                     )
                 )
             logger.info("[STEP 3] Descriptive grading done — descriptive_subtotal=%.2f", descriptive_subtotal)
+            self._emit_progress(progress_callback, "Descriptive evaluation complete.")
         else:
             tokens_used = 0
             logger.info("[STEP 3] No descriptive questions — skipping LLM grading call")
+            self._emit_progress(progress_callback, "No descriptive questions to evaluate.")
 
         # Step 4: assemble QuizResult
         logger.info("[STEP 4] Assembling QuizResult")
@@ -502,6 +541,7 @@ class QuizAgent:
         try:
             quiz_result = QuizResult(**result_dict)
         except ValidationError as exc:
+            logger.error("[STEP 4] QuizResult validation FAILED: %s", exc)
             return build_error_output(topic, model_name, [str(exc)])
 
         eval_output = QuizAgentOutput(
@@ -521,13 +561,19 @@ class QuizAgent:
         logger.info("PHASE 2 — evaluate() DONE  status=evaluated  score=%.1f/%d (%.1f%%)",
                     overall_score, max_score, quiz_result.overall_percentage)
         logger.info("================================================================")
+        self._emit_progress(progress_callback, "Evaluation scoring completed.")
         return eval_output
 
     # ------------------------------------------------------------------
     # Phase 3: generate_swot
     # ------------------------------------------------------------------
 
-    def generate_swot(self, quiz_result: QuizResult, topic: str) -> SWOTAnalysis:
+    def generate_swot(
+        self,
+        quiz_result: QuizResult,
+        topic: str,
+        progress_callback: Callable[[str], None] | None = None,
+    ) -> SWOTAnalysis:
         """Generate a SWOT analysis from a completed QuizResult via one LLM call.
 
         Falls back to a minimal derived SWOT if the LLM call fails.
@@ -535,6 +581,7 @@ class QuizAgent:
         logger.info("================================================================")
         logger.info("PHASE 3 — generate_swot() START")
         logger.info("================================================================")
+        self._emit_progress(progress_callback, "Generating SWOT feedback.")
 
         strong_concepts = [
             qr.question_id
@@ -568,9 +615,11 @@ class QuizAgent:
             raw, _ = call_llm([{"role": "user", "content": prompt}], config)
             swot_data = parse_swot_response(raw)
             logger.info("[SWOT] SWOT analysis generated OK")
+            self._emit_progress(progress_callback, "SWOT analysis ready.")
             return SWOTAnalysis(**swot_data)
         except Exception as exc:
             logger.warning("[SWOT] LLM SWOT generation failed — returning fallback: %s", exc)
+            self._emit_progress(progress_callback, "SWOT fallback generated.")
             return SWOTAnalysis(
                 strengths=["Completed the quiz"],
                 weaknesses=weak_concepts or ["Areas need review"],
@@ -756,6 +805,7 @@ class QuizAgent:
         topic: str,
         content: str,
         config,
+        progress_callback: Callable[[str], None] | None = None,
     ) -> tuple[dict[str, Any], int]:
         """Expand all MCQ questions concurrently and return full parsed payload."""
         if not stem_parsed or not isinstance(stem_parsed.get("questions"), list):
@@ -781,11 +831,18 @@ class QuizAgent:
                 executor.submit(self._expand_single_mcq_question, questions[i], topic, content, config): i
                 for i in mcq_indexes
             }
+            completed = 0
+            total_mcq = len(mcq_indexes)
             for future in as_completed(futures):
                 idx = futures[future]
                 expanded_question, question_tokens = future.result()
                 questions[idx] = expanded_question
                 tokens_used += question_tokens
+                completed += 1
+                self._emit_progress(
+                    progress_callback,
+                    f"MCQ questions generated: {completed}/{total_mcq}.",
+                )
 
         return {"questions": questions}, tokens_used
 

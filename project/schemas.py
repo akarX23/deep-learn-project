@@ -614,15 +614,6 @@ class QuizResult(BaseModel):
     weak_sub_concepts: List[str] = Field(default_factory=list)
     recommended_action: str  # "re-teach" | "practice-more" | "advance"
 
-    @field_validator("recommended_action")
-    @classmethod
-    def validate_recommended_action(cls, value: str) -> str:
-        if value not in {"re-teach", "practice-more", "advance"}:
-            raise ValueError(
-                "recommended_action must be one of: re-teach, practice-more, advance"
-            )
-        return value
-
 
 class QuizAgentMetadata(BaseModel):
     """Audit record for a Quiz Agent response."""

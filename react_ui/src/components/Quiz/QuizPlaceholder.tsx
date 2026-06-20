@@ -130,7 +130,7 @@ export function QuizPlaceholder({
           return;
         }
 
-        console.log(payload.update);
+        console.log("Quiz", payload.update);
       },
       [sid]
     )
