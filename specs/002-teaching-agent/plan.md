@@ -33,6 +33,18 @@ stream token by token. A stream-complete sentinel (`{"done": true}`) signals the
 JSON-serialized `TeachingContent`). Phase 3 (reflection pattern, colleague-owned) is a
 separate branch and is not in scope here.
 
+Phase 5 adds multi-turn conversation support. A new optional `chat_history` field on
+`TeachingRequestEvent` / `TeachingAgentInput` carries prior conversation turns
+(`{role, content}`, oldest→newest, excluding the current query). The agent threads this
+history into the LLM message list ahead of the current structured prompt
+(`messages = [*chat_history, {"role": "user", "content": prompt}]`) — there is no follow-up
+branch, no conversational mode, and no auto-detection. Every turn keeps the existing 4-section
+structured output; the streaming pipeline, diagram handling, parsing, and the reflection loop
+(gated at N=0) are unchanged. An empty `chat_history` (the default) reproduces single-turn
+behavior exactly, so the change is additive and backward-compatible. The Planner owns history
+truncation/summarization; an optional defensive cap (`TEACHING_MAX_HISTORY_TURNS`) is
+available in the agent.
+
 ## Technical Context
 
 **Language/Version**: Python 3.11
@@ -116,6 +128,7 @@ project/
 │                        #           TeachingAgentOutput
 │                        # Phase 2: TeachingRequestEvent, TeachingCompletionEvent
 │                        # Phase 4: StreamTokensEventBody (already present, no change)
+│                        # Phase 5: + chat_history on TeachingRequestEvent & TeachingAgentInput (default [])
 └── topics.py            # Phase 2: Add TEACHING to PlannerTopics; add TeachingTopics enum
                          #           (TEACHING_COMPLETE only); include in get_all_topic_names()
                          # Phase 4: BackendStreamTopics.STREAM_TOKENS (already present, no change)
@@ -126,15 +139,19 @@ teaching_agent/
 │                        #           response assembly
 │                        # Phase 4: uses call_llm_stream(); accepts token_callback; calls
 │                        #           parse_markdown_response() on complete buffer
+│                        # Phase 5: pass agent_input.chat_history into build_messages()
 ├── config.py            # LLMConfig dataclass, get_llm_config(), per-mode max_tokens map
+│                        # Phase 5 (optional): get_max_history_turns() defensive cap
 ├── llm_client.py        # Phase 1: call_llm(messages, config) → (str, int)
 │                        # Phase 4: add call_llm_stream(messages, config) → Iterator[(str, int)];
 │                        #           remove response_format=json_object from call_llm()
 ├── prompts.py           # Phase 1: BEGINNER_PROMPT, INTERMEDIATE_PROMPT, ADVANCED_PROMPT constants
 │                        # Phase 4: updated to markdown bold-header output format
+│                        # Phase 5 (optional): one-line conversation-aware nudge per template
 ├── validators.py        # validate_mermaid(diagram: str) → bool; regex-based structural check
 ├── helpers.py           # Phase 1: parse_llm_response(raw) → dict; build_error_output()
 │                        # Phase 4: parse_llm_response() replaced by parse_markdown_response()
+│                        # Phase 5: build_messages(prompt, chat_history=None) prepends history
 ├── stream_parser.py     # Phase 4 (new): StreamingFieldExtractor — state machine for field-keyed
 │                        #                token extraction from markdown delta stream
 ├── kafka.py             # Phase 2: Protocol types, factory functions, topic helpers
@@ -142,13 +159,16 @@ teaching_agent/
 ├── handlers.py          # Phase 2: TeachingRequestEventHandler
 │                        # Phase 4: builds token_callback; accumulates raw_markdown;
 │                        #           publishes stream_complete sentinel; content = raw_markdown
+│                        # Phase 5: passes event.chat_history into agent.run() input
 ├── worker.py            # Phase 2: TeachingWorker lifecycle (unchanged in Phase 4)
 └── tests/
     ├── __init__.py
     ├── test_teaching_agent.py       # Phase 1 tests (real LLM calls)
     │                                # Phase 4: updated mocks (markdown format, call_llm_stream)
+    │                                # Phase 5: build_messages + run() history tests
     ├── test_kafka_integration.py    # Phase 2: handler + publish tests (fake Kafka)
     │                                # Phase 4: updated for streaming events
+    │                                # Phase 5: handler passes chat_history; multi-turn test
     ├── test_worker_runtime.py       # Phase 2: worker lifecycle tests (unchanged in Phase 4)
     ├── test_stream_parser.py        # Phase 4 (new): unit tests for StreamingFieldExtractor
     ├── live_call_test.py
@@ -394,6 +414,19 @@ validation rules live in `data-model.md` and `contracts/teaching-agent-contract.
 - The trailing rule in each prompt template MUST reflect this: `"If no reference material is provided above, explain from general knowledge."` — replacing the old weak instructions ("briefly connect it", "build on it explicitly", "reference it where directly relevant") that treated context as an optional addendum rather than the primary source.
 - When `context` is empty, the agent proceeds with general knowledge only; no special handling required.
 - This was a correction to the original implementation which incorrectly labelled context as `"Prior session context:"` and gave it low-priority instructions.
+
+### Multi-Turn Conversation Rules (FR-040 – FR-044, Phase 5)
+
+| Rule | Detail |
+|---|---|
+| New input field | `chat_history: list[dict] = []` on `TeachingRequestEvent` and `TeachingAgentInput`; entries `{"role": "user"\|"assistant", "content": str}`, oldest→newest, excluding the current query |
+| Message construction | `build_messages(prompt, chat_history)` returns `[*chat_history, {"role": "user", "content": prompt}]`; the structured per-mode prompt stays the final user message |
+| No branch / no mode | No follow-up path, no conversational/Q&A output, no intent auto-detection; the 4-section structured pipeline runs every turn |
+| Backward compatibility | Empty/absent `chat_history` → single user message → byte-for-byte the pre-Phase-5 behavior; existing callers/tests unaffected |
+| Current-query placement | Current query stays in `user_prompt` (→ `topic`); `chat_history` holds prior turns only; Planner must not duplicate the current query |
+| History size | Planner owns truncation/summarization; optional agent-side defensive cap via `TEACHING_MAX_HISTORY_TURNS` (keep most recent N), disabled by default |
+| Unchanged downstream | `PROMPT_BY_MODE`, `StreamingFieldExtractor`, `parse_markdown_response`, `_resolve_diagram`, `TeachingContent` (notes required), reflection (N=0), the 4 streaming fields, and `ui_frontend/` are all unchanged |
+| Optional prompt nudge | If quality testing shows drift between "continue chat" and "produce structured block", add one line per `PROMPT_BY_MODE` template; mechanism unchanged |
 
 ## Complexity Tracking
 

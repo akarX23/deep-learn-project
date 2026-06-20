@@ -426,6 +426,106 @@ def test_diagram_field_in_stream_events() -> None:
     assert "notes" in fields
 
 
+def test_handler_passes_chat_history_to_agent() -> None:
+    """Phase 5: handler maps event.chat_history into the agent.run() input dict."""
+    captured = {}
+
+    class _FakeAgent:
+        def run(self, raw_input, token_callback):
+            captured["raw_input"] = raw_input
+            return (
+                _make_ok_output(raw_input["topic"], raw_input["output_mode"]),
+                "**Explanation**\nFollow-up answer\n\n**Notes**\nNotes",
+            )
+
+    handler = TeachingRequestEventHandler(
+        agent_factory=_FakeAgent,
+        publisher=lambda p, e: None,
+        stream_publisher=lambda p, e: None,
+    )
+    history = [
+        {"role": "user", "content": "What is gradient descent?"},
+        {"role": "assistant", "content": "It is an optimization method."},
+    ]
+    handler.process_request(
+        {
+            "request_id": "req-mt-1",
+            "sid": "s-mt",
+            "user_prompt": "How does momentum change it?",
+            "user_level": "intermediate",
+            "rag_compiled": "",
+            "chat_history": history,
+        },
+        producer=_FakeProducer(),
+    )
+
+    assert captured["raw_input"]["chat_history"] == history
+    assert captured["raw_input"]["topic"] == "How does momentum change it?"
+
+
+def test_handler_defaults_chat_history_when_absent() -> None:
+    """Backward compat: an event without chat_history yields [] into the agent."""
+    captured = {}
+
+    class _FakeAgent:
+        def run(self, raw_input, token_callback):
+            captured["raw_input"] = raw_input
+            return (
+                _make_ok_output(raw_input["topic"], raw_input["output_mode"]),
+                "**Explanation**\nAnswer\n\n**Notes**\nNotes",
+            )
+
+    handler = TeachingRequestEventHandler(
+        agent_factory=_FakeAgent,
+        publisher=lambda p, e: None,
+        stream_publisher=lambda p, e: None,
+    )
+    handler.process_request(
+        {"request_id": "req-mt-2", "sid": "s2", "user_prompt": "Loops",
+         "user_level": "beginner", "rag_compiled": ""},
+        producer=_FakeProducer(),
+    )
+
+    assert captured["raw_input"]["chat_history"] == []
+
+
+def test_multi_turn_request_publishes_completion_once() -> None:
+    """Phase 5: a request with chat_history still publishes exactly one
+    teaching-complete event (publish-once contract preserved)."""
+    sent = []
+
+    class _FakeProducerLocal:
+        def send(self, topic, payload):
+            sent.append((topic, payload))
+
+        def flush(self):
+            pass
+
+    class _FakeAgent:
+        def run(self, raw_input, token_callback):
+            return (
+                _make_ok_output(raw_input["topic"], raw_input["output_mode"]),
+                "**Explanation**\nFollow-up\n\n**Notes**\nNotes",
+            )
+
+    handler = TeachingRequestEventHandler(agent_factory=_FakeAgent)  # real publishers
+    handler.process_request(
+        {
+            "request_id": "req-mt-3",
+            "sid": "s3",
+            "user_prompt": "Follow up",
+            "user_level": "beginner",
+            "rag_compiled": "",
+            "chat_history": [{"role": "user", "content": "earlier"}],
+        },
+        producer=_FakeProducerLocal(),
+    )
+
+    completions = [p for t, p in sent if t == "teaching-complete"]
+    assert len(completions) == 1
+    assert completions[0]["request_id"] == "req-mt-3"
+
+
 def _make_completion_event():
     from project.schemas import TeachingCompletionEvent
 
