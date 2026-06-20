@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import uuid
+from collections.abc import Sequence
 from typing import Any
 
 from project.schemas import (
@@ -28,7 +29,7 @@ _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
 # ---------------------------------------------------------------------------
 
 
-def score_mcq_single(options: list[dict | MCQOption], selected_id: str | None) -> int:
+def score_mcq_single(options: Sequence[dict | MCQOption], selected_id: str | None) -> int:
     """Return 1 if selected_id is the correct option, 0 otherwise."""
     if not selected_id:
         return 0
@@ -41,7 +42,7 @@ def score_mcq_single(options: list[dict | MCQOption], selected_id: str | None) -
 
 
 def score_mcq_multi(
-    options: list[dict | MCQOption],
+    options: Sequence[dict | MCQOption],
     selected_ids: list[str],
     max_points: int = 2,
 ) -> float:
@@ -137,6 +138,55 @@ def parse_swot_response(raw: str) -> dict[str, Any]:
     return parsed
 
 
+def parse_mcq_options_response(raw: str, question_id: str | None = None) -> dict[str, Any]:
+    """Parse the LLM's MCQ option-expansion response into a normalized dict.
+
+    Accepted response shapes:
+    - {"options": [...], "topic_deep_dive": "..."}
+    - {"question": {"options": [...], "topic_deep_dive": "..."}}
+    - {"questions": [{...}, ...]}  # falls back to first or matching question_id
+    """
+    if not raw or not raw.strip():
+        raise ValueError("LLM returned an empty MCQ options response")
+    text = _strip_fences(raw)
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"MCQ options response is not valid JSON: {exc}") from exc
+
+    if not isinstance(parsed, dict):
+        raise ValueError("MCQ options response must be a JSON object")
+
+    candidate: dict[str, Any] | None = None
+
+    if "options" in parsed:
+        candidate = parsed
+    elif isinstance(parsed.get("question"), dict):
+        candidate = parsed["question"]
+    elif isinstance(parsed.get("questions"), list):
+        questions = [q for q in parsed["questions"] if isinstance(q, dict)]
+        if question_id:
+            candidate = next((q for q in questions if q.get("id") == question_id), None)
+        if candidate is None and questions:
+            candidate = questions[0]
+
+    if candidate is None:
+        raise ValueError("MCQ options response missing an options payload")
+
+    options = candidate.get("options")
+    if not isinstance(options, list):
+        raise ValueError("MCQ options response missing 'options' list")
+
+    topic_deep_dive = candidate.get("topic_deep_dive", "")
+    if topic_deep_dive is None:
+        topic_deep_dive = ""
+
+    return {
+        "options": options,
+        "topic_deep_dive": str(topic_deep_dive),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Quiz assembly
 # ---------------------------------------------------------------------------
@@ -204,11 +254,11 @@ def build_result(
     percentage = round(overall_score / max_score * 100, 1) if max_score > 0 else 0.0
 
     if percentage >= 75:
-        recommended_action = "advance"
+        recommended_action = "Move to next Topic"
     elif percentage >= 50:
-        recommended_action = "practice-more"
+        recommended_action = "Review Notes and Retake Quiz"
     else:
-        recommended_action = "re-teach"
+        recommended_action = "Retake the Course"
 
     return {
         "overall_score": overall_score,

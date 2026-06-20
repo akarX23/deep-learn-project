@@ -1,0 +1,15 @@
+{
+  "status": "ok",
+  "output_mode": "beginner",
+  "content": {
+    "explanation": "1. A stack is a way to store things in a special order, where the last thing you add is the first thing you take out.\n2. Imagine a pile of plates: when you add a new plate, you put it on top, and when you take one off, you take the top one first.\n3. Stacks are important because they help computers remember what to do next, like keeping track of the pages you've visited on the internet.\n4. Here's how it works: you can add something to the top (push), look at the top thing without taking it off (peek), or take the top thing off (pop).\n5. A common mistake beginners make is trying to take something off the stack when it's empty, which doesn't work.",
+    "diagram": "graph TD\n    A[Empty Stack] -->|push|> B[Stack with 1 item]\n    B -->|push|> C[Stack with 2 items]\n    C -->|peek|> D[View top item]\n    C -->|pop|> B\n    B -->|pop|> A",
+    "notes": "* A stack stores things in a special order (Last In, First Out)\n* You can add things to the top (push), look at the top (peek), or take the top off (pop)\n* Don't try to take something off an empty stack\n* Stacks have a limited size, and too much can cause a \"stack overflow\"",
+    "example": "Let's say you're browsing the internet, and you visit three pages in a row: Google, YouTube, and Facebook. \n1. You start with an empty stack (or browser history).\n2. You visit Google, and it gets added to the stack (push).\n3. Then you visit YouTube, and it gets added on top of Google (push).\n4. Next, you visit Facebook, and it gets added on top of YouTube (push).\n5. Now, when you click the \"back\" button, Facebook gets taken off the stack (pop), and you go back to YouTube.\n6. If you click \"back\" again, YouTube gets taken off, and you go back to Google."
+  },
+  "metadata": {
+    "topic": "Stack data structure",
+    "tokens_used": 453,
+    "model": "groq/llama-3.3-70b-versatile"
+  }
+}

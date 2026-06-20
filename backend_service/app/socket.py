@@ -22,10 +22,12 @@ from backend_service.app.config import KafkaSettings
 from backend_service.app.connection_manager import ConnectionManager
 from project.events import (
     ClarifyUserLevelEvent,
+    StreamProgressUpdateEventBody,
     StreamTokensEventBody,
     WebSocketEvents,
 )
 from project.topics import (
+    BackendStreamTopics,
     PlannerAgentTopics,
     get_backend_consumer_topic_names,
 )
@@ -35,8 +37,8 @@ logger = logging.getLogger(__name__)
 CONSUMER_GROUP_ID = "backend-service-consumer"
 
 # Socket.IO server mounted onto the FastAPI app in main.py.
-sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
-socket_asgi_app = socketio.ASGIApp(sio, socketio_path="")
+sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins=[])
+socket_asgi_app = socketio.ASGIApp(sio)
 
 # Shared connection manager keyed by session_id (== sid).
 connection_manager = ConnectionManager()
@@ -87,6 +89,10 @@ def _route_message(topic: str, payload: dict[str, Any]) -> tuple[WebSocketEvents
         event = ClarifyUserLevelEvent.model_validate(payload)
         return WebSocketEvents.CLARIFY_USER_LEVEL_SKT, event.sid
 
+    if topic == BackendStreamTopics.STREAM_PROGRESS_UPDATE.value:
+        event = StreamProgressUpdateEventBody.model_validate(payload)
+        return WebSocketEvents.STREAM_PROGRESS_UPDATE_SKT, event.sid
+
     body = StreamTokensEventBody.model_validate(payload)
     return WebSocketEvents.STREAM_TOKENS_SKT, body.sid
 
@@ -119,7 +125,7 @@ async def run_consumer(settings: KafkaSettings) -> None:
                 try:
                     event, sid = _route_message(message.topic, message.value)
                     await emit_event(event, message.value, sid)
-                    logger.info("Forwarded %s to session %s", event.value, sid)
+                    logger.debug("Forwarded %s to session %s", event.value, sid)
                 except Exception:  # noqa: BLE001 - keep consumer alive
                     logger.exception(
                         "Failed to forward message from topic %s", message.topic

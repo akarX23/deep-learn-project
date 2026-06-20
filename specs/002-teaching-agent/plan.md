@@ -18,7 +18,8 @@ sequence that does not require stateful loop orchestration.
 
 Phase 2 adds a Kafka integration layer (`kafka.py`, `handlers.py`, `worker.py`) following
 the same three-file pattern as the RAG agent. The worker consumes `TeachingRequestEvent`
-payloads from the `"teaching"` Kafka topic, invokes `TeachingAgent.run()` unchanged, and
+payloads from the `"teaching"` Kafka topic, maps the event's `user_prompt` / `user_level` /
+`rag_compiled` onto `TeachingAgent.run()`'s `topic` / `output_mode` / `context`, and
 publishes `TeachingCompletionEvent` results to `"teaching-complete"`. The core pipeline
 logic from Phase 1 is not modified.
 
@@ -31,6 +32,18 @@ stream token by token. A stream-complete sentinel (`{"done": true}`) signals the
 `TeachingCompletionEvent.content` now carries the complete raw markdown string (not
 JSON-serialized `TeachingContent`). Phase 3 (reflection pattern, colleague-owned) is a
 separate branch and is not in scope here.
+
+Phase 5 adds multi-turn conversation support. A new optional `chat_history` field on
+`TeachingRequestEvent` / `TeachingAgentInput` carries prior conversation turns
+(`{role, content}`, oldest→newest, excluding the current query). The agent threads this
+history into the LLM message list ahead of the current structured prompt
+(`messages = [*chat_history, {"role": "user", "content": prompt}]`) — there is no follow-up
+branch, no conversational mode, and no auto-detection. Every turn keeps the existing 4-section
+structured output; the streaming pipeline, diagram handling, parsing, and the reflection loop
+(gated at N=0) are unchanged. An empty `chat_history` (the default) reproduces single-turn
+behavior exactly, so the change is additive and backward-compatible. The Planner owns history
+truncation/summarization; an optional defensive cap (`TEACHING_MAX_HISTORY_TURNS`) is
+available in the agent.
 
 ## Technical Context
 
@@ -72,14 +85,22 @@ separate branch and is not in scope here.
 - Code Quality Gate: PASS. Data model and contracts are defined; no cross-module ambiguity.
   Module boundary for schemas follows the established `project/schemas.py` pattern.
 - Testing Gate: PASS. `quickstart.md` includes both full-run and targeted test instructions.
-  Test mocking pattern mirrors the RAG agent suite (monkeypatching `call_llm`).
+  Test mocking pattern mirrors the RAG agent suite (monkeypatching `call_llm`). Phase 3 adds
+  reflection tests (all monkeypatched, no real LLM): N=0 single-pass equivalence, critique
+  and revision fallback paths (SC-012), token accumulation across calls (SC-013), and the
+  two-iteration case. The SC-011 quality-improvement rubric (≥80% of runs) is validated
+  manually with a real model (tasks.md T046), not in the automated suite.
 - UX Consistency Gate: PASS. Contract defines stable field structure; diagram null-fallback
   behavior is documented so the UI can handle both cases.
 - Performance Gate: PASS. Token ceiling enforcement is at the LiteLLM call level with
-  actual consumption reported in metadata. Wall-clock targets are stated.
+  actual consumption reported in metadata. Wall-clock targets are stated; reflection adds
+  2N LLM calls per request; wall-clock budget updated per FR-018; N=0 restores the Phase 1
+  budget; the latency cost is justified by the quality improvement requirement (SC-011).
 - Maintainability Gate: PASS. Environment-variable-driven configuration eliminates
   hard-coded provider coupling. Separate prompt templates per mode are independently
-  auditable.
+  auditable; reflection prompts isolated in `REFLECTION_PROMPT_BY_MODE` /
+  `REVISION_PROMPT_BY_MODE` constants, independently auditable and replaceable without
+  touching agent logic.
 
 ## Project Structure
 
@@ -103,9 +124,11 @@ specs/002-teaching-agent/
 ```text
 project/
 ├── schemas.py           # Phase 1: OutputMode, TeachingAgentInput, TeachingContent,
-│                        #           TeachingMetadata, TeachingAgentOutput
+│                        #           TeachingMetadata (add reflection_iterations int field),
+│                        #           TeachingAgentOutput
 │                        # Phase 2: TeachingRequestEvent, TeachingCompletionEvent
 │                        # Phase 4: StreamTokensEventBody (already present, no change)
+│                        # Phase 5: + chat_history on TeachingRequestEvent & TeachingAgentInput (default [])
 └── topics.py            # Phase 2: Add TEACHING to PlannerTopics; add TeachingTopics enum
                          #           (TEACHING_COMPLETE only); include in get_all_topic_names()
                          # Phase 4: BackendStreamTopics.STREAM_TOKENS (already present, no change)
@@ -116,15 +139,19 @@ teaching_agent/
 │                        #           response assembly
 │                        # Phase 4: uses call_llm_stream(); accepts token_callback; calls
 │                        #           parse_markdown_response() on complete buffer
+│                        # Phase 5: pass agent_input.chat_history into build_messages()
 ├── config.py            # LLMConfig dataclass, get_llm_config(), per-mode max_tokens map
+│                        # Phase 5 (optional): get_max_history_turns() defensive cap
 ├── llm_client.py        # Phase 1: call_llm(messages, config) → (str, int)
 │                        # Phase 4: add call_llm_stream(messages, config) → Iterator[(str, int)];
 │                        #           remove response_format=json_object from call_llm()
 ├── prompts.py           # Phase 1: BEGINNER_PROMPT, INTERMEDIATE_PROMPT, ADVANCED_PROMPT constants
 │                        # Phase 4: updated to markdown bold-header output format
+│                        # Phase 5 (optional): one-line conversation-aware nudge per template
 ├── validators.py        # validate_mermaid(diagram: str) → bool; regex-based structural check
 ├── helpers.py           # Phase 1: parse_llm_response(raw) → dict; build_error_output()
 │                        # Phase 4: parse_llm_response() replaced by parse_markdown_response()
+│                        # Phase 5: build_messages(prompt, chat_history=None) prepends history
 ├── stream_parser.py     # Phase 4 (new): StreamingFieldExtractor — state machine for field-keyed
 │                        #                token extraction from markdown delta stream
 ├── kafka.py             # Phase 2: Protocol types, factory functions, topic helpers
@@ -132,13 +159,16 @@ teaching_agent/
 ├── handlers.py          # Phase 2: TeachingRequestEventHandler
 │                        # Phase 4: builds token_callback; accumulates raw_markdown;
 │                        #           publishes stream_complete sentinel; content = raw_markdown
+│                        # Phase 5: passes event.chat_history into agent.run() input
 ├── worker.py            # Phase 2: TeachingWorker lifecycle (unchanged in Phase 4)
 └── tests/
     ├── __init__.py
     ├── test_teaching_agent.py       # Phase 1 tests (real LLM calls)
     │                                # Phase 4: updated mocks (markdown format, call_llm_stream)
+    │                                # Phase 5: build_messages + run() history tests
     ├── test_kafka_integration.py    # Phase 2: handler + publish tests (fake Kafka)
     │                                # Phase 4: updated for streaming events
+    │                                # Phase 5: handler passes chat_history; multi-turn test
     ├── test_worker_runtime.py       # Phase 2: worker lifecycle tests (unchanged in Phase 4)
     ├── test_stream_parser.py        # Phase 4 (new): unit tests for StreamingFieldExtractor
     ├── live_call_test.py
@@ -151,6 +181,121 @@ teaching_agent/
 Schemas in `project/schemas.py` (shared contract location). No new top-level directories.
 No LangGraph — the linear pipeline requires only a plain class. Phase 2 Kafka files follow
 the RAG agent three-file pattern exactly for system-wide consistency.
+
+## Reflection Architecture
+
+> Phase 3. Corresponds to the Reflection proposal in `spec.md` (US6, FR-029–FR-037),
+> pending team sign-off. Implementation is gated on that ratification.
+
+### Pattern: Generate → Critique → Revise (×N)
+
+```
+Input
+  │
+  ▼
+[1] Generation call  →  initial TeachingContent  (PROMPT_BY_MODE)
+  │
+  ▼
+[2] Critique call    →  ReflectionCritique JSON  (REFLECTION_PROMPT_BY_MODE)
+  │    (if fails: skip to [4] with initial output)
+  ▼
+[3] Revision call    →  revised TeachingContent  (REVISION_PROMPT_BY_MODE)
+  │    (if fails: skip to [4] with initial output)
+  ▼
+[4] Repeat [2]–[3] up to N-1 more times
+  │
+  ▼
+Assemble TeachingAgentOutput with best available content
+```
+
+N = `get_max_reflection_iterations(output_mode)`, which resolves
+`TEACHING_{MODE}_MAX_REFLECTION_ITERATIONS` → `TEACHING_MAX_REFLECTION_ITERATIONS` (global)
+→ default 1. N = 0 → steps [2]–[4] are skipped entirely; behavior identical to Phase 1.
+
+### Critique Prompt Design
+
+`REFLECTION_PROMPT_BY_MODE` instructs the LLM to return a `ReflectionCritique` JSON:
+- `quality_score` (int, 1–10): holistic score of the current output
+- `issues`: list of `{field, issue, severity}` objects; `field` ∈ {explanation, diagram, notes, example}
+- `revision_instructions`: a concise string instructing the revision call on what to fix
+
+The critique prompt includes: `{topic}`, `{output_mode}`, `{current_output}` (the current
+TeachingContent serialised as JSON). It does not include `{context}` to keep the critique
+call within `TEACHING_REFLECTION_MAX_TOKENS` (default 512).
+
+### Revision Prompt Design
+
+`REVISION_PROMPT_BY_MODE` is structurally similar to `PROMPT_BY_MODE` but adds two
+additional placeholders:
+- `{current_output}`: the current TeachingContent JSON (so the LLM refines, not reinvents)
+- `{revision_instructions}`: the `revision_instructions` string from the critique
+
+The revision call uses the same token ceiling and model as the generation call
+(`TEACHING_{MODE}_MAX_TOKENS`, `TEACHING_{MODE}_MODEL` or `TEACHING_MODEL`).
+It returns JSON with the same structure as generation (explanation, diagram, notes, example).
+
+### Agent Changes
+
+Two new private methods added to `TeachingAgent` in `agent.py`:
+
+- `_reflect(current_content, topic, output_mode, config, tokens_accumulator) → ReflectionCritique | None`
+  Calls the LLM with `REFLECTION_PROMPT_BY_MODE[output_mode]`. Parses the response into
+  `ReflectionCritique`. Returns `None` on any failure (parse error, LiteLLM exception).
+  Appends the critique call's tokens to `tokens_accumulator`.
+
+- `_revise(current_content, critique, topic, output_mode, context, config, tokens_accumulator) → TeachingContent | None`
+  Calls the LLM with `REVISION_PROMPT_BY_MODE[output_mode]`. Passes the existing content
+  plus `critique.revision_instructions`. Parses and validates the response (including Mermaid).
+  Returns `None` on any failure. Appends the revision call's tokens to `tokens_accumulator`.
+
+`run()` updated: after the initial generation and diagram validation, enter the reflection
+loop. On each iteration, call `_reflect()`; if `None`, break and return current content.
+Call `_revise()`; if `None`, break and return current content. Replace current content with
+revision. After N iterations, assemble `TeachingAgentOutput` with `tokens_used` = sum of
+all calls and `reflection_iterations` = number of completed cycles.
+
+### Token Accounting
+
+```
+tokens_used = sum of completion_tokens over EVERY LLM call that returns
+              (generation + each critique + each revision), per SC-013 —
+              including a critique/revision whose response later fails to parse
+              (the call still consumed tokens).
+```
+
+`metadata.tokens_used` always reflects total real consumption.
+`metadata.reflection_iterations` counts only fully completed (critique + revision)
+cycles and is independent of `tokens_used`. It is a new field (int, ge=0) added to
+`TeachingMetadata` in `project/schemas.py`.
+
+### Graceful Degradation
+
+| Failure point | Recovery |
+|---|---|
+| Critique call fails (exception or parse error) | Break loop; return current content (initial or last revision) |
+| Revision call fails (exception or parse error) | Break loop; return content from before this iteration |
+| Revision produces invalid Mermaid (beginner) | Apply same retry-once + fallback-template rule as generation |
+| Revision produces invalid Mermaid (inter/adv) | Set diagram to null in revised content |
+
+In all cases: `status` remains `"ok"` if initial generation succeeded.
+`reflection_iterations` reflects the number of **completed** (critique + revision both
+succeeded) cycles, not attempted cycles.
+
+### Reflection Quality Validation (SC-011)
+
+The ≥80% quality-improvement target is validated **manually with a real model** (tasks.md
+T046), not in the automated suite — the automated reflection tests use a monkeypatched
+`call_llm` and assert control flow and token accounting, not output quality. A reviewer runs
+each of the 9 topic/mode pairs with reflection on (N≥1) versus off (N=0) and scores both the
+initial and reflected output on a fixed rubric:
+
+- **Clarity** — easier to follow; jargon appropriate to the mode.
+- **Structure adherence** — follows the mode's required section structure (FR-012/013/014).
+- **Example completeness** — the worked example / code is correct and self-contained.
+
+The reflected output must score **strictly higher** than the initial generation in ≥80% of
+the pairs. A "lateral move" (no net change) counts as a non-improvement, per the probabilistic
+assumption in `spec.md`.
 
 ## Behavior Rules and Requirement Clarifications
 
@@ -223,6 +368,7 @@ validation rules live in `data-model.md` and `contracts/teaching-agent-contract.
 |---|---|
 | Inbound topic | `"teaching"` — consumed by `TeachingWorker`; published by Planner Agent |
 | Outbound topic | `"teaching-complete"` — published by `TeachingRequestEventHandler` |
+| Field mapping | Handler maps inbound `user_prompt → topic`, `user_level → output_mode`, `rag_compiled → context`; core `run()` signature unchanged (FR-020) |
 | `request_id` pass-through | Copied verbatim from `TeachingRequestEvent` to `TeachingCompletionEvent`; Teaching Agent never modifies it |
 | `sid` pass-through | Copied verbatim from `TeachingRequestEvent`; used by backend to route completion event to the correct Socket.IO session; Teaching Agent never reads or validates its contents |
 | `user_level` pass-through | Copied verbatim from `TeachingRequestEvent` to `TeachingCompletionEvent`; also used as `output_mode` for the core pipeline |
@@ -231,6 +377,23 @@ validation rules live in `data-model.md` and `contracts/teaching-agent-contract.
 | Malformed payload | Logged with `request_id` (or `"unknown"` if absent), skipped; poll loop continues without crashing |
 | Topic bootstrap | `PlannerTopics.TEACHING` and `TeachingTopics.TEACHING_COMPLETE` registered in `project/topics.py`; both included in `get_all_topic_names()`; backend service creates topics at startup |
 | Test isolation | All Kafka dependencies injectable via factory parameters; tests use Protocol-compatible fakes, no real Kafka required |
+
+### Reflection Rules (FR-029 – FR-037, Phase 3)
+
+| Rule | Detail |
+|---|---|
+| Default behavior | N=1 reflection iteration; configurable via `TEACHING_MAX_REFLECTION_ITERATIONS` |
+| Disable reflection | Set `TEACHING_MAX_REFLECTION_ITERATIONS=0`; exact Phase 1 behavior restored |
+| Per-mode override | `TEACHING_{MODE}_MAX_REFLECTION_ITERATIONS` takes precedence over global |
+| Critique model | `TEACHING_REFLECTION_MODEL` → fallback `TEACHING_MODEL`; per-mode: `TEACHING_{MODE}_REFLECTION_MODEL` |
+| Critique token ceiling | `TEACHING_REFLECTION_MAX_TOKENS` (default 512); critique must fit to be parseable |
+| Revision token ceiling | Per-mode generation ceiling (`TEACHING_{MODE}_MAX_TOKENS`, default 4096) |
+| Failure recovery | Any failure in critique or revision → return best available content; status stays `"ok"` |
+| tokens_used | Sum of completion_tokens across all LLM calls (generation + all critiques + all revisions) |
+| reflection_iterations | Number of completed (both critique and revision succeeded) cycles; 0 when disabled |
+| Output schema | `TeachingAgentOutput` and `TeachingCompletionEvent` are unchanged; reflection is internal |
+| Kafka publish | TeachingCompletionEvent published exactly once, after all reflection iterations |
+| Mermaid rules | Applied identically to revised output as to initial output (FR-005, FR-006, FR-007) |
 
 ### Edge-Case Handling (spec "Edge Cases", FR-010)
 
@@ -251,6 +414,19 @@ validation rules live in `data-model.md` and `contracts/teaching-agent-contract.
 - The trailing rule in each prompt template MUST reflect this: `"If no reference material is provided above, explain from general knowledge."` — replacing the old weak instructions ("briefly connect it", "build on it explicitly", "reference it where directly relevant") that treated context as an optional addendum rather than the primary source.
 - When `context` is empty, the agent proceeds with general knowledge only; no special handling required.
 - This was a correction to the original implementation which incorrectly labelled context as `"Prior session context:"` and gave it low-priority instructions.
+
+### Multi-Turn Conversation Rules (FR-040 – FR-044, Phase 5)
+
+| Rule | Detail |
+|---|---|
+| New input field | `chat_history: list[dict] = []` on `TeachingRequestEvent` and `TeachingAgentInput`; entries `{"role": "user"\|"assistant", "content": str}`, oldest→newest, excluding the current query |
+| Message construction | `build_messages(prompt, chat_history)` returns `[*chat_history, {"role": "user", "content": prompt}]`; the structured per-mode prompt stays the final user message |
+| No branch / no mode | No follow-up path, no conversational/Q&A output, no intent auto-detection; the 4-section structured pipeline runs every turn |
+| Backward compatibility | Empty/absent `chat_history` → single user message → byte-for-byte the pre-Phase-5 behavior; existing callers/tests unaffected |
+| Current-query placement | Current query stays in `user_prompt` (→ `topic`); `chat_history` holds prior turns only; Planner must not duplicate the current query |
+| History size | Planner owns truncation/summarization; optional agent-side defensive cap via `TEACHING_MAX_HISTORY_TURNS` (keep most recent N), disabled by default |
+| Unchanged downstream | `PROMPT_BY_MODE`, `StreamingFieldExtractor`, `parse_markdown_response`, `_resolve_diagram`, `TeachingContent` (notes required), reflection (N=0), the 4 streaming fields, and `ui_frontend/` are all unchanged |
+| Optional prompt nudge | If quality testing shows drift between "continue chat" and "produce structured block", add one line per `PROMPT_BY_MODE` template; mechanism unchanged |
 
 ## Complexity Tracking
 

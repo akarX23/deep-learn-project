@@ -13,6 +13,7 @@
 | Phase 2 — Kafka integration | `kafka.py`, `handlers.py`, `worker.py`, Kafka event schemas, topic registration | **Complete** |
 | Phase 3 — Reflection pattern | Colleague-owned; not in scope for this feature branch | In progress (separate branch) |
 | Phase 4 — Token streaming | Markdown LLM output, `StreamingFieldExtractor`, `stream-tokens` Kafka topic, real-time field-keyed token delivery to frontend | **Complete** |
+| Phase 5 — Multi-turn conversation | `chat_history` threaded into the LLM message list; follow-up queries answered with prior turns as context, retaining the 4-section structured output | **Planned** |
 
 ---
 
@@ -159,6 +160,35 @@ tokens arrive incrementally, the `diagram` field arrives as a single complete ev
 
 ---
 
+### User Story 7 - Multi-Turn Follow-Up Conversation (Priority: P2)
+
+A learner asks a follow-up question that depends on the previous exchange (e.g. first
+"Explain gradient descent", then "How does that change with momentum?"). The Planner Agent
+sends the prior conversation in a new `chat_history` field alongside the current query. The
+Teaching Agent threads that history into the LLM call so the answer is informed by what came
+before, while still returning the same 4-section structured explanation
+(Explanation / Diagram / Notes / Example).
+
+**Why this priority**: Single-shot answers force the learner to restate context on every turn.
+Conversation awareness makes the agent usable for an actual tutoring dialogue, which is the
+core product interaction. It ships behind a default-empty field, so it is additive and
+backward-compatible.
+
+**Independent Test**: Send a request with a non-empty `chat_history` (one prior user/assistant
+turn) plus a follow-up `user_prompt`. Verify the prior turns appear in the messages sent to
+the LLM ahead of the current structured prompt, the response is the parsed 4-section
+`TeachingContent`, and an empty/absent `chat_history` produces byte-for-byte the single-turn
+behavior.
+
+**Acceptance Scenarios**:
+
+1. **Given** a request with an empty or absent `chat_history`, **When** the agent processes it, **Then** the LLM message list contains exactly the single structured user prompt and the output is identical to the pre-Phase-5 single-turn behavior.
+2. **Given** a request with a non-empty `chat_history` (oldest→newest), **When** the agent builds the LLM call, **Then** the prior turns are prepended in order and the current structured prompt is the final user message.
+3. **Given** a follow-up request, **When** the response is produced, **Then** it is still the 4-section structured output (`explanation`, `diagram`, `notes`, `example`) with `status: "ok"` — there is no separate conversational/Q&A response shape.
+4. **Given** `chat_history`, **When** the request is processed, **Then** the current query is taken from `user_prompt` only and is NOT expected to be duplicated inside `chat_history`.
+
+---
+
 ### Edge Cases
 
 - Topic is a single word vs. a multi-word phrase (e.g., "Trees" vs. "Balanced Binary Search Trees").
@@ -170,6 +200,9 @@ tokens arrive incrementally, the `diagram` field arrives as a single complete ev
 - Generated Mermaid diagram is syntactically invalid — agent must not return the invalid diagram; it must either fix it or set `diagram` to null.
 - Kafka payload is missing required fields or has wrong types — worker must log and skip, never crash.
 - Same `request_id` arrives twice (retry) — worker processes it again; idempotency is the Planner's responsibility.
+- `chat_history` is empty or absent — agent behaves exactly as the single-turn pipeline (default `[]`).
+- `chat_history` contains many turns — the Planner is responsible for truncation/summarization to fit the model window; the agent may apply an optional defensive cap but never crashes on a large history.
+- A `chat_history` entry has an unexpected `role` or empty `content` — handled per the validation decision (light validator rejects, or pass-through to the LLM); never raises an unhandled exception.
 
 ## Requirements *(mandatory)*
 
@@ -223,14 +256,25 @@ tokens arrive incrementally, the `diagram` field arrives as a single complete ev
 - **FR-035**: The existing `parse_markdown_response()` parser (replacing `parse_llm_response()`) MUST be used internally in `agent.py` for Mermaid diagram validation and `TeachingAgentOutput` construction. It is not exposed to Kafka consumers.
 - **FR-036**: When `context` is non-empty, the LLM prompt MUST explicitly instruct the model to treat it as the primary reference source and ground the explanation in the provided material. General knowledge MAY be used only to supplement where the material is silent or incomplete. The prompt label for `context` MUST NOT describe it as a "prior session" summary — it is course reference material compiled by the RAG Agent.
 
+### Multi-Turn Conversation Requirements (Phase 5)
+
+> FR numbering starts at FR-040 to avoid colliding with the unratified Reflection proposal
+> below (which reuses FR-029–FR-037).
+
+- **FR-040**: The system MUST accept an optional `chat_history` field on both `TeachingRequestEvent` and `TeachingAgentInput` — an ordered list (oldest→newest) of prior conversation turns, each shaped `{"role": "user" | "assistant", "content": str}`, EXCLUDING the current query. It MUST default to `[]`; an empty `chat_history` MUST produce behavior byte-for-byte identical to the single-turn pipeline.
+- **FR-041**: The system MUST thread `chat_history` into the LLM message list ahead of the current structured prompt: `messages = [*chat_history, {"role": "user", "content": <structured PROMPT_BY_MODE prompt>}]`. There MUST be no separate follow-up branch, no conversational/Q&A output mode, and no intent auto-detection — every turn (first query and follow-up alike) uses the existing per-mode structured prompt and returns the same 4-section structured output.
+- **FR-042**: The current user query MUST remain in `user_prompt` (mapped to `topic`); `chat_history` MUST carry prior turns only. The Planner MUST NOT duplicate the current query inside `chat_history`.
+- **FR-043**: Managing `chat_history` size (truncation/summarization to fit the model context window) is the Planner's responsibility. The Teaching Agent MAY apply an optional defensive cap via `TEACHING_MAX_HISTORY_TURNS` (keep the most recent N turns); the cap is optional and disabled by default.
+- **FR-044**: The multi-turn change MUST NOT alter the output contract. `TeachingContent` (including required `notes`), `TeachingAgentOutput`, `TeachingCompletionEvent`, the four streaming fields, diagram handling, `parse_markdown_response`, and the reflection loop (gated at N=0) remain unchanged for every turn.
+
 ### Key Entities
 
-- **TeachingAgentInput**: The input contract. Contains `topic` (the subject to be explained), `output_mode` (the target learner level), and `context` (RAG-compiled study material from the user's course documents; used as the primary LLM reference source when non-empty).
+- **TeachingAgentInput**: The input contract. Contains `topic` (the subject to be explained), `output_mode` (the target learner level), `context` (RAG-compiled study material from the user's course documents; used as the primary LLM reference source when non-empty), and `chat_history` (Phase 5: optional ordered list of prior `{role, content}` turns, default `[]`; prepended to the LLM message list).
 - **TeachingAgentOutput**: The output contract. Contains `status` (`ok` or `error`), `output_mode` (mirrored from input), `content` (the explanation payload), and `metadata` (audit information).
 - **TeachingContent**: The structured explanation payload. Contains `explanation` (full markdown explanation), `diagram` (Mermaid syntax or null), `notes` (summary markdown), and `example` (worked example or code snippet, or null).
 - **OutputMode**: Enum of `beginner`, `intermediate`, `advanced`. Determines explanation structure, diagram rules, token ceiling, and language register.
 - **TeachingMetadata**: Audit record. Contains `topic` (mirrored from input), `tokens_used` (actual consumption), and `model` (model identifier).
-- **TeachingRequestEvent**: Inbound Kafka payload published by the Planner to the `"teaching"` topic. Contains `request_id` (unique per request), `user_prompt` (the question to explain), `user_level` (beginner/intermediate/advanced), `rag_compiled` (RAG output string, default `""`), and `sid` (Socket.IO session ID for frontend routing). Defined in `project/schemas.py`.
+- **TeachingRequestEvent**: Inbound Kafka payload published by the Planner to the `"teaching"` topic. Contains `request_id` (unique per request), `user_prompt` (the current question to explain), `user_level` (beginner/intermediate/advanced), `rag_compiled` (RAG output string, default `""`), `sid` (Socket.IO session ID for frontend routing), and `chat_history` (Phase 5: prior conversation turns, oldest→newest, default `[]`, excluding the current query). Defined in `project/schemas.py`.
 - **TeachingCompletionEvent**: Outbound Kafka payload published by the Teaching Agent to `"teaching-complete"`. Contains `request_id`, `sid`, and `user_level` (all passed through verbatim from the request), and `content` (JSON-serialized `TeachingContent` string; empty string on error). Defined in `project/schemas.py`.
 - **TeachingTopics**: Enum in `project/topics.py` with value `TEACHING_COMPLETE = "teaching-complete"` — the outbound topic owned by the Teaching Agent. The inbound topic `"teaching"` is registered under `PlannerTopics.TEACHING`, consistent with the pattern used by `PlannerTopics.RAG`. Both `PlannerTopics.TEACHING` and `TeachingTopics.TEACHING_COMPLETE` are included in `get_all_topic_names()` so the backend service bootstraps both topics at startup.
 - **TeachingWorker**: Owns the Kafka consume → dispatch → publish lifecycle. Lives in `teaching_agent/worker.py`. Follows the same structure as `RAGWorker`: injectable factories for consumer, producer, and handler; background poll thread; `start()` / `stop()` / `get_state()` interface.
@@ -254,6 +298,8 @@ tokens arrive incrementally, the `diagram` field arrives as a single complete ev
 - **SC-012**: 100% of requests — including error cases — result in a stream-complete sentinel (`{"done": true}`) published to `"stream-tokens"`. The frontend is never left waiting without an end signal.
 - **SC-013**: 100% of diagram tokens published to `"stream-tokens"` are complete valid Mermaid strings. No partial diagram tokens are ever published.
 - **SC-014**: When `context` is non-empty, the generated explanation MUST demonstrably draw from the provided reference material rather than defaulting to generic general-knowledge content about the topic.
+- **SC-015**: A request with an empty or absent `chat_history` produces a message list and output byte-for-byte identical to the single-turn pipeline in 100% of runs (backward compatibility).
+- **SC-016**: A request with a non-empty `chat_history` includes every prior turn, in order, ahead of the current structured prompt in the messages sent to the LLM, and still returns a schema-valid 4-section `TeachingAgentOutput` in 100% of runs.
 
 ## Assumptions
 
@@ -267,3 +313,195 @@ tokens arrive incrementally, the `diagram` field arrives as a single complete ev
 - OCR, PDF processing, and direct retrieval are out of scope; that responsibility belongs to the RAG Agent.
 - Downstream consumers (Quiz Agent, Evaluation Agent) read from `"teaching-complete"`. Breaking schema changes to `TeachingCompletionEvent` require coordination with those teams.
 - Python code examples are the expected language for intermediate and advanced `example` fields; this is a product-level assumption aligned with the CS curriculum focus.
+- Multi-turn conversation context is supplied by the Planner via `chat_history` (prior turns only, oldest→newest). The Planner owns truncation/summarization to keep the payload within the model context window. The Teaching Agent threads it into the LLM call unchanged and defaults it to `[]`, so first-query behavior and all existing callers are unaffected.
+
+---
+
+## Proposed Additions — Phase 3: Reflection Pattern (PROPOSAL — NOT RATIFIED)
+
+> **Status: PROPOSAL — requires team sign-off.** This `spec.md` is locked. Everything in this
+> section is a proposal for a future Phase 3 (the Reflection pattern: an internal
+> self-critique-and-revision loop that runs after initial generation, before the result is
+> returned or published). It has **not** been ratified and is **not** part of the binding
+> specification above. None of these items may be merged into the locked requirements without
+> team sign-off. Each item below records its intended placement for if/when it is approved.
+> Source: `reflection-pattern-changes.md`.
+>
+> The external output contract is unchanged by this proposal: `TeachingAgentOutput` and
+> `TeachingCompletionEvent` keep the same shape; only an internal `metadata.reflection_iterations`
+> counter is added.
+
+### Proposed User Story 6 — Self-Critique and Revision (Reflection) (Priority: P2)
+
+*Intended placement: after User Story 4, before User Story 5 (Kafka).*
+
+After generating an initial explanation, the Teaching Agent critiques its own output via a
+second LLM call, identifying specific weaknesses per field (explanation clarity, diagram
+accuracy, notes completeness, example quality). It then issues a third LLM call to produce
+a revised explanation that addresses the identified issues. The final output returned to the
+Planner is the revised version, not the initial draft. Reflection is configurable and can be
+disabled entirely via environment variable when latency is the primary constraint.
+
+**Why this priority**: A single-pass LLM generation frequently produces explanations that
+are technically correct but miss clarity, analogy quality, or structural completeness. One
+reflection pass measurably improves output quality without changing the output schema or
+breaking any downstream consumer.
+
+**Independent Test**: Run the same topic and mode with and without reflection enabled.
+Compare the `explanation`, `notes`, and `example` fields. The reflected output must score
+higher on a structured rubric (clarity, completeness, structure adherence) than the
+initial generation in ≥ 80% of runs.
+
+**Acceptance Scenarios**:
+
+1. **Given** reflection is enabled (TEACHING_MAX_REFLECTION_ITERATIONS ≥ 1), **When** the
+   agent processes a valid request, **Then** an internal critique is produced and a revised
+   TeachingContent is returned — the initial draft is never returned directly.
+2. **Given** the critique LLM call fails, **When** the agent handles the failure, **Then**
+   it gracefully falls back to returning the initial generation; `status` remains `"ok"` and
+   no exception propagates.
+3. **Given** the revision LLM call fails after a successful critique, **When** the agent
+   handles the failure, **Then** it falls back to the initial generation; `status` remains
+   `"ok"`.
+4. **Given** reflection is disabled (TEACHING_MAX_REFLECTION_ITERATIONS = 0), **When** the
+   agent processes a request, **Then** it behaves exactly as the current single-pass pipeline
+   with no additional LLM calls.
+5. **Given** reflection is enabled and N iterations are configured, **When** the agent
+   completes all N cycles, **Then** `metadata.tokens_used` is the sum of all LLM calls
+   (generation + N × (critique + revision)) and `metadata.reflection_iterations` reports
+   the number of completed cycles.
+6. **Given** any request with reflection enabled, **When** the output is assembled, **Then**
+   the `TeachingAgentOutput` schema is identical to non-reflected output — no new fields
+   visible to downstream consumers.
+
+### Proposed Functional Requirements — Reflection Requirements (Phase 3)
+
+*Intended placement: append after FR-028.*
+
+- **FR-029**: The system MUST support a configurable reflection-and-revision loop executed
+  after initial generation and before the result is returned. The number of iterations is
+  controlled by `TEACHING_MAX_REFLECTION_ITERATIONS` (global, default `1`; `0` disables
+  reflection entirely and restores single-pass behavior). A per-mode override
+  `TEACHING_{MODE}_MAX_REFLECTION_ITERATIONS` takes precedence when set.
+
+- **FR-030**: Each reflection iteration MUST consist of two sub-steps: (a) a **critique**
+  LLM call that produces a structured assessment of the current output's weaknesses
+  per field (explanation, diagram, notes, example) and a set of revision instructions;
+  (b) a **revision** LLM call that receives the current output plus the critique and
+  produces an improved TeachingContent replacing the prior version.
+
+- **FR-031**: The critique call MUST use a dedicated prompt template per mode
+  (`REFLECTION_PROMPT_BY_MODE`) and MUST instruct the LLM to return a JSON object
+  containing at minimum: `quality_score` (int, 1–10), `issues` (list of
+  `{field, issue, severity}` objects), and `revision_instructions` (string summarising
+  what the revision call must fix). This intermediate schema is for internal use only and
+  MUST NOT appear in `TeachingAgentOutput` or `TeachingCompletionEvent`.
+
+- **FR-032**: The revision call MUST use a dedicated prompt template per mode
+  (`REVISION_PROMPT_BY_MODE`) that embeds the original topic, output_mode, context,
+  the current (draft) output, and the `revision_instructions` from the critique. It MUST
+  return a JSON object with the same structure as the generation prompt response
+  (explanation, diagram, notes, example), subject to the same Mermaid validation rules.
+
+- **FR-033**: If any LLM call within a reflection cycle (critique or revision) fails or
+  returns an unparseable response, the agent MUST fall back to the best available version
+  of the output at that point (initial generation or last successful revision) and return
+  `status: "ok"`. Reflection failures MUST NOT change `status` to `"error"`.
+
+- **FR-034**: The reflection model is configurable independently of the generation model:
+  `TEACHING_REFLECTION_MODEL` (falls back to `TEACHING_MODEL`); per-mode override
+  `TEACHING_{MODE}_REFLECTION_MODEL`. The critique token ceiling is controlled by
+  `TEACHING_REFLECTION_MAX_TOKENS` (default `512`). The revision call reuses the
+  per-mode generation ceiling (`TEACHING_{MODE}_MAX_TOKENS`, default `4096`).
+
+- **FR-035**: `metadata.tokens_used` MUST report the total tokens consumed across all LLM
+  calls in the request lifecycle (generation + all critique + all revision calls).
+  `metadata.reflection_iterations` MUST report the number of completed reflection cycles
+  as a non-negative integer (0 when reflection is disabled or all cycles fail before
+  producing a revision).
+
+- **FR-036**: Diagram validation rules (FR-005, FR-006, FR-007) MUST be applied to the
+  revision output identically to the initial generation output. A revision that produces an
+  invalid diagram follows the same fallback path as the original generation.
+
+- **FR-037**: The reflection loop MUST be transparent to all Kafka consumers.
+  `TeachingCompletionEvent` is published exactly once per request, after all reflection
+  iterations complete (or after graceful degradation), not between iterations.
+
+### Proposed revision to FR-018 (Performance)
+
+*Intended action: replace the existing FR-018 upon sign-off. The ratified FR-018 above
+remains in force until then.*
+
+- **FR-018 (proposed)**: The system MUST define measurable performance requirements per configuration:
+  - **Reflection disabled** (TEACHING_MAX_REFLECTION_ITERATIONS = 0): beginner ≤ 5 s,
+    intermediate ≤ 10 s, advanced ≤ 20 s on developer hardware with a fast-endpoint model.
+  - **1 reflection iteration** (default): beginner ≤ 15 s, intermediate ≤ 25 s,
+    advanced ≤ 45 s on developer hardware with a fast-endpoint model.
+  - The agent must handle the full per-mode token ceiling at both generation and revision
+    steps without timeout.
+  - Wall-clock measurements must use the same model and endpoint for comparison across
+    reflection-on and reflection-off runs.
+
+### Proposed Success Criteria
+
+*Intended placement: append after SC-010.*
+
+- **SC-011**: When reflection is enabled with N ≥ 1 iterations, the revised output must
+  demonstrate measurable improvement over the initial generation on a structured quality
+  rubric (clarity, structure adherence, example completeness) in ≥ 80% of test runs for
+  each mode.
+- **SC-012**: A critique or revision LLM failure never changes the response `status` to
+  `"error"` when the initial generation succeeded. Graceful degradation to initial output
+  is confirmed in 100% of simulated failure runs.
+- **SC-013**: `metadata.tokens_used` equals the sum of `completion_tokens` across all LLM
+  calls in the request lifecycle. `metadata.reflection_iterations` equals the number of
+  completed reflection cycles.
+- **SC-014**: `TeachingCompletionEvent` is published exactly once per Kafka request,
+  regardless of the number of configured reflection iterations.
+
+### Proposed Key Entities
+
+*Intended placement: append to the Key Entities section.*
+
+- **ReflectionCritique**: Internal intermediate schema (never exposed externally). Contains
+  `quality_score` (int, 1–10), `issues` (list of dicts: `field`, `issue`, `severity`), and
+  `revision_instructions` (str). Returned by the critique LLM call. Defined in
+  `project/schemas.py` (Teaching Agent section, internal models). Not included in
+  `TeachingAgentOutput` or `TeachingCompletionEvent`.
+- **REFLECTION_PROMPT_BY_MODE**: Dict mapping output mode to the critique prompt template.
+  Defined in `teaching_agent/prompts.py`. Takes `{topic}`, `{output_mode}`, `{current_output}`
+  placeholders. Instructs the LLM to produce a `ReflectionCritique` JSON object.
+- **REVISION_PROMPT_BY_MODE**: Dict mapping output mode to the revision prompt template.
+  Takes `{topic}`, `{output_mode}`, `{context}`, `{current_output}`, `{revision_instructions}`
+  placeholders. Instructs the LLM to produce an improved TeachingContent JSON object using
+  the same structure as the generation prompts.
+
+### Proposed Edge Cases
+
+*Intended placement: append to the Edge Cases section.*
+
+- Critique LLM call returns unparseable JSON → fall back to initial generation, log warning,
+  continue as if reflection is disabled for this request.
+- Revision LLM call returns unparseable JSON after a successful critique → fall back to
+  initial generation (not to the critique), log warning.
+- Revision produces an invalid Mermaid diagram in beginner mode → apply the same retry-once
+  then fallback-template rule as the initial generation path.
+- `TEACHING_MAX_REFLECTION_ITERATIONS` set to a value > 3 → honour the configured value
+  but document that latency scales linearly with N; no hard cap enforced in code.
+- Reflection enabled but `TEACHING_REFLECTION_MAX_TOKENS` is too small to fit a valid
+  critique → critique may be truncated; treat as parse failure and degrade gracefully.
+
+### Proposed Assumptions
+
+*Intended placement: append to the Assumptions section.*
+
+- Reflection is an internal quality mechanism. It does not change the external contract:
+  `TeachingAgentOutput` schema is unchanged, `TeachingCompletionEvent` is published once,
+  and downstream consumers (Quiz Agent, Evaluation Agent, Planner) are unaware of whether
+  reflection ran.
+- The quality improvement from reflection is a probabilistic guarantee (≥ 80% of runs per
+  SC-011), not a deterministic one. The critique and revision are LLM calls and may
+  occasionally produce lateral moves rather than improvements.
+- `metadata.reflection_iterations` = 0 is a valid and expected value when reflection is
+  disabled via `TEACHING_MAX_REFLECTION_ITERATIONS = 0`.

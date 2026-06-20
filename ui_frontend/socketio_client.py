@@ -8,10 +8,20 @@ import queue
 import threading
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import urlsplit
 
 import socketio
 
-from project.schemas import AgentEvent, ConnectionLifecycleState, EventType
+from project.schemas import (
+    AgentEvent,
+    ConnectionLifecycleState,
+    EvaluationResultPayload,
+    EventType,
+    QuizEventPayload,
+    QuizPhase,
+    TeachingCompletePayload,
+    TeachingTokenPayload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +57,9 @@ class SocketIOClient:
         self.sid: Optional[str] = None
         self._connect_error_count = 0
         self._running = False
+        self._stream_generations: dict[str, int] = {}
+        self._active_stream_ids: dict[str, str] = {}
+        self._stream_sequences: dict[str, int] = {}
 
         # Register event handlers
         self.sio.on("connect", self._on_connect)
@@ -54,6 +67,17 @@ class SocketIOClient:
         self.sio.on("disconnect", self._on_disconnect)
         self.sio.on("stream-tokens-skt", self._on_stream_tokens)
         self.sio.on("clarify-user-level-skt", self._on_clarify_user_level)
+        # Catch-all to verify ingress even when a specific handler is not firing.
+        self.sio.on("*", self._on_any_event)
+
+    async def _on_any_event(self, event: str, data: object) -> None:
+        """Debug ingress for any socket event name and payload shape."""
+        print(f"[frontend-debug] _on_any_event fired: event={event}")
+        payload_type = type(data).__name__
+        keys: list[str] = []
+        if isinstance(data, dict):
+            keys = list(data.keys())
+        self._event_queue.put(("debug", f"socket-any event={event} type={payload_type} keys={keys}"))
 
     def _emit_state(
         self,
@@ -107,20 +131,147 @@ class SocketIOClient:
     async def _on_stream_tokens(self, data: dict) -> None:
         """Handle stream-tokens-skt event from backend.
 
-        Backend emits StreamTokensEventBody: {from_service, sid, data: {...}}.
-        The inner ``data`` dict carries the TeachingTokenPayload fields that
-        the router expects (stream_id, sequence, token, is_final).
+        Routes by ``from_service``:
+        - teaching-agent  → teaching.token / teaching.complete
+        - quiz-agent      → quiz.* / evaluation.result
         """
+        print(f"[frontend-debug] _on_stream_tokens fired with data keys: {list(data.keys()) if isinstance(data, dict) else type(data)}")
         try:
-            payload = data.get("data", {}) if isinstance(data, dict) else {}
-            event = self._build_agent_event(
-                event_type=EventType.TEACHING_TOKEN,
-                payload=payload,
-                source_agent=data.get("from_service", "teaching") if isinstance(data, dict) else "teaching",
+            raw = data if isinstance(data, dict) else {}
+            from_service = raw.get("from_service", "")
+            sid = raw.get("sid", self.sid or "unknown")
+            inner = raw.get("data", {}) if isinstance(raw.get("data"), dict) else {}
+            self._event_queue.put(
+                (
+                    "debug",
+                    f"stream-tokens handler fired from_service={from_service} sid={sid} keys={list(inner.keys())}",
+                )
             )
-            self._event_queue.put(("event", event))
+            print(
+                f"[frontend-debug] socket stream event received "
+                f"from_service={from_service} sid={sid} keys={list(inner.keys())}"
+            )
+
+            if from_service == "teaching-agent":
+                self._route_teaching(inner, from_service, sid)
+            elif from_service == "quiz-agent":
+                self._route_quiz(inner, from_service, sid)
+            else:
+                logger.warning(f"Unknown from_service in stream-tokens: {from_service}")
         except Exception as exc:
             logger.error(f"Failed to process stream-tokens event: {exc}", exc_info=True)
+
+    # -- teaching routing --------------------------------------------------
+
+    def _route_teaching(self, data: dict, source: str, sid: str) -> None:
+        stream_key = f"{sid}:{source}"
+
+        if data.get("done"):
+            stream_id = self._active_stream_ids.pop(stream_key, stream_key)
+            self._stream_sequences.pop(stream_id, None)
+            print(
+                f"[frontend-debug] teaching complete received sid={sid} "
+                f"stream_id={stream_id} tokens_used={data.get('tokens_used', 0)}"
+            )
+            event = self._build_agent_event(
+                event_type=EventType.TEACHING_COMPLETE,
+                payload=TeachingCompletePayload(
+                    stream_id=stream_id, final_text="",
+                    tokens_used=data.get("tokens_used", 0),
+                ).model_dump(),
+                source_agent=source, session_id=sid,
+                event_id=f"{stream_id}:complete",
+            )
+        else:
+            if stream_key not in self._active_stream_ids:
+                gen = self._stream_generations[stream_key] = (
+                    self._stream_generations.get(stream_key, 0) + 1
+                )
+                stream_id = f"{stream_key}:{gen}"
+                self._active_stream_ids[stream_key] = stream_id
+                self._stream_sequences[stream_id] = -1
+            stream_id = self._active_stream_ids[stream_key]
+            seq = self._stream_sequences[stream_id] = (
+                self._stream_sequences.get(stream_id, -1) + 1
+            )
+            print(
+                f"[frontend-debug] teaching token mapped sid={sid} "
+                f"stream_id={stream_id} seq={seq} token_len={len(data.get('token', ''))}"
+            )
+            event = self._build_agent_event(
+                event_type=EventType.TEACHING_TOKEN,
+                payload=TeachingTokenPayload(
+                    stream_id=stream_id, sequence=seq,
+                    token=data.get("token", ""), is_final=False,
+                ).model_dump(),
+                source_agent=source, session_id=sid,
+                event_id=f"{stream_id}:{seq}",
+            )
+        self._event_queue.put(("event", event))
+
+    # -- quiz routing ------------------------------------------------------
+
+    def _route_quiz(self, data: dict, source: str, sid: str) -> None:
+        # Generation payload: QuizAgentOutput with status="generated" + quiz
+        if data.get("status") == "generated" and data.get("quiz"):
+            quiz = data["quiz"]
+            quiz_id = quiz.get("quiz_id", "unknown")
+            questions = quiz.get("questions", [])
+            print(
+                f"[frontend-debug] quiz generation payload sid={sid} "
+                f"quiz_id={quiz_id} questions={len(questions)}"
+            )
+
+            # Signal quiz started (carries full questions list for the UI)
+            self._event_queue.put(("event", self._build_agent_event(
+                event_type=EventType.QUIZ_STARTED,
+                payload=QuizEventPayload(
+                    quiz_id=quiz_id, phase=QuizPhase.STARTED,
+                    questions=questions,
+                ).model_dump(),
+                source_agent=source, session_id=sid,
+            )))
+
+            # Immediately enqueue the first question so the quiz tab renders it
+            if questions:
+                q = questions[0]
+                choices = [opt.get("text", "") for opt in q.get("options", [])]
+                self._event_queue.put(("event", self._build_agent_event(
+                    event_type=EventType.QUIZ_QUESTION,
+                    payload=QuizEventPayload(
+                        quiz_id=quiz_id, phase=QuizPhase.QUESTION,
+                        question_text=q.get("prompt", ""),
+                        choices=choices,
+                    ).model_dump(),
+                    source_agent=source, session_id=sid,
+                )))
+            return
+
+        # Evaluation payload: QuizEvaluationStreamPayload with result + swot
+        if "result" in data and "swot" in data:
+            result = data["result"]
+            swot = data["swot"]
+            score = result.get("overall_score", 0)
+            max_score = result.get("max_score", 0)
+            pct = result.get("overall_percentage", 0)
+            print(
+                f"[frontend-debug] quiz evaluation payload sid={sid} "
+                f"score={score}/{max_score} pct={pct}"
+            )
+            self._event_queue.put(("event", self._build_agent_event(
+                event_type=EventType.EVALUATION_RESULT,
+                payload=EvaluationResultPayload(
+                    evaluation_id=f"eval-{sid}",
+                    summary=f"Score: {score}/{max_score} ({pct:.0f}%)",
+                    strengths=swot.get("strengths", []),
+                    gaps=swot.get("weaknesses", []),
+                    recommendations=swot.get("opportunities", []),
+                ).model_dump(),
+                source_agent=source, session_id=sid,
+            )))
+            return
+
+        logger.warning(f"Unrecognised quiz-agent payload shape: {list(data.keys())}")
 
     async def _on_clarify_user_level(self, data: dict) -> None:
         """Handle clarify-user-level-skt event from backend.
@@ -145,27 +296,50 @@ class SocketIOClient:
         except Exception as exc:
             logger.error(f"Failed to process clarify-user-level event: {exc}", exc_info=True)
 
+    def _resolve_connect_target(self) -> tuple[str, str]:
+        """Return (base_url, socketio_path) from configured server_url.
+
+        Accepts either:
+        - ws://host:port
+        - ws://host:port/socket.io
+        """
+        parsed = urlsplit(self.server_url)
+        scheme = parsed.scheme or "http"
+        netloc = parsed.netloc
+        path = (parsed.path or "").rstrip("/")
+
+        # If URL includes /socket.io, strip it from base URL and pass as socketio_path.
+        if path.endswith("/socket.io"):
+            base_path = path[: -len("/socket.io")]
+            base_url = f"{scheme}://{netloc}{base_path}" if base_path else f"{scheme}://{netloc}"
+            return base_url, "socket.io"
+
+        base_url = f"{scheme}://{netloc}{path}" if path else f"{scheme}://{netloc}"
+        return base_url, "socket.io"
+
     def _build_agent_event(
         self,
         event_type: EventType,
         payload: dict,
         source_agent: str,
+        session_id: str | None = None,
+        event_id: str | None = None,
     ) -> AgentEvent:
         """
         Convert incoming Socket.IO payload into AgentEvent.
-        
+
         Extracts request_id and session_id from payload where available,
         generates event_id and timestamp.
         """
-        event_id = payload.get("event_id", f"{self.sid}-{datetime.now(timezone.utc).timestamp()}")
-        session_id = payload.get("sid", self.sid or "unknown")
+        resolved_event_id = event_id or payload.get("event_id", f"{self.sid}-{datetime.now(timezone.utc).timestamp()}")
+        resolved_session_id = session_id or payload.get("sid", self.sid or "unknown")
         request_id = payload.get("request_id", None)
-        
+
         return AgentEvent(
-            event_id=event_id,
+            event_id=resolved_event_id,
             event_type=event_type,
             source_agent=source_agent,
-            session_id=session_id,
+            session_id=resolved_session_id,
             request_id=request_id,
             timestamp=datetime.now(timezone.utc),
             payload=payload,
@@ -176,7 +350,12 @@ class SocketIOClient:
         """Establish Socket.IO connection."""
         try:
             self._emit_state(ConnectionLifecycleState.CONNECTING)
-            await self.sio.connect(self.server_url)
+            connect_url, socketio_path = self._resolve_connect_target()
+            self._event_queue.put(
+                ("debug", f"connect target url={connect_url} socketio_path={socketio_path}")
+            )
+            print(f"[frontend-debug] connecting to Socket.IO server at {connect_url} path={socketio_path}")
+            await self.sio.connect(connect_url, socketio_path=socketio_path)
             logger.info(f"Socket.IO connection initiated to {self.server_url}")
         except Exception as exc:
             logger.error(f"Connection failed: {exc}")

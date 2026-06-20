@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
@@ -14,10 +15,21 @@ from project.schemas import (
 
 _SECTION_HEADER_RE = re.compile(r"^\*\*(\w+)\*\*\s*$", re.MULTILINE | re.IGNORECASE)
 
+# Opening markdown fence (```json or ```) at the very start of a fenced response.
+_JSON_FENCE_OPEN_RE = re.compile(r"^```(?:json)?\s*\n", re.MULTILINE)
 
-def build_messages(prompt: str) -> list[dict[str, str]]:
-    """Wrap a rendered prompt string into the LiteLLM messages format."""
-    return [{"role": "user", "content": prompt}]
+
+def build_messages(
+    prompt: str, chat_history: list[dict] | None = None
+) -> list[dict[str, str]]:
+    """Wrap a rendered prompt into the LiteLLM messages format.
+
+    Phase 5: when ``chat_history`` (prior turns, oldest->newest) is provided it is
+    prepended, so the current structured prompt is the final user message.
+    ``None``/``[]`` returns a single user message — identical to the single-turn
+    pipeline, keeping existing callers byte-for-byte unchanged.
+    """
+    return [*(chat_history or []), {"role": "user", "content": prompt}]
 
 
 def parse_markdown_response(raw: str) -> dict[str, Any]:
@@ -51,6 +63,50 @@ def parse_markdown_response(raw: str) -> dict[str, Any]:
         "notes": sections["notes"],
         "example": sections.get("example") or None,
     }
+
+
+def parse_llm_response(
+    raw: str, required_fields: tuple[str, ...] = ("explanation", "notes")
+) -> dict[str, Any]:
+    """Extract and parse a JSON object from an LLM response.
+
+    Generation now streams markdown (see ``parse_markdown_response``); this JSON
+    parser is retained for the reflection loop, whose critique and revision calls
+    return JSON. Strips a surrounding ```json fence if present.
+
+    Each name in ``required_fields`` must be present and a non-empty string
+    (default 'explanation'/'notes'; pass () for critique responses, which are
+    validated by the ReflectionCritique model instead).
+
+    Raises:
+        ValueError: If the response cannot be parsed or a required field is missing.
+    """
+    if not raw or not raw.strip():
+        raise ValueError("LLM returned an empty response")
+
+    text = raw.strip()
+    if text.startswith("```"):
+        open_match = _JSON_FENCE_OPEN_RE.match(text)
+        if open_match:
+            body = text[open_match.end():]
+            close_pos = body.rfind("```")
+            text = (body[:close_pos] if close_pos != -1 else body).strip()
+
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"LLM response is not valid JSON: {exc}") from exc
+
+    if not isinstance(parsed, dict):
+        raise ValueError("LLM response JSON is not an object")
+
+    for required_field in required_fields:
+        if required_field not in parsed:
+            raise ValueError(f"LLM response missing required field: '{required_field}'")
+        if not isinstance(parsed[required_field], str) or not parsed[required_field].strip():
+            raise ValueError(f"LLM response field '{required_field}' must be a non-empty string")
+
+    return parsed
 
 
 def build_error_output(topic: str, output_mode: str, model: str) -> TeachingAgentOutput:

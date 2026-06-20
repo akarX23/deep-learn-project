@@ -59,6 +59,10 @@ def _handle_teaching_token(
     """Route teaching.token event to chat state."""
     try:
         payload = TeachingTokenPayload(**event.payload)
+        print(
+            f"[frontend-debug] router teaching.token stream_id={payload.stream_id} "
+            f"seq={payload.sequence} token_len={len(payload.token)}"
+        )
     except Exception as exc:
         logger.error(f"Invalid teaching.token payload: {exc}")
         return _add_diagnostic(
@@ -142,6 +146,8 @@ def _handle_quiz_event(
             "choices": payload.choices or [],
             "feedback": payload.feedback,
             "score": payload.score,
+            **({"questions": payload.questions} if payload.questions else {}),
+            **({"current_question_index": 0} if phase == QuizPhase.STARTED else {}),
         }
     )
     return session.model_copy(update={"quiz_state": updated_quiz_state})

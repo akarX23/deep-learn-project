@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class PageExtractionStatus(str, Enum):
@@ -230,6 +230,21 @@ class UserRequest(BaseModel):
     sid: str
 
 
+class QuizContentRequest(BaseModel):
+    """Inbound request used by backend to trigger quiz generation."""
+
+    sid: str
+    user_prompt: str
+    teaching_material: str
+
+    @field_validator("sid", "user_prompt", "teaching_material")
+    @classmethod
+    def validate_non_empty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value cannot be empty")
+        return value
+
+
 class StreamTokensEventBody(BaseModel):
     """Kafka payload for the ``stream-tokens`` topic, forwarded to Socket.IO.
 
@@ -240,6 +255,29 @@ class StreamTokensEventBody(BaseModel):
     from_service: str
     sid: str
     data: dict[str, Any] = Field(default_factory=dict)
+
+
+class ProgressUpdatePage(str, Enum):
+    """Frontend section identifiers for stream progress updates."""
+
+    CHAT = "chat"
+    QUIZ = "quiz"
+    EVAL = "eval"
+
+
+class StreamProgressUpdateEventBody(BaseModel):
+    """Kafka payload for ``stream-progress-update``, forwarded to Socket.IO."""
+
+    sid: str
+    for_page: ProgressUpdatePage
+    update: str
+
+    @field_validator("sid", "update")
+    @classmethod
+    def validate_non_empty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value cannot be empty")
+        return value
 
 
 # ---------------------------------------------------------------------------
@@ -285,6 +323,24 @@ class TeachingRequestEvent(BaseModel):
     user_level: str
     rag_compiled: str = ""
     sid: str
+    # Phase 5: prior conversation turns (oldest->newest), EXCLUDING the current
+    # query (carried in `user_prompt`). Each entry is
+    # {"role": "user"|"assistant", "content": str}. Default [] reproduces
+    # single-turn behavior; the Planner owns truncation/summarization.
+    chat_history: list[dict] = Field(default_factory=list)
+
+    @field_validator("chat_history")
+    @classmethod
+    def validate_chat_history(cls, value: list[dict]) -> list[dict]:
+        for turn in value:
+            if not isinstance(turn, dict):
+                raise ValueError("each chat_history entry must be a dict")
+            if turn.get("role") not in ("user", "assistant"):
+                raise ValueError("chat_history entry 'role' must be 'user' or 'assistant'")
+            content = turn.get("content")
+            if not isinstance(content, str) or not content.strip():
+                raise ValueError("chat_history entry 'content' must be a non-empty string")
+        return value
 
 
 class QuizRequestEvent(BaseModel):
@@ -366,12 +422,29 @@ class TeachingAgentInput(BaseModel):
     topic: str
     output_mode: OutputMode
     context: str = ""
+    # Phase 5: prior conversation turns (oldest->newest), EXCLUDING the current
+    # query (which is `topic`). Each entry {"role": "user"|"assistant", "content": str}.
+    # Default [] -> single-turn behavior unchanged; prepended to the LLM messages.
+    chat_history: list[dict] = Field(default_factory=list)
 
     @field_validator("topic")
     @classmethod
     def validate_topic(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("topic cannot be empty")
+        return value
+
+    @field_validator("chat_history")
+    @classmethod
+    def validate_chat_history(cls, value: list[dict]) -> list[dict]:
+        for turn in value:
+            if not isinstance(turn, dict):
+                raise ValueError("each chat_history entry must be a dict")
+            if turn.get("role") not in ("user", "assistant"):
+                raise ValueError("chat_history entry 'role' must be 'user' or 'assistant'")
+            content = turn.get("content")
+            if not isinstance(content, str) or not content.strip():
+                raise ValueError("chat_history entry 'content' must be a non-empty string")
         return value
 
 
@@ -397,6 +470,7 @@ class TeachingMetadata(BaseModel):
     topic: str
     tokens_used: int = Field(ge=0)
     model: str
+    reflection_iterations: int = Field(default=0, ge=0)
 
     @field_validator("model")
     @classmethod
@@ -422,29 +496,38 @@ class TeachingAgentOutput(BaseModel):
         return value
 
 
-# class TeachingCompletionEvent(BaseModel):
-#     """Kafka completion payload published by the Teaching Agent to 'teaching-complete'."""
+# --- Reflection (Phase 3) — internal models -------------------------------
+# ReflectionIssue / ReflectionCritique are used ONLY inside TeachingAgent.run();
+# they are never serialized into TeachingAgentOutput or TeachingCompletionEvent.
 
-#     request_id: str
-#     session_ctx: dict[str, Any]
-#     topic: str
-#     output_mode: str
-#     status: str
-#     content: Optional[TeachingContent] = None
-#     tokens_used: int = Field(default=0, ge=0)
-#     model: str
-#     started_at: str
-#     completed_at: str
-#     duration_ms: int = Field(default=0, ge=0)
-#     errors: List[str] = Field(default_factory=list)
-#     source: str = "teaching-agent"
 
-#     @field_validator("request_id", "topic", "output_mode", "model", "started_at", "completed_at")
-#     @classmethod
-#     def validate_non_empty_fields(cls, value: str) -> str:
-#         if not value.strip():
-#             raise ValueError("value cannot be empty")
-#         return value
+class ReflectionIssue(BaseModel):
+    """A single weakness in the current output, flagged by the critique step."""
+
+    field: str  # explanation | diagram | notes | example
+    issue: str
+    severity: Literal["low", "medium", "high"]
+
+
+class ReflectionCritique(BaseModel):
+    """Internal critique produced by the reflection step (Phase 3).
+
+    Consumed only within TeachingAgent.run() to drive the revision call;
+    not part of any external contract.
+    """
+
+    quality_score: int = Field(ge=1, le=10)
+    issues: List[ReflectionIssue] = Field(default_factory=list)
+    revision_instructions: str = ""
+
+    @model_validator(mode="after")
+    def require_instructions_when_issues_present(self) -> "ReflectionCritique":
+        if self.issues and not self.revision_instructions.strip():
+            raise ValueError(
+                "revision_instructions cannot be empty when issues are present"
+            )
+        return self
+
 
 # ---------------------------------------------------------------------------
 # Quiz Agent schemas
@@ -566,15 +649,6 @@ class QuizResult(BaseModel):
     weak_sub_concepts: List[str] = Field(default_factory=list)
     recommended_action: str  # "re-teach" | "practice-more" | "advance"
 
-    @field_validator("recommended_action")
-    @classmethod
-    def validate_recommended_action(cls, value: str) -> str:
-        if value not in {"re-teach", "practice-more", "advance"}:
-            raise ValueError(
-                "recommended_action must be one of: re-teach, practice-more, advance"
-            )
-        return value
-
 
 class QuizAgentMetadata(BaseModel):
     """Audit record for a Quiz Agent response."""
@@ -631,8 +705,8 @@ class QuizEvaluateRequestEvent(BaseModel):
 
     request_id: str
     sid: str
-    quiz: dict  # serialized Quiz object
-    answers: List[dict]  # serialized List[SubmittedAnswer]
+    quiz: Quiz  # serialized Quiz object
+    answers: List[SubmittedAnswer]  # serialized List[SubmittedAnswer]
 
 
 class QuizEvaluationStreamPayload(BaseModel):
@@ -643,7 +717,7 @@ class QuizEvaluationStreamPayload(BaseModel):
     one event.
     """
 
-    result: dict  # serialized QuizResult
+    result: QuizResult  # serialized QuizResult
     swot: SWOTAnalysis
 # ---------------------------------------------------------------------------
 # UI Frontend websocket schemas
@@ -754,6 +828,7 @@ class QuizEventPayload(BaseModel):
     choices: List[str] = Field(default_factory=list)
     feedback: Optional[str] = None
     score: Optional[float] = None
+    questions: List[dict] = Field(default_factory=list)
 
     @field_validator("quiz_id")
     @classmethod
@@ -860,6 +935,8 @@ class QuizState(BaseModel):
     choices: List[str] = Field(default_factory=list)
     feedback: Optional[str] = None
     score: Optional[float] = None
+    questions: List[dict] = Field(default_factory=list)
+    current_question_index: int = 0
 
 
 class EvaluationState(BaseModel):

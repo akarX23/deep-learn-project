@@ -3,13 +3,14 @@
 **Input**: Design documents from `/specs/002-teaching-agent/`
 **Prerequisites**: plan.md ✓, spec.md ✓, research.md ✓, data-model.md ✓, contracts/ ✓, quickstart.md ✓
 
-**Organization**: Phase 1 (core pipeline, complete) + Phase 2 (Kafka integration, open).
-All Phase 2 tasks are reviewed and approved individually before implementation.
+**Organization**: Phase 1 (core pipeline) + Phase 2 (Kafka integration) + Phase 3 (reflection layer)
++ Phase 4 (token streaming) + Phase 5 (multi-turn conversation).
+All Phase 2–5 tasks are reviewed and approved individually before implementation.
 
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel (different files, no blocking dependencies)
-- **[Story]**: User story from spec.md (US1–US4 = core pipeline; US5 = Kafka integration)
+- **[Story]**: User story from spec.md (US1–US4 = core pipeline; US5 = Kafka integration; US6 = reflection; US7 = multi-turn conversation)
 
 ---
 
@@ -134,16 +135,16 @@ Backend service will auto-bootstrap `"teaching"` and `"teaching-complete"` on ne
 - [x] T021 Create `teaching_agent/handlers.py`:
       - `TeachingRequestEventHandler` class with injectable dependencies:
         `agent_factory` (default: `TeachingAgent`), `publisher` (default:
-        `publish_teaching_complete`)
+        `publish_teaching_complete`) — no `clock` (completion event has no timing fields)
       - `parse_event(payload: dict) → TeachingRequestEvent` — validates inbound payload
       - `build_completion_event(event, result) → TeachingCompletionEvent`
-        — maps agent output to new completion schema: `content = result.content.model_dump_json()
-        if result.content else ""`; passes through `request_id`, `sid`, `user_level`
+        — copies `request_id`, `sid`, `user_level` from the event; serializes
+        `result.content` to JSON (`""` when content is None)
       - `process_request(payload: dict, producer=None) → TeachingCompletionEvent | None`:
-        parse event → map `user_prompt→topic`, `user_level→output_mode`, `rag_compiled→context`
-        → `agent.run()` → build completion event → publish; on parse failure: log error
-        and return None (no publish); on agent failure: still publish error completion
-        event with `content: ""` (always-publish rule)
+        parse event → map `user_prompt → topic`, `user_level → output_mode`,
+        `rag_compiled → context` → `agent.run()` → build completion event → publish;
+        on parse failure: log error and return None (no publish);
+        on agent failure: still publish completion event with empty `content` (always-publish rule)
       - `_extract_request_id(payload: dict) → str` — returns `"unknown"` if absent
 
 **Checkpoint**: Unit-testable without Kafka — `TeachingRequestEventHandler` instantiates with fake `agent_factory` and `publisher` lambda
@@ -236,11 +237,14 @@ Backend service will auto-bootstrap `"teaching"` and `"teaching-complete"` on ne
       - effort: `TEACHING_{MODE}_EFFORT` → no fallback (optional; `None` when unset)
       No hardcoded values remain in config.py; all defaults resolve from env/config files only.
 
-- [x] T030 Update `.env.local` — add per-mode env var stubs (commented out) under Teaching Agent section:
+- [~] T030 Update `.env.local` — add per-mode env var stubs (commented out) under Teaching Agent section:
       `TEACHING_BEGINNER_MODEL`, `TEACHING_BEGINNER_API_KEY`, `TEACHING_BEGINNER_MAX_TOKENS`,
       same for `INTERMEDIATE` and `ADVANCED`; shared `TEACHING_MODEL` / `TEACHING_API_KEY`
       remain as the active fallback defaults. Stubs are commented out so they act as
       in-place documentation without overriding the shared fallbacks.
+      NOTE: documentation-only — these per-mode stubs are NOT currently present in `.env.local`;
+      `get_llm_config()` resolves them at runtime regardless, and the shared `TEACHING_*`
+      fallbacks are the active config. Re-add the stubs only if per-mode tuning is needed.
 
 - [x] T031 Update `CLAUDE.md` env var table — add per-mode override rows
       (`TEACHING_{MODE}_MODEL`, `TEACHING_{MODE}_API_KEY`, `TEACHING_{MODE}_MAX_TOKENS`)
@@ -259,6 +263,15 @@ Backend service will auto-bootstrap `"teaching"` and `"teaching-complete"` on ne
       section: `TEACHING_BEGINNER_TEMPERATURE`, `TEACHING_INTERMEDIATE_TEMPERATURE`,
       `TEACHING_ADVANCED_TEMPERATURE`, `TEACHING_BEGINNER_EFFORT`, `TEACHING_INTERMEDIATE_EFFORT`,
       `TEACHING_ADVANCED_EFFORT`; variables go in `.env.local` (not `.env.local.example`)
+      NOTE: documentation-only — these stubs are NOT currently present in `.env.local`.
+      `get_llm_config()` reads `TEACHING_{MODE}_TEMPERATURE` (fallback `TEACHING_TEMPERATURE`,
+      default 0.7) and `TEACHING_{MODE}_EFFORT` (optional, `None` when unset) at runtime
+      regardless. Re-add the stubs only if per-mode tuning is needed.
+
+- [x] T034 Remove the dead commented-out `TeachingCompletionEvent` block in
+      `project/schemas.py` (Teaching Agent section, ~lines 411–433). It was superseded by the
+      active planner-aligned `TeachingCompletionEvent` in the Planner Agent section and is now
+      obsolete. Constitution Principle V — remove obsolete code paths.
 
 - [x] T034 Update `teaching_agent/handlers.py` for new `TeachingRequestEvent` /
       `TeachingCompletionEvent` schema (post-master-merge Planner Agent contract change):
@@ -452,6 +465,117 @@ registered in `project/topics.py`; worker boots and processes messages end-to-en
 
 ---
 
+---
+
+## Phase 5: Multi-Turn Conversation (US7) — Planned
+
+**Goal**: Let the Teaching Agent answer follow-up queries with prior conversation as context.
+The Planner sends prior turns in a new optional `chat_history` field; the agent threads them
+into the LLM message list ahead of the current structured prompt. Every turn keeps the
+existing 4-section structured output — no follow-up branch, no conversational mode, no
+auto-detection. Empty `chat_history` (default) reproduces single-turn behavior exactly.
+
+**All Phase 5 tasks require explicit user approval before implementation. One task at a time.**
+
+---
+
+### P5-A: Schema (Blocking Prerequisite)
+
+**Purpose**: Add `chat_history` to the inbound event and the agent input. All other P5 tasks depend on this.
+
+- [x] T050 [US7] Add `chat_history` to `project/schemas.py` (Teaching Agent section):
+      - `TeachingRequestEvent`: `chat_history: list[dict] = Field(default_factory=list)` —
+        prior turns, oldest→newest, each `{"role": "user"|"assistant", "content": str}`,
+        EXCLUDING the current query
+      - `TeachingAgentInput`: mirror the same field with the same default
+      - default `[]` keeps every existing caller/test and the first-query path unchanged
+      - (decision §4.1) optionally add a light validator rejecting entries without a valid
+        `role` or with empty `content`; default recommendation = `list[dict]` + light validator
+
+**Checkpoint**: `python -c "from project.schemas import TeachingAgentInput; assert TeachingAgentInput(topic='x', output_mode='beginner').chat_history == []"` passes
+
+---
+
+### P5-B: Message Building (Core Change)
+
+**Purpose**: Make message construction history-aware. This is the only behavioral change.
+
+- [x] T051 [US7] Update `teaching_agent/helpers.py`:
+      `build_messages(prompt: str, chat_history: list[dict] | None = None) -> list[dict[str, str]]`
+      returns `[*(chat_history or []), {"role": "user", "content": prompt}]`.
+      Backward compatible: `chat_history=None`/`[]` → `[{"role": "user", "content": prompt}]`,
+      identical to today; the structured prompt stays the final user message.
+
+**Checkpoint**: `python -m pytest teaching_agent/tests/test_teaching_agent.py -q -k "build_messages"` passes
+
+---
+
+### P5-C: Agent + Handler Wiring
+
+**Purpose**: Pass `chat_history` from the event through `run()` into `build_messages()`.
+
+- [x] T052 [US7] Update `teaching_agent/agent.py`: in `run()`, change the structured-step
+      message construction from `messages = build_messages(prompt)` to
+      `messages = build_messages(prompt, agent_input.chat_history)`. No branch, no new method;
+      Steps 5–9 (extractor, parse, diagram, reflection N=0, assembly) unchanged.
+
+- [x] T053 [US7] Update `teaching_agent/handlers.py`: in `process_request()`, add
+      `"chat_history": event.chat_history` to the dict passed to `agent.run()`. token_callback,
+      publish flow, sentinel, and `build_completion_event` unchanged.
+
+**Checkpoint**: `python -m pytest teaching_agent/tests/test_kafka_integration.py -q` passes
+
+---
+
+### P5-D: Tests
+
+**Purpose**: Cover the multi-turn path; confirm single-turn regression is intact.
+
+- [x] T054 [US7] Update `teaching_agent/tests/test_teaching_agent.py`:
+      - `build_messages` regression: `None`/`[]` → single user message
+      - `build_messages` multi-turn: prior turns prepended in order, current prompt last
+      - schema: `chat_history` defaults to `[]`; populated entries parse; (if validated) bad
+        role / empty content rejected
+      - `run()` with non-empty `chat_history`: prior turns appear in the messages fed to
+        `call_llm_stream`; output is still the parsed 4-section `TeachingContent`; `status == "ok"`
+      - existing single-turn tests stay green unchanged
+
+- [x] T055 [US7] Update `teaching_agent/tests/test_kafka_integration.py`:
+      - handler maps `event.chat_history` into `run()` (assert via a capturing fake agent)
+      - request with `chat_history` → exactly one `teaching-complete` publish + stream tokens
+        + done sentinel (publish-once preserved)
+      - backward compat: event without `chat_history` → identical to today
+
+---
+
+### P5-E: Optional Hardening, Docs & Validation
+
+- [ ] T056 [US7] (optional, decision §4.3) Defensive history cap:
+      `teaching_agent/config.py` `get_max_history_turns()` reading `TEACHING_MAX_HISTORY_TURNS`
+      (unset → no cap); `agent.run()` keeps the most recent N turns before `build_messages`.
+      Skip unless a cap is wanted.
+
+- [ ] T057 [US7] (optional, decision §4.4) Conversation-aware prompt nudge in
+      `teaching_agent/prompts.py` — one line per `PROMPT_BY_MODE` template. Add only if quality
+      testing shows the model drifting between chat and structured output.
+
+- [x] T058 [US7] Update docs for `chat_history`: `specs/002-teaching-agent/data-model.md`
+      (input/event schema) and `specs/002-teaching-agent/contracts/teaching-agent-contract.md`
+      (input contract) updated. `CLAUDE.md` not changed — it does not document the Teaching
+      input shape (RAG-focused).
+
+- [x] T059 [US7] Run offline suite + lint:
+      offline subset (test_teaching_agent.py + test_kafka_integration.py = 55 passed;
+      test_stream_parser.py + test_worker_runtime.py = 13 passed) green; `ruff check` on all
+      changed files passes. (Pre-existing ruff errors in untouched `test_context_priority.py`
+      are out of scope per the Phase-5-only decision.)
+
+- [ ] T060 [US7] Manual two-turn validation (real LLM, gated): first query (structured output)
+      → follow-up with turn 1 in `chat_history`; verify the answer references the prior turn
+      while still returning the 4-section format.
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -462,7 +586,12 @@ registered in `project/topics.py`; worker boots and processes messages end-to-en
 - **P2-C (T021)**: Depends on P2-A + P2-B (needs Kafka types and event schemas)
 - **P2-D (T022)**: Depends on P2-B + P2-C (needs kafka.py and handlers.py)
 - **P2-E (T023–T024)**: Depends on P2-B + P2-C + P2-D (tests all three files)
-- **P2-F (T025–T027)**: Depends on P2-E completion
+- **P2-F (T025–T034)**: Depends on P2-E completion
+- **Phase 3 (T035–T053)**: P3-A→P3-E built per the Phase 3 Dependencies block;
+  P3-F (T047–T053) are doc-reconciliation / added-coverage tasks, mostly independent
+- **Phase 5 (T050–T060)**: P5-A (T050) BLOCKS all of P5; P5-B (T051) depends on P5-A;
+  P5-C (T052–T053) depends on P5-A + P5-B; P5-D (T054–T055) depends on P5-C; P5-E
+  (T056–T060) depends on P5-D. T056/T057 are optional.
 
 ### Within P2-A
 
@@ -478,6 +607,8 @@ T021 → [checkpoint]
 T022 → [checkpoint]
 T023 → T024 → [checkpoint]
 T025 → T026 → T027
+(Phase 3) T035 → T036 → T037/T038 → T039/T040 → T041 → T042 → T043–T053
+(Phase 5) T050 → T051 → T052 → T053 → T054 → T055 → [checkpoint] → T056–T060
 ```
 
 ---

@@ -112,6 +112,10 @@ def _make_agent(producer: MockProducer) -> PlannerAgent:
     return PlannerAgent(producer=producer)
 
 
+def _messages_for_topic(producer: MockProducer, topic: str) -> list[dict[str, Any]]:
+    return [value for current_topic, value, _ in producer.sent if current_topic == topic]
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -269,6 +273,8 @@ def test_pipeline_teaching_only_no_files(
         agent.run(_req(user_prompt="Please explain what a neural network is in detail"))
 
     assert "teaching" in producer.topics()
+    progress_updates = _messages_for_topic(producer, "stream-progress-update")
+    assert any(update["for_page"] == "chat" for update in progress_updates)
     assert "workflow-complete" in producer.topics()
     assert "rag" not in producer.topics()
 
@@ -331,6 +337,9 @@ def test_pipeline_quiz_intent_dispatches_quiz(
         agent.run(_req(user_prompt="quiz me on gradient descent concepts"))
 
     assert "quiz-request" in producer.topics()
+    progress_updates = _messages_for_topic(producer, "stream-progress-update")
+    assert any(update["for_page"] == "chat" for update in progress_updates)
+    assert any(update["for_page"] == "quiz" for update in progress_updates)
     assert "workflow-complete" in producer.topics()
 
 

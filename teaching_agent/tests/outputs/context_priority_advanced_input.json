@@ -1,0 +1,5 @@
+{
+  "topic": "Scaled dot-product attention in Transformers",
+  "output_mode": "advanced",
+  "context": "From Vaswani et al. (2017) \u2014 Attention is All You Need:\n  - Model dimensions: d_model=512, d_ff=2048, h=8 attention heads.\n  - Scaled dot-product attention formula:\n    Attention(Q,K,V) = softmax(QK^T / sqrt(d_k)) * V\n  - The sqrt(d_k) scaling factor is critical: without it, large d_k values cause dot products to grow in magnitude, pushing softmax into saturation regions where gradients vanish.\n  - Positional encoding uses sinusoidal functions:\n    PE(pos, 2i) = sin(pos / 10000^(2i/d_model))\n  - Course note: multi-head attention allows the model to jointly attend to information from different representation subspaces at different positions."
+}

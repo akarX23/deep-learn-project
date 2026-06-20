@@ -4,14 +4,22 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+import os
 
 from project.schemas import (
+    ProgressUpdatePage,
+    StreamProgressUpdateEventBody,
     StreamTokensEventBody,
     TeachingCompletionEvent,
     TeachingRequestEvent,
 )
 from teaching_agent.agent import TeachingAgent
-from teaching_agent.kafka import KafkaProducerProtocol, publish_stream_token, publish_teaching_complete
+from teaching_agent.kafka import (
+    KafkaProducerProtocol,
+    publish_stream_progress_update,
+    publish_stream_token,
+    publish_teaching_complete,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,10 +36,14 @@ class TeachingRequestEventHandler:
         stream_publisher: Callable[
             [KafkaProducerProtocol, StreamTokensEventBody], None
         ] = publish_stream_token,
+        progress_publisher: Callable[
+            [KafkaProducerProtocol, StreamProgressUpdateEventBody], None
+        ] = publish_stream_progress_update,
     ) -> None:
         self._agent_factory = agent_factory
         self._publisher = publisher
         self._stream_publisher = stream_publisher
+        self._progress_publisher = progress_publisher
 
     def parse_event(self, payload: dict[str, object]) -> TeachingRequestEvent:
         """Parse inbound payload into request event schema."""
@@ -73,6 +85,27 @@ class TeachingRequestEventHandler:
         )
 
         def token_callback(field: str, token: str) -> None:
+            # Handle progress events emitted by StreamingFieldExtractor
+            if field == "_progress":
+                if producer is None:
+                    return
+                try:
+                    self._progress_publisher(
+                        producer,
+                        StreamProgressUpdateEventBody(
+                            sid=event.sid,
+                            for_page=ProgressUpdatePage.CHAT,
+                            update=token,  # token here is the progress message
+                        ),
+                    )
+                except Exception as cb_exc:
+                    logger.warning(
+                        "progress_publish_failed request_id=%s error=%s",
+                        event.request_id,
+                        cb_exc,
+                    )
+                return
+
             if producer is None:
                 return
             try:
@@ -92,11 +125,13 @@ class TeachingRequestEventHandler:
                     "topic": event.user_prompt,
                     "output_mode": event.user_level,
                     "context": event.rag_compiled,
+                    "chat_history": event.chat_history,
                 },
                 token_callback,
             )
             completion_event = self.build_completion_event(event, raw_markdown)
             logger.info("processing_completed request_id=%s", event.request_id)
+
         except Exception as exc:
             logger.error("processing_failed request_id=%s error=%s", event.request_id, exc)
             result = None
@@ -114,7 +149,7 @@ class TeachingRequestEventHandler:
                 self._stream_publisher(producer, StreamTokensEventBody(
                     from_service="teaching-agent",
                     sid=event.sid,
-                    data={"done": True, "tokens_used": tokens_used},
+                    data={"done": True, "tokens_used": tokens_used, "model": os.getenv("TEACHING_MODEL")},
                 ))
                 producer.flush()
             except Exception as exc:

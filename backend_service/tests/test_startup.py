@@ -256,12 +256,15 @@ def test_lifespan_includes_topic_bootstrap() -> None:
     assert tracking_admin.bootstrap_topics_topics == [
         "rag",
         "init-planner",
+        "teaching",
         "rag-complete",
-        "teaching-request",
         "quiz-request",
         "clarify-user-level",
         "workflow-complete",
         "teaching-complete",
+        "teaching-complete",
+        "stream-tokens",
+        "stream-progress-update",
         "quiz-complete",
     ]
 

@@ -1,0 +1,5 @@
+{
+  "topic": "Hash tables",
+  "output_mode": "intermediate",
+  "context": "From the course notes on hash tables:\n  - Hash index formula: index = hash(key) % table_size\n  - Two collision resolution strategies are covered: open addressing (specifically linear probing) and separate chaining.\n  - The course emphasises that the load factor \u03b1 (number of entries / table size) should be kept below 0.7 to maintain O(1) average performance.\n  - Instructor note: Python's built-in dict uses open addressing with a load factor threshold of approximately 2/3, after which the table is resized.\n  - Worst-case lookup degrades to O(n) when many collisions cluster (primary clustering in linear probing)."
+}

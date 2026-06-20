@@ -15,10 +15,17 @@
   - `topic`: str — the subject to be explained (e.g., "Binary Trees", "Recursion")
   - `output_mode`: OutputMode — determines explanation register and structure
   - `context`: str — optional prior session summary from Memory Agent; may be empty string
+  - `chat_history`: list[dict] — (Phase 5) prior conversation turns, oldest→newest,
+    EXCLUDING the current query (which is `topic`). Each entry
+    `{"role": "user"|"assistant", "content": str}`. Defaults to `[]`; prepended to the
+    LLM message list so the current structured prompt stays the final user message.
 - Validation rules:
   - `topic` must be a non-empty string after stripping whitespace.
   - `output_mode` must be one of the three defined enum values.
   - `context` is always accepted; empty string is valid.
+  - `chat_history` defaults to `[]`; each entry must have `role` ∈ {`user`, `assistant`}
+    and a non-empty string `content` (light validator). Empty `chat_history` reproduces
+    single-turn behavior exactly.
 
 ### TeachingContent
 - Description: The structured explanation payload returned in the response.
@@ -38,11 +45,15 @@
 - Description: Audit record for the Teaching Agent response.
 - Fields:
   - `topic`: str — mirrored from input
-  - `tokens_used`: int — actual token consumption reported by the LLM response
+  - `tokens_used`: int — total completion tokens across every LLM call in the request
+    lifecycle (generation + each critique + each revision), per SC-013
   - `model`: str — model identifier used for the generation (e.g., `claude-sonnet-4-6`)
+  - `reflection_iterations`: int — completed reflection cycles; 0 when disabled or none
+    completed; default 0 (Phase 3)
 - Validation rules:
   - `tokens_used` must be >= 0.
   - `model` must be non-empty.
+  - `reflection_iterations` must be >= 0.
 
 ### TeachingAgentOutput
 - Description: Output payload returned by the Teaching Agent to the Planner Agent.
@@ -66,9 +77,14 @@
   - `user_prompt`: str — the question or topic to explain; maps to `TeachingAgentInput.topic`
   - `user_level`: str — learner level; maps to `TeachingAgentInput.output_mode`
   - `rag_compiled`: str — RAG output to use as context; maps to `TeachingAgentInput.context`; defaults to `""`
+  - `chat_history`: list[dict] — (Phase 5) prior conversation turns, oldest→newest,
+    EXCLUDING the current query (`user_prompt`); maps to `TeachingAgentInput.chat_history`;
+    defaults to `[]`. The Planner owns truncation/summarization to fit the model window.
 - Validation rules:
   - `request_id` must be non-empty.
   - `user_level` must be non-empty and one of `"beginner"`, `"intermediate"`, `"advanced"`.
+  - `chat_history` defaults to `[]`; each entry must have `role` ∈ {`user`, `assistant`}
+    and a non-empty string `content`.
 
 ### TeachingCompletionEvent (Phase 2 — Kafka outbound; updated Phase 4)
 
@@ -106,13 +122,34 @@
 - `TeachingTopics.TEACHING_COMPLETE` and `PlannerTopics.TEACHING` are both included in
   `get_all_topic_names()` so the backend service bootstraps them at startup.
 
+### ReflectionIssue (Phase 3 — internal)
+
+- Description: One weakness flagged by the critique step. Internal to the reflection
+  loop; never serialized into `TeachingAgentOutput` or `TeachingCompletionEvent`.
+- Fields:
+  - `field`: str — one of `explanation`, `diagram`, `notes`, `example`
+  - `issue`: str — the specific weakness
+  - `severity`: str — one of `low`, `medium`, `high`
+
+### ReflectionCritique (Phase 3 — internal)
+
+- Description: Structured self-critique produced between generation and revision.
+  Internal only; defined in `project/schemas.py`.
+- Fields:
+  - `quality_score`: int — holistic score, 1–10
+  - `issues`: list[ReflectionIssue] — may be empty
+  - `revision_instructions`: str — instructions passed to the revision call
+- Validation rules:
+  - `quality_score` within [1, 10].
+  - `revision_instructions` non-empty when `issues` is non-empty.
+
 ## Relationships
 
 - One `TeachingAgentInput` maps to one `TeachingAgentOutput`.
 - One `TeachingAgentOutput` contains exactly one `TeachingContent` (when `status: "ok"`) and exactly one `TeachingMetadata`.
 - `OutputMode` determines per-mode content rules applied to `TeachingContent`.
 - One `TeachingRequestEvent` produces exactly one `TeachingCompletionEvent`. `request_id`, `sid`, and `user_level` are invariant across both — the Teaching Agent never modifies them.
-- `TeachingRequestEvent` carries `user_prompt` (→`topic`), `user_level` (→`output_mode`), `rag_compiled` (→`context`) plus Kafka tracking fields `request_id` and `sid`. The handler maps these before calling `TeachingAgent.run()`.
+- `TeachingRequestEvent` carries `user_prompt` (→`topic`), `user_level` (→`output_mode`), `rag_compiled` (→`context`), `chat_history` (→`chat_history`, Phase 5) plus Kafka tracking fields `request_id` and `sid`. The handler maps these before calling `TeachingAgent.run()`.
 - `TeachingCompletionEvent` carries `request_id`, `sid`, `user_level` (correlation/routing) and `content` (Phase 4: complete raw markdown string; empty string on error).
 - One `TeachingRequestEvent` also produces N `StreamTokensEventBody` events (one per LLM token chunk) plus one stream-complete sentinel, all published to `"stream-tokens"` before the `TeachingCompletionEvent` is published. `TeachingContent` is assembled internally in `agent.py` for Mermaid validation only — it is not serialized to any Kafka event in Phase 4.
 
