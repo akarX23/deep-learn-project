@@ -1,0 +1,5 @@
+{
+  "topic": "Stack data structure",
+  "output_mode": "beginner",
+  "context": "In our course, a stack is a LIFO (Last In, First Out) data structure. Key operations taught in Lecture 4:\n  - push: add an element to the top\n  - pop: remove the top element\n  - peek: view the top element without removing it\nThe course identifies three real-world applications: (1) browser history navigation (back button), (2) undo functionality in text editors, and (3) function call management via the call stack in programming languages. 'Stack overflow' occurs when the stack exceeds its maximum capacity \u2014 this is the origin of the website name stackoverflow.com."
+}
