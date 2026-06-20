@@ -19,9 +19,13 @@ Published by the Planner Agent to topic `"teaching"`.
 {
   "request_id": "550e8400-e29b-41d4-a716-446655440000",
   "sid": "abc123xyz",
-  "user_prompt": "Binary Search Tree",
+  "user_prompt": "How is it different from an AVL tree?",
   "user_level": "intermediate",
-  "rag_compiled": "User previously studied arrays and linked lists in this session."
+  "rag_compiled": "User previously studied arrays and linked lists in this session.",
+  "chat_history": [
+    { "role": "user", "content": "What is a Binary Search Tree?" },
+    { "role": "assistant", "content": "A BST is a node-based structure where left < node < right." }
+  ]
 }
 ```
 
@@ -31,9 +35,10 @@ Published by the Planner Agent to topic `"teaching"`.
 |---|---|---|---|
 | request_id | string | Yes | Non-empty; unique per request; assigned by Planner |
 | sid | string | Yes | Non-empty; Socket.IO session ID for frontend WebSocket routing |
-| user_prompt | string | Yes | Non-empty; the question or topic to explain |
+| user_prompt | string | Yes | Non-empty; the **current** question or topic to explain |
 | user_level | string | Yes | One of: `"beginner"`, `"intermediate"`, `"advanced"` |
 | rag_compiled | string | No | RAG output to use as context; defaults to `""` |
+| chat_history | array | No | (Phase 5) prior turns, oldest→newest, EXCLUDING the current query; each `{"role": "user"\|"assistant", "content": <non-empty str>}`; defaults to `[]`. Planner owns truncation/summarization. |
 
 ---
 
@@ -80,9 +85,13 @@ Published by the Teaching Agent to topic `"teaching-complete"` after every reque
 
 ```json
 {
-  "topic": "Binary Search Tree",
+  "topic": "How is it different from an AVL tree?",
   "output_mode": "intermediate",
-  "context": "User previously studied arrays and linked lists in this session."
+  "context": "User previously studied arrays and linked lists in this session.",
+  "chat_history": [
+    { "role": "user", "content": "What is a Binary Search Tree?" },
+    { "role": "assistant", "content": "A BST is a node-based structure where left < node < right." }
+  ]
 }
 ```
 
@@ -93,6 +102,7 @@ Published by the Teaching Agent to topic `"teaching-complete"` after every reque
 | topic        | string | Yes      | Non-empty after whitespace strip                 |
 | output_mode  | string | Yes      | One of: `"beginner"`, `"intermediate"`, `"advanced"` |
 | context      | string | Yes      | May be empty string; never null                  |
+| chat_history | array  | No       | (Phase 5) prior turns, oldest→newest, EXCLUDING `topic`; each `{"role": "user"\|"assistant", "content": <non-empty str>}`; defaults to `[]`. Prepended to the LLM messages; empty ⇒ single-turn behavior. |
 
 ---
 
@@ -250,5 +260,6 @@ The `TeachingCompletionEvent` on `"teaching-complete"` is published after the se
 - `request_id` is assigned by the Planner before publishing; it is opaque to the Teaching Agent and passed through unchanged.
 - `sid` is the Socket.IO session ID assigned by the backend when the user's browser connects. The Teaching Agent never reads or validates its contents — it is passed through unchanged to `TeachingCompletionEvent` so the backend can route the result to the correct WebSocket session.
 - The `rag_compiled` field is assembled by the Planner Agent from RAG Agent output; the Teaching Agent treats it as opaque text passed as `context` to the core pipeline.
+- (Phase 5) `chat_history` carries prior conversation turns (oldest→newest, excluding the current `user_prompt`). The Planner owns truncation/summarization so the payload stays within the model context window. The Teaching Agent prepends it to the LLM message list unchanged and defaults it to `[]`; an empty/absent `chat_history` reproduces single-turn behavior, and every turn still returns the 4-section structured output.
 - The Planner Agent validates `output_mode` before publishing; the Teaching Agent re-validates and returns `status: "error"` (and still publishes a `TeachingCompletionEvent`) if the value is invalid.
 - The `"teaching"` and `"teaching-complete"` topics exist before the worker starts — they are bootstrapped by the backend service at startup. `"teaching"` is registered under `PlannerTopics.TEACHING` in `project/topics.py`; `"teaching-complete"` is registered under `TeachingTopics.TEACHING_COMPLETE`.

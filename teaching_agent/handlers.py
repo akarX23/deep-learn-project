@@ -92,6 +92,7 @@ class TeachingRequestEventHandler:
                     "topic": event.user_prompt,
                     "output_mode": event.user_level,
                     "context": event.rag_compiled,
+                    "chat_history": event.chat_history,
                 },
                 token_callback,
             )

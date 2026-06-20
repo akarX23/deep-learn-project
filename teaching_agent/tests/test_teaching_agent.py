@@ -14,7 +14,7 @@ from pydantic import ValidationError
 import teaching_agent.agent as agent_module
 from project.schemas import OutputMode, TeachingAgentInput, TeachingAgentOutput
 from teaching_agent.agent import TeachingAgent
-from teaching_agent.helpers import parse_markdown_response
+from teaching_agent.helpers import build_messages, parse_markdown_response
 from teaching_agent.validators import validate_mermaid
 
 def _noop(field, token):  # no-op token callback for all integration tests
@@ -409,3 +409,104 @@ class TestReflection:
         result, _ = TeachingAgent().run(
             {"topic": "loops", "output_mode": "beginner", "context": ""}, _noop)
         assert result.metadata.reflection_iterations == 0
+
+
+# ---------------------------------------------------------------------------
+# Phase 5: Multi-turn conversation (chat_history). build_messages + schema are
+# pure/offline; run() tests patch call_llm_stream with a capturing fake and pin
+# reflection OFF (N=0) so only the generation stream is exercised.
+# ---------------------------------------------------------------------------
+
+
+class _CapturingStreamer:
+    """Fake call_llm_stream that records the messages it was called with."""
+
+    def __init__(self, markdown=_GEN_MD, tokens=100):
+        self.markdown = markdown
+        self.tokens = tokens
+        self.messages = None
+
+    def __call__(self, messages, config):
+        self.messages = messages
+        yield self.markdown, self.tokens
+
+
+class TestMultiTurnChatHistory:
+    # ---- build_messages (pure) ----
+    def test_build_messages_no_history_is_single_user_message(self):
+        expected = [{"role": "user", "content": "p"}]
+        assert build_messages("p") == expected
+        assert build_messages("p", None) == expected
+        assert build_messages("p", []) == expected
+
+    def test_build_messages_prepends_history_in_order(self):
+        history = [
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a1"},
+        ]
+        assert build_messages("current", history) == [
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a1"},
+            {"role": "user", "content": "current"},
+        ]
+
+    # ---- schema (pure) ----
+    def test_input_chat_history_defaults_empty(self):
+        inp = TeachingAgentInput(topic="Loops", output_mode="beginner")
+        assert inp.chat_history == []
+
+    def test_input_chat_history_accepts_valid_turns(self):
+        inp = TeachingAgentInput(
+            topic="Loops", output_mode="beginner",
+            chat_history=[{"role": "user", "content": "hi"}],
+        )
+        assert inp.chat_history[0]["role"] == "user"
+
+    def test_input_chat_history_rejects_bad_role(self):
+        with pytest.raises(ValidationError):
+            TeachingAgentInput(
+                topic="Loops", output_mode="beginner",
+                chat_history=[{"role": "system", "content": "hi"}],
+            )
+
+    def test_input_chat_history_rejects_empty_content(self):
+        with pytest.raises(ValidationError):
+            TeachingAgentInput(
+                topic="Loops", output_mode="beginner",
+                chat_history=[{"role": "user", "content": "   "}],
+            )
+
+    # ---- run() threads history into the stream call ----
+    def test_run_threads_history_into_stream_messages(self, monkeypatch):
+        monkeypatch.setenv("TEACHING_MODEL", "test/model")
+        monkeypatch.setenv("TEACHING_MAX_REFLECTION_ITERATIONS", "0")
+        streamer = _CapturingStreamer()
+        monkeypatch.setattr(agent_module, "call_llm_stream", streamer)
+        history = [
+            {"role": "user", "content": "earlier question"},
+            {"role": "assistant", "content": "earlier answer"},
+        ]
+        result, _ = TeachingAgent().run(
+            {"topic": "follow up", "output_mode": "beginner",
+             "context": "", "chat_history": history},
+            _noop,
+        )
+        assert result.status == "ok"
+        assert result.content.explanation == "gen exp"
+        # prior turns prepended in order; current structured prompt is last
+        assert streamer.messages[0] == {"role": "user", "content": "earlier question"}
+        assert streamer.messages[1] == {"role": "assistant", "content": "earlier answer"}
+        assert streamer.messages[-1]["role"] == "user"
+        assert "follow up" in streamer.messages[-1]["content"]
+
+    def test_run_empty_history_is_single_user_message(self, monkeypatch):
+        monkeypatch.setenv("TEACHING_MODEL", "test/model")
+        monkeypatch.setenv("TEACHING_MAX_REFLECTION_ITERATIONS", "0")
+        streamer = _CapturingStreamer()
+        monkeypatch.setattr(agent_module, "call_llm_stream", streamer)
+        result, _ = TeachingAgent().run(
+            {"topic": "solo", "output_mode": "beginner", "context": ""}, _noop)
+        assert result.status == "ok"
+        assert len(streamer.messages) == 1
+        assert streamer.messages[0]["role"] == "user"
+        assert "solo" in streamer.messages[0]["content"]

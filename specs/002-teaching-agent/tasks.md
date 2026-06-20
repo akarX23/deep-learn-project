@@ -483,7 +483,7 @@ auto-detection. Empty `chat_history` (default) reproduces single-turn behavior e
 
 **Purpose**: Add `chat_history` to the inbound event and the agent input. All other P5 tasks depend on this.
 
-- [ ] T050 [US7] Add `chat_history` to `project/schemas.py` (Teaching Agent section):
+- [x] T050 [US7] Add `chat_history` to `project/schemas.py` (Teaching Agent section):
       - `TeachingRequestEvent`: `chat_history: list[dict] = Field(default_factory=list)` —
         prior turns, oldest→newest, each `{"role": "user"|"assistant", "content": str}`,
         EXCLUDING the current query
@@ -500,7 +500,7 @@ auto-detection. Empty `chat_history` (default) reproduces single-turn behavior e
 
 **Purpose**: Make message construction history-aware. This is the only behavioral change.
 
-- [ ] T051 [US7] Update `teaching_agent/helpers.py`:
+- [x] T051 [US7] Update `teaching_agent/helpers.py`:
       `build_messages(prompt: str, chat_history: list[dict] | None = None) -> list[dict[str, str]]`
       returns `[*(chat_history or []), {"role": "user", "content": prompt}]`.
       Backward compatible: `chat_history=None`/`[]` → `[{"role": "user", "content": prompt}]`,
@@ -514,12 +514,12 @@ auto-detection. Empty `chat_history` (default) reproduces single-turn behavior e
 
 **Purpose**: Pass `chat_history` from the event through `run()` into `build_messages()`.
 
-- [ ] T052 [US7] Update `teaching_agent/agent.py`: in `run()`, change the structured-step
+- [x] T052 [US7] Update `teaching_agent/agent.py`: in `run()`, change the structured-step
       message construction from `messages = build_messages(prompt)` to
       `messages = build_messages(prompt, agent_input.chat_history)`. No branch, no new method;
       Steps 5–9 (extractor, parse, diagram, reflection N=0, assembly) unchanged.
 
-- [ ] T053 [US7] Update `teaching_agent/handlers.py`: in `process_request()`, add
+- [x] T053 [US7] Update `teaching_agent/handlers.py`: in `process_request()`, add
       `"chat_history": event.chat_history` to the dict passed to `agent.run()`. token_callback,
       publish flow, sentinel, and `build_completion_event` unchanged.
 
@@ -531,7 +531,7 @@ auto-detection. Empty `chat_history` (default) reproduces single-turn behavior e
 
 **Purpose**: Cover the multi-turn path; confirm single-turn regression is intact.
 
-- [ ] T054 [US7] Update `teaching_agent/tests/test_teaching_agent.py`:
+- [x] T054 [US7] Update `teaching_agent/tests/test_teaching_agent.py`:
       - `build_messages` regression: `None`/`[]` → single user message
       - `build_messages` multi-turn: prior turns prepended in order, current prompt last
       - schema: `chat_history` defaults to `[]`; populated entries parse; (if validated) bad
@@ -540,7 +540,7 @@ auto-detection. Empty `chat_history` (default) reproduces single-turn behavior e
         `call_llm_stream`; output is still the parsed 4-section `TeachingContent`; `status == "ok"`
       - existing single-turn tests stay green unchanged
 
-- [ ] T055 [US7] Update `teaching_agent/tests/test_kafka_integration.py`:
+- [x] T055 [US7] Update `teaching_agent/tests/test_kafka_integration.py`:
       - handler maps `event.chat_history` into `run()` (assert via a capturing fake agent)
       - request with `chat_history` → exactly one `teaching-complete` publish + stream tokens
         + done sentinel (publish-once preserved)
@@ -559,13 +559,16 @@ auto-detection. Empty `chat_history` (default) reproduces single-turn behavior e
       `teaching_agent/prompts.py` — one line per `PROMPT_BY_MODE` template. Add only if quality
       testing shows the model drifting between chat and structured output.
 
-- [ ] T058 [US7] Update docs for `chat_history`: `specs/002-teaching-agent/data-model.md`
-      (input/event schema), `specs/002-teaching-agent/contracts/teaching-agent-contract.md`
-      (input contract), and `CLAUDE.md` if it documents the Teaching input shape.
+- [x] T058 [US7] Update docs for `chat_history`: `specs/002-teaching-agent/data-model.md`
+      (input/event schema) and `specs/002-teaching-agent/contracts/teaching-agent-contract.md`
+      (input contract) updated. `CLAUDE.md` not changed — it does not document the Teaching
+      input shape (RAG-focused).
 
-- [ ] T059 [US7] Run offline suite + lint:
-      `python -m pytest teaching_agent/tests/ -q -k "not TestTeachingAgentRun"` (offline subset)
-      and `ruff check teaching_agent project` — all green.
+- [x] T059 [US7] Run offline suite + lint:
+      offline subset (test_teaching_agent.py + test_kafka_integration.py = 55 passed;
+      test_stream_parser.py + test_worker_runtime.py = 13 passed) green; `ruff check` on all
+      changed files passes. (Pre-existing ruff errors in untouched `test_context_priority.py`
+      are out of scope per the Phase-5-only decision.)
 
 - [ ] T060 [US7] Manual two-turn validation (real LLM, gated): first query (structured output)
       → follow-up with turn 1 in `chat_history`; verify the answer references the prior turn

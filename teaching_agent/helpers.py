@@ -19,9 +19,17 @@ _SECTION_HEADER_RE = re.compile(r"^\*\*(\w+)\*\*\s*$", re.MULTILINE | re.IGNOREC
 _JSON_FENCE_OPEN_RE = re.compile(r"^```(?:json)?\s*\n", re.MULTILINE)
 
 
-def build_messages(prompt: str) -> list[dict[str, str]]:
-    """Wrap a rendered prompt string into the LiteLLM messages format."""
-    return [{"role": "user", "content": prompt}]
+def build_messages(
+    prompt: str, chat_history: list[dict] | None = None
+) -> list[dict[str, str]]:
+    """Wrap a rendered prompt into the LiteLLM messages format.
+
+    Phase 5: when ``chat_history`` (prior turns, oldest->newest) is provided it is
+    prepended, so the current structured prompt is the final user message.
+    ``None``/``[]`` returns a single user message — identical to the single-turn
+    pipeline, keeping existing callers byte-for-byte unchanged.
+    """
+    return [*(chat_history or []), {"role": "user", "content": prompt}]
 
 
 def parse_markdown_response(raw: str) -> dict[str, Any]:

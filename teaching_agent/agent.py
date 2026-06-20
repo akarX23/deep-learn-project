@@ -90,9 +90,11 @@ class TeachingAgent:
 
         model = config.model
 
-        # Step 3: Render prompt and build messages.
+        # Step 3: Render prompt and build messages. Phase 5: prior conversation
+        # turns (if any) are prepended; an empty chat_history reproduces the
+        # single-turn message list exactly.
         prompt = PROMPT_BY_MODE[output_mode].format(topic=topic, context=context)
-        messages = build_messages(prompt)
+        messages = build_messages(prompt, agent_input.chat_history)
 
         # Step 4: Stream LLM response through field extractor.
         extractor = StreamingFieldExtractor(token_callback)

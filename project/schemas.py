@@ -285,6 +285,24 @@ class TeachingRequestEvent(BaseModel):
     user_level: str
     rag_compiled: str = ""
     sid: str
+    # Phase 5: prior conversation turns (oldest->newest), EXCLUDING the current
+    # query (carried in `user_prompt`). Each entry is
+    # {"role": "user"|"assistant", "content": str}. Default [] reproduces
+    # single-turn behavior; the Planner owns truncation/summarization.
+    chat_history: list[dict] = Field(default_factory=list)
+
+    @field_validator("chat_history")
+    @classmethod
+    def validate_chat_history(cls, value: list[dict]) -> list[dict]:
+        for turn in value:
+            if not isinstance(turn, dict):
+                raise ValueError("each chat_history entry must be a dict")
+            if turn.get("role") not in ("user", "assistant"):
+                raise ValueError("chat_history entry 'role' must be 'user' or 'assistant'")
+            content = turn.get("content")
+            if not isinstance(content, str) or not content.strip():
+                raise ValueError("chat_history entry 'content' must be a non-empty string")
+        return value
 
 
 class QuizRequestEvent(BaseModel):
@@ -366,12 +384,29 @@ class TeachingAgentInput(BaseModel):
     topic: str
     output_mode: OutputMode
     context: str = ""
+    # Phase 5: prior conversation turns (oldest->newest), EXCLUDING the current
+    # query (which is `topic`). Each entry {"role": "user"|"assistant", "content": str}.
+    # Default [] -> single-turn behavior unchanged; prepended to the LLM messages.
+    chat_history: list[dict] = Field(default_factory=list)
 
     @field_validator("topic")
     @classmethod
     def validate_topic(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("topic cannot be empty")
+        return value
+
+    @field_validator("chat_history")
+    @classmethod
+    def validate_chat_history(cls, value: list[dict]) -> list[dict]:
+        for turn in value:
+            if not isinstance(turn, dict):
+                raise ValueError("each chat_history entry must be a dict")
+            if turn.get("role") not in ("user", "assistant"):
+                raise ValueError("chat_history entry 'role' must be 'user' or 'assistant'")
+            content = turn.get("content")
+            if not isinstance(content, str) or not content.strip():
+                raise ValueError("chat_history entry 'content' must be a non-empty string")
         return value
 
 
