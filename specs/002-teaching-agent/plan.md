@@ -45,6 +45,19 @@ behavior exactly, so the change is additive and backward-compatible. The Planner
 truncation/summarization; an optional defensive cap (`TEACHING_MAX_HISTORY_TURNS`) is
 available in the agent.
 
+Phase 6 adds a guardrail classification step executed as Step 0 of `TeachingAgent.run()` —
+before any config loading, prompt rendering, or main LLM call. A small, fast LLM call
+classifies the user prompt into one of four categories: `greeting`, `off_topic`, `unclear`,
+or `valid_question`. Only `valid_question` proceeds to Step 1 of the existing pipeline;
+the other three categories receive canned friendly responses delivered via a single
+`token_callback("explanation", canned_text)` call, and `run()` returns early with
+`status="ok"`, `content=None`, `raw_markdown=canned_text`. No schema changes are needed
+because `TeachingAgentOutput.content` is already `Optional` and the handler uses
+`raw_markdown` (not `content`) to build `TeachingCompletionEvent.content`. The guardrail
+is skipped entirely when `chat_history` is non-empty (follow-up queries always run the
+full pipeline). On any classification failure the guardrail fails open — the full pipeline
+runs as if the input were `valid_question`.
+
 ## Technical Context
 
 **Language/Version**: Python 3.11
@@ -140,18 +153,34 @@ teaching_agent/
 │                        # Phase 4: uses call_llm_stream(); accepts token_callback; calls
 │                        #           parse_markdown_response() on complete buffer
 │                        # Phase 5: pass agent_input.chat_history into build_messages()
+│                        # Phase 6: Step 0 guardrail check; skip if chat_history non-empty;
+│                        #           call GuardrailClassifier; early return with canned text
+│                        #           for non-valid_question; fall through on failure (fail-open)
+├── guardrail.py         # Phase 6 (new): GuardrailClassifier.classify(topic) → str;
+│                        #   calls LLM with GUARDRAIL_PROMPT; parses {"category": "..."}; 
+│                        #   returns "valid_question" on any failure (fail-open)
+│                        #   _CANNED_RESPONSES dict; get_canned_response(category) → str
 ├── config.py            # LLMConfig dataclass, get_llm_config(), per-mode max_tokens map
 │                        # Phase 5 (optional): get_max_history_turns() defensive cap
+│                        # Phase 6: get_guardrail_config() reading TEACHING_GUARDRAIL_MODEL
+│                        #   (fallback: TEACHING_MODEL); TEACHING_GUARDRAIL_ENABLED (default true)
 ├── llm_client.py        # Phase 1: call_llm(messages, config) → (str, int)
 │                        # Phase 4: add call_llm_stream(messages, config) → Iterator[(str, int)];
 │                        #           remove response_format=json_object from call_llm()
 ├── prompts.py           # Phase 1: BEGINNER_PROMPT, INTERMEDIATE_PROMPT, ADVANCED_PROMPT constants
 │                        # Phase 4: updated to markdown bold-header output format
 │                        # Phase 5 (optional): one-line conversation-aware nudge per template
+│                        # Phase 6: GUARDRAIL_PROMPT — classification prompt returning
+│                        #           {"category": "greeting|off_topic|unclear|valid_question", "reason": "..."}
+│                        # Bugfix (FR-046): all 3 prompts instruct LLM to quote node labels
+│                        # Bugfix (FR-051): all 3 prompts instruct LLM to use small example
+│                        #                  inputs (n ≤ 10) to prevent token exhaustion
 ├── validators.py        # validate_mermaid(diagram: str) → bool; regex-based structural check
 ├── helpers.py           # Phase 1: parse_llm_response(raw) → dict; build_error_output()
 │                        # Phase 4: parse_llm_response() replaced by parse_markdown_response()
 │                        # Phase 5: build_messages(prompt, chat_history=None) prepends history
+│                        # Bugfix: sanitize_mermaid_labels(diagram) — auto-quotes unquoted node
+│                        #         labels containing special chars before validate_mermaid()
 ├── stream_parser.py     # Phase 4 (new): StreamingFieldExtractor — state machine for field-keyed
 │                        #                token extraction from markdown delta stream
 ├── kafka.py             # Phase 2: Protocol types, factory functions, topic helpers
@@ -395,6 +424,52 @@ validation rules live in `data-model.md` and `contracts/teaching-agent-contract.
 | Kafka publish | TeachingCompletionEvent published exactly once, after all reflection iterations |
 | Mermaid rules | Applied identically to revised output as to initial output (FR-005, FR-006, FR-007) |
 
+### Guardrail Architecture (FR-047 – FR-050, Phase 6)
+
+```
+TeachingAgent.run()
+  Step 0: Guardrail check
+          ├── chat_history non-empty?  → skip (always run full pipeline)
+          ├── TEACHING_GUARDRAIL_ENABLED=false? → skip
+          ├── GuardrailClassifier.classify(topic)
+          │     ├── "greeting"       → token_callback("explanation", CANNED_GREETING) → return early
+          │     ├── "off_topic"      → token_callback("explanation", CANNED_OFF_TOPIC) → return early
+          │     ├── "unclear"        → token_callback("explanation", CANNED_UNCLEAR) → return early
+          │     └── "valid_question" → fall through to Step 1
+          └── classify() failure → fail-open → fall through to Step 1
+  Step 1 → Step 8: existing pipeline (unchanged)
+```
+
+**Early return shape (non-valid_question)**:
+```python
+token_callback("explanation", canned_text)   # single call, not streamed
+return TeachingAgentOutput(
+    status="ok",
+    output_mode=OutputMode(output_mode),
+    content=None,               # already Optional in schema — no change needed
+    metadata=TeachingMetadata(
+        topic=topic,
+        tokens_used=guardrail_tokens,
+        model=guardrail_config.model,
+    ),
+), canned_text                  # raw_markdown = canned_text → TeachingCompletionEvent.content
+```
+
+**Canned responses**:
+
+| Category | Canned text |
+|---|---|
+| `greeting` | `"Hi there! I'm your AI tutor. What topic would you like to learn about? I can explain concepts at beginner, intermediate, or advanced depth."` |
+| `off_topic` | `"I'm a specialized learning assistant for educational topics. I'm not able to help with that, but I'd love to explain any concept you're curious about!"` |
+| `unclear` | `"I'd be happy to help! Could you clarify what you'd like to learn? Try asking about a specific concept, algorithm, data structure, or topic."` |
+
+**Guardrail LLM prompt design** (`GUARDRAIL_PROMPT`):
+- Tight, deterministic prompt — no markdown, no section headers, no fences in the response.
+- Returns `{"category": "...", "reason": "..."}` as a JSON object (uses `call_llm` with `response_format={"type": "json_object"}`).
+- Uses `TEACHING_GUARDRAIL_MODEL` (falls back to `TEACHING_MODEL`); small/fast model recommended (e.g. `groq/llama-3.1-8b-instant`) since the call is purely classificatory.
+- Token ceiling: low (e.g. 128 tokens) — classification is never more than a few words.
+- On exception or JSON parse failure: returns `"valid_question"` (fail-open).
+
 ### Edge-Case Handling (spec "Edge Cases", FR-010)
 
 | Edge case                                   | Handling                                                        |
@@ -406,6 +481,27 @@ validation rules live in `data-model.md` and `contracts/teaching-agent-contract.
 | Ambiguous / out-of-scope topic              | Prompts instruct a structured best-effort response; never an error solely for ambiguity |
 | LLM call fails or returns empty             | `status: "error"`, `tokens_used: 0`, no unhandled exception (FR-010) |
 | Invalid generated Mermaid                   | Diagram set to null (intermediate/advanced) or retried/fallback (beginner); never returned invalid |
+| Mermaid node labels contain special chars (`:`, `()`, `%`, etc.) | `sanitize_mermaid_labels()` in `helpers.py` auto-wraps unquoted labels in double quotes before `validate_mermaid()` runs; already-quoted labels untouched; applied on all diagram paths (initial, retry, revision) |
+| User types a greeting instead of a learning question | Guardrail classifies as `greeting`; single canned welcome token emitted via `token_callback`; main pipeline not invoked (Phase 6) |
+| User types off-topic or unclear message | Guardrail classifies and returns appropriate canned redirect or clarification; no main pipeline invocation (Phase 6) |
+| Guardrail LLM call or JSON parse fails | Fail-open: system falls through to the full pipeline as if category were `valid_question`; learner is never silently dropped (Phase 6) |
+| Follow-up query in active conversation (non-empty `chat_history`) | Guardrail step skipped entirely; full pipeline always runs (Phase 6) |
+| LLM generates example with large input (e.g. `fibonacci(50)`) producing exhaustive computation trace | Prompt rule in all 3 mode templates (FR-051): use small input values (e.g. n ≤ 10 for recursive algorithms); never show full computation traces; demonstrate the concept, not the arithmetic |
+
+### Guardrail Rules (FR-047 – FR-050, Phase 6)
+
+| Rule | Detail |
+|---|---|
+| Trigger condition | `TEACHING_GUARDRAIL_ENABLED` is `true` (default) AND `chat_history` is empty |
+| Skip condition | `chat_history` non-empty → guardrail bypassed; OR `TEACHING_GUARDRAIL_ENABLED=false` |
+| Classification categories | `greeting`, `off_topic`, `unclear`, `valid_question` |
+| LLM prompt | `GUARDRAIL_PROMPT` in `teaching_agent/prompts.py`; returns `{"category": "...", "reason": "..."}` |
+| Model | `TEACHING_GUARDRAIL_MODEL` → fallback `TEACHING_MODEL`; small/fast model recommended |
+| Token ceiling | Low (128 tokens) — classification response is always short |
+| Failure behavior | Any exception or malformed JSON → return `"valid_question"` (fail-open) |
+| Canned response delivery | Single `token_callback("explanation", canned_text)` call; no diagram/notes/example events |
+| Return shape | `status="ok"`, `content=None`, `raw_markdown=canned_text` |
+| Schema impact | Zero — `content=None` already schema-valid; handler uses `raw_markdown`; no new fields |
 
 ### RAG Context Priority (FR-036)
 

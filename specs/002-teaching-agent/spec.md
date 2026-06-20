@@ -14,6 +14,7 @@
 | Phase 3 — Reflection pattern | Colleague-owned; not in scope for this feature branch | In progress (separate branch) |
 | Phase 4 — Token streaming | Markdown LLM output, `StreamingFieldExtractor`, `stream-tokens` Kafka topic, real-time field-keyed token delivery to frontend | **Complete** |
 | Phase 5 — Multi-turn conversation | `chat_history` threaded into the LLM message list; follow-up queries answered with prior turns as context, retaining the 4-section structured output | **Planned** |
+| Phase 6 — Guardrail Classification | Fast LLM classification before the main pipeline: routes `greeting` / `off_topic` / `unclear` inputs to canned responses; `valid_question` proceeds to the full pipeline. Skipped when `chat_history` is non-empty. No schema changes. | **Planned** |
 
 ---
 
@@ -189,6 +190,36 @@ behavior.
 
 ---
 
+---
+
+### User Story 8 - Guardrail Classification (Priority: P1)
+
+A user types something that is not a valid learning question — a greeting ("Hi!"),
+an off-topic statement ("Tell me a joke"), or an unclear message ("do it"). The system
+must respond immediately with a friendly canned message without burning LLM tokens on
+the main teaching pipeline. Users who ask valid questions must be routed to the full
+pipeline unaffected.
+
+**Why this priority**: Without a guardrail, every non-question costs a full LLM call
+(potentially 4096 tokens). More importantly, returning a structured teaching explanation
+for "Hi" confuses users and breaks the tutoring interaction model.
+
+**Independent Test**: Send requests with a greeting, an off-topic phrase, and an unclear
+message to the Teaching Agent. Verify that each returns a canned, friendly response as
+a single explanation stream token, with `status: "ok"`, `content: None`, and the canned
+text in `TeachingCompletionEvent.content`. Also verify that a valid learning question
+is not intercepted.
+
+**Acceptance Scenarios**:
+
+1. **Given** a `user_prompt` that is a greeting (e.g. "Hi", "Hello", "Hey there"), **When** the agent processes it, **Then** a single `field: "explanation"` stream token containing a friendly greeting response is published; no diagram, notes, or example tokens are published.
+2. **Given** a `user_prompt` that is off-topic (e.g. "Tell me a joke", "What's the weather"), **When** the agent processes it, **Then** a polite redirect message is streamed as a single explanation token; the main teaching pipeline is not invoked.
+3. **Given** a `user_prompt` that is unclear (e.g. "do it", "the thing"), **When** the agent processes it, **Then** a clarification request is streamed; the main pipeline is not invoked.
+4. **Given** a `user_prompt` that is a valid learning question (e.g. "Explain recursion"), **When** the agent processes it, **Then** the guardrail routes it to the full teaching pipeline and the response is the normal 4-section structured output.
+5. **Given** a request where `chat_history` is non-empty (a follow-up query), **When** the agent processes it, **Then** the guardrail is skipped entirely and the full pipeline runs regardless of the `user_prompt` content.
+
+---
+
 ### Edge Cases
 
 - Topic is a single word vs. a multi-word phrase (e.g., "Trees" vs. "Balanced Binary Search Trees").
@@ -198,11 +229,17 @@ behavior.
 - Topic is ambiguous or out of scope of a standard CS curriculum — agent must still return a structured, best-effort response rather than failing.
 - LLM call fails or returns an empty response — agent must return `status: "error"` with an appropriate message rather than propagating an exception.
 - Generated Mermaid diagram is syntactically invalid — agent must not return the invalid diagram; it must either fix it or set `diagram` to null.
+- LLM generates Mermaid node labels containing special characters (colons `:`, parentheses `()`, percent `%`, division sign `÷`, etc.) that break the Mermaid renderer — labels must be auto-quoted before validation and must never reach the frontend unquoted.
 - Kafka payload is missing required fields or has wrong types — worker must log and skip, never crash.
 - Same `request_id` arrives twice (retry) — worker processes it again; idempotency is the Planner's responsibility.
 - `chat_history` is empty or absent — agent behaves exactly as the single-turn pipeline (default `[]`).
 - `chat_history` contains many turns — the Planner is responsible for truncation/summarization to fit the model window; the agent may apply an optional defensive cap but never crashes on a large history.
 - A `chat_history` entry has an unexpected `role` or empty `content` — handled per the validation decision (light validator rejects, or pass-through to the LLM); never raises an unhandled exception.
+- User types a greeting ("Hi", "Hello") instead of a learning question — guardrail must intercept and return a canned welcome response without invoking the teaching pipeline.
+- User types an off-topic message ("Tell me a joke") or unclear message ("do it") — guardrail must classify and return the appropriate canned redirect or clarification request.
+- Guardrail LLM call itself fails (exception or malformed JSON) — system must fall through to the full teaching pipeline (fail-open) so a learner is never silently dropped.
+- Follow-up queries (non-empty `chat_history`) must always skip the guardrail regardless of the current `user_prompt` content.
+- LLM generates an example with a large input value (e.g. `fibonacci(50)`) that produces an exhaustive step-by-step computation trace, consuming the full token ceiling and truncating the response — all prompts must instruct the model to use small, illustrative input values (e.g. n ≤ 10 for recursive algorithms) and never show full computation traces.
 
 ## Requirements *(mandatory)*
 
@@ -267,6 +304,22 @@ behavior.
 - **FR-043**: Managing `chat_history` size (truncation/summarization to fit the model context window) is the Planner's responsibility. The Teaching Agent MAY apply an optional defensive cap via `TEACHING_MAX_HISTORY_TURNS` (keep the most recent N turns); the cap is optional and disabled by default.
 - **FR-044**: The multi-turn change MUST NOT alter the output contract. `TeachingContent` (including required `notes`), `TeachingAgentOutput`, `TeachingCompletionEvent`, the four streaming fields, diagram handling, `parse_markdown_response`, and the reflection loop (gated at N=0) remain unchanged for every turn.
 
+### Guardrail Classification Requirements (Phase 6)
+
+- **FR-047**: Before the main teaching pipeline, the system MUST classify the user prompt via a fast LLM classification call. The classifier MUST return one of four categories: `greeting`, `off_topic`, `unclear`, or `valid_question`. The classification call uses `GUARDRAIL_PROMPT` (in `teaching_agent/prompts.py`) and returns `{"category": "...", "reason": "..."}`. Only `valid_question` proceeds to Step 1 of the existing pipeline.
+- **FR-048**: For each non-`valid_question` category the system MUST return a canned response. Delivery is via `token_callback("explanation", canned_text)` (a single call, not streamed token-by-token). `run()` then returns early with `status="ok"`, `content=None`, and `raw_markdown=canned_text`. No diagram, notes, or example events are published. `TeachingCompletionEvent.content` carries the canned text (via `raw_markdown`). No schema changes are required.
+- **FR-049**: The guardrail MUST be skipped entirely when `agent_input.chat_history` is non-empty. A follow-up query in an active conversation always runs the full pipeline without classification.
+- **FR-050**: The guardrail model is configured via `TEACHING_GUARDRAIL_MODEL` (falls back to `TEACHING_MODEL`). The guardrail can be disabled via `TEACHING_GUARDRAIL_ENABLED=false` (default `true`). If the guardrail LLM call or JSON parse fails, the system falls through to the full pipeline (fail-open) — a learner is never silently dropped.
+
+### Mermaid Label Sanitization (Bugfix)
+
+- **FR-045**: Before Mermaid diagram validation, the system MUST sanitize node labels that contain special characters (`:`, `(`, `)`, `{`, `}`, `#`, `%`, `÷`, and similar characters that break the Mermaid renderer) by wrapping the label text in double quotes. Pre-quoted labels (already wrapped in `"..."`) MUST be left unchanged. Any literal double-quote characters inside the label text MUST be escaped as `&quot;`. The sanitizer MUST be applied on every diagram path: initial LLM output, retry output (beginner mode), and any revision output.
+- **FR-046**: All three mode prompt templates MUST include an explicit rule instructing the LLM to wrap Mermaid node label text in double quotes, e.g. `A["Label text here"]`, particularly when the label contains colons, parentheses, or other special characters. The sanitizer (FR-045) acts as defense-in-depth for cases where the LLM ignores this instruction.
+
+### Example Verbosity Constraint (Bugfix)
+
+- **FR-051**: All three mode prompt templates MUST include an explicit rule instructing the LLM to keep examples concise by using small, illustrative input values (e.g. n ≤ 10 for recursive algorithms, short strings for string algorithms). The rule MUST explicitly prohibit showing full computation traces for large inputs. This prevents token exhaustion when the model picks a large input (e.g. `fibonacci(50)`) and generates an exhaustive recursive trace that consumes the full 4096-token ceiling, truncating the actual explanation content.
+
 ### Key Entities
 
 - **TeachingAgentInput**: The input contract. Contains `topic` (the subject to be explained), `output_mode` (the target learner level), `context` (RAG-compiled study material from the user's course documents; used as the primary LLM reference source when non-empty), and `chat_history` (Phase 5: optional ordered list of prior `{role, content}` turns, default `[]`; prepended to the LLM message list).
@@ -276,6 +329,7 @@ behavior.
 - **TeachingMetadata**: Audit record. Contains `topic` (mirrored from input), `tokens_used` (actual consumption), and `model` (model identifier).
 - **TeachingRequestEvent**: Inbound Kafka payload published by the Planner to the `"teaching"` topic. Contains `request_id` (unique per request), `user_prompt` (the current question to explain), `user_level` (beginner/intermediate/advanced), `rag_compiled` (RAG output string, default `""`), `sid` (Socket.IO session ID for frontend routing), and `chat_history` (Phase 5: prior conversation turns, oldest→newest, default `[]`, excluding the current query). Defined in `project/schemas.py`.
 - **TeachingCompletionEvent**: Outbound Kafka payload published by the Teaching Agent to `"teaching-complete"`. Contains `request_id`, `sid`, and `user_level` (all passed through verbatim from the request), and `content` (JSON-serialized `TeachingContent` string; empty string on error). Defined in `project/schemas.py`.
+- **GuardrailClassifier**: Classification component in `teaching_agent/guardrail.py`. Accepts the user prompt, calls the LLM with `GUARDRAIL_PROMPT`, and returns one of four category strings: `greeting`, `off_topic`, `unclear`, `valid_question`. On any LLM or parse failure returns `valid_question` (fail-open). Controlled via `TEACHING_GUARDRAIL_ENABLED` and `TEACHING_GUARDRAIL_MODEL`.
 - **TeachingTopics**: Enum in `project/topics.py` with value `TEACHING_COMPLETE = "teaching-complete"` — the outbound topic owned by the Teaching Agent. The inbound topic `"teaching"` is registered under `PlannerTopics.TEACHING`, consistent with the pattern used by `PlannerTopics.RAG`. Both `PlannerTopics.TEACHING` and `TeachingTopics.TEACHING_COMPLETE` are included in `get_all_topic_names()` so the backend service bootstraps both topics at startup.
 - **TeachingWorker**: Owns the Kafka consume → dispatch → publish lifecycle. Lives in `teaching_agent/worker.py`. Follows the same structure as `RAGWorker`: injectable factories for consumer, producer, and handler; background poll thread; `start()` / `stop()` / `get_state()` interface.
 - **TeachingRequestEventHandler**: Business logic bridge between Kafka and the core pipeline. Lives in `teaching_agent/handlers.py`. Parses `TeachingRequestEvent`, maps `user_prompt`→`topic` / `user_level`→`output_mode` / `rag_compiled`→`context`, calls `TeachingAgent.run()`, builds `TeachingCompletionEvent`, and publishes it. Has injectable `agent_factory` and `publisher` dependencies so it can be tested without Kafka.
@@ -300,6 +354,11 @@ behavior.
 - **SC-014**: When `context` is non-empty, the generated explanation MUST demonstrably draw from the provided reference material rather than defaulting to generic general-knowledge content about the topic.
 - **SC-015**: A request with an empty or absent `chat_history` produces a message list and output byte-for-byte identical to the single-turn pipeline in 100% of runs (backward compatibility).
 - **SC-016**: A request with a non-empty `chat_history` includes every prior turn, in order, ahead of the current structured prompt in the messages sent to the LLM, and still returns a schema-valid 4-section `TeachingAgentOutput` in 100% of runs.
+- **SC-017**: 100% of Mermaid diagrams published to `"stream-tokens"` or returned in `TeachingContent.diagram` have all special-character node labels wrapped in double quotes. No unquoted label containing `:`, `(`, `)`, `%`, or similar characters ever reaches the frontend renderer.
+- **SC-018**: 100% of non-learning inputs classified as `greeting`, `off_topic`, or `unclear` receive a canned response with a single explanation stream token and no main pipeline invocation.
+- **SC-019**: 100% of requests with a non-empty `chat_history` bypass the guardrail and run the full teaching pipeline, regardless of the `user_prompt` content.
+- **SC-020**: If the guardrail LLM call fails for any reason, the full teaching pipeline runs without error in 100% of cases (fail-open behavior).
+- **SC-021**: 100% of generated responses include an `example` section that uses small, illustrative input values and does not consume a disproportionate share of the token ceiling through a full computation trace.
 
 ## Assumptions
 

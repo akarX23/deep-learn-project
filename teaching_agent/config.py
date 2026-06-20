@@ -142,6 +142,36 @@ def get_reflection_config(output_mode: str) -> LLMConfig:
     )
 
 
+def get_guardrail_config() -> LLMConfig | None:
+    """Build LLM config for the guardrail classification call.
+
+    Returns None when TEACHING_GUARDRAIL_ENABLED is explicitly set to "false"
+    (any other value, including unset, is treated as enabled).
+    Model: TEACHING_GUARDRAIL_MODEL -> TEACHING_MODEL (required).
+    """
+    enabled = os.getenv("TEACHING_GUARDRAIL_ENABLED", "true").strip().lower()
+    if enabled == "false":
+        return None
+
+    model = os.getenv("TEACHING_GUARDRAIL_MODEL") or os.getenv("TEACHING_MODEL")
+    if not model:
+        raise RuntimeError(
+            "No model configured for the guardrail. "
+            "Set TEACHING_GUARDRAIL_MODEL or TEACHING_MODEL to a LiteLLM-compatible model string."
+        )
+
+    api_key = os.getenv("TEACHING_GUARDRAIL_API_KEY") or os.getenv("TEACHING_API_KEY")
+
+    return LLMConfig(
+        model=model,
+        api_base=os.getenv("TEACHING_API_BASE"),
+        api_key=api_key or None,
+        temperature=0.0,
+        max_tokens=128,
+        effort=None,
+    )
+
+
 def get_max_reflection_iterations(output_mode: str) -> int:
     """Resolve the reflection iteration count (N) for the given output mode.
 

@@ -465,6 +465,41 @@ registered in `project/topics.py`; worker boots and processes messages end-to-en
 
 ---
 
+### P4-G: Mermaid Label Sanitizer (FR-045, FR-046)
+
+**Purpose**: Fix Mermaid diagrams not rendering on the frontend when node labels contain
+special characters (`:`, `()`, `%`, etc.). Two-part fix: a prompt instruction (prevention)
+and a post-processing sanitizer in `helpers.py` called in `_resolve_diagram()` (defense-in-depth).
+
+- [x] T061 [FR-046] Update `teaching_agent/prompts.py`:
+      Add one rule line to the Rules section of all three mode prompts:
+      `"- Always wrap Mermaid node label text in double quotes, e.g. A[\"Label text here\"]. Required when labels contain colons, parentheses, or special characters."`
+      Placement: last bullet in the Rules list for each prompt.
+
+- [x] T062 [FR-045] Add `sanitize_mermaid_labels(diagram: str) → str` to `teaching_agent/helpers.py`:
+      - Regex `r'\[([^\[\]\n]+)\]'` matches square-bracket node labels
+      - Skip labels already wrapped in double quotes (`inner.startswith('"') and inner.endswith('"')`)
+      - If label contains any char from `frozenset(':(){}#%÷×≤≥≠')`, wrap in double quotes
+      - Escape any existing `"` inside the label text as `&quot;` before wrapping
+      - All other labels returned unchanged
+
+- [x] T063 [FR-045] Update `teaching_agent/agent.py` — `_resolve_diagram()`:
+      Call `sanitize_mermaid_labels(diagram_raw)` before `validate_mermaid()` on the initial
+      check path. Similarly sanitize the retry result before its `validate_mermaid()` call.
+      Import `sanitize_mermaid_labels` from `teaching_agent.helpers`.
+
+- [x] T064 [FR-045] Add unit tests to `teaching_agent/tests/test_teaching_agent.py`:
+      - `test_sanitize_labels_wraps_colon_in_label` — `A[Start: Step]` → `A["Start: Step"]`
+      - `test_sanitize_labels_wraps_parens_in_label` — `A[Result (2 items)]` → `A["Result (2 items)"]`
+      - `test_sanitize_labels_skips_already_quoted` — `A["Already: Quoted"]` → unchanged
+      - `test_sanitize_labels_no_special_chars_unchanged` — `A[Plain label]` → unchanged
+      - `test_sanitize_labels_escapes_inner_quotes` — `A[Say "hello"]` → `A["Say &quot;hello&quot;"]`
+
+**Checkpoint**: All 5 new unit tests pass; existing 57 tests pass unchanged; a diagram with
+`A[Start: Flip a Coin]` is correctly transformed to `A["Start: Flip a Coin"]` by the sanitizer.
+
+---
+
 ---
 
 ## Phase 5: Multi-Turn Conversation (US7) — Planned
@@ -573,6 +608,198 @@ auto-detection. Empty `chat_history` (default) reproduces single-turn behavior e
 - [ ] T060 [US7] Manual two-turn validation (real LLM, gated): first query (structured output)
       → follow-up with turn 1 in `chat_history`; verify the answer references the prior turn
       while still returning the 4-section format.
+
+---
+
+---
+
+---
+
+## Phase 6: Guardrail Classification (US8) — Planned
+
+**Goal**: Insert a fast LLM classification step (Step 0) before the main teaching pipeline.
+Non-learning inputs (`greeting`, `off_topic`, `unclear`) receive canned responses without
+invoking the main LLM call. `valid_question` inputs proceed to Step 1 unchanged.
+Follow-up queries (non-empty `chat_history`) skip the guardrail entirely.
+No schema changes required — `content=None` is already valid; canned text travels as `raw_markdown`.
+
+**All Phase 6 tasks require explicit user approval before implementation. One task at a time.**
+
+---
+
+### P6-A: Prompt (Blocking Prerequisite)
+
+**Purpose**: Add the classification prompt to `teaching_agent/prompts.py`. All other Phase 6 tasks depend on it.
+
+- [ ] T065 [US8] Add `GUARDRAIL_PROMPT` to `teaching_agent/prompts.py`:
+      A tight classification prompt that instructs the LLM to return ONLY a JSON object:
+      `{"category": "greeting|off_topic|unclear|valid_question", "reason": "<one line>"}`.
+      No markdown, no fences, no other text. The prompt lists the 4 categories with clear
+      decision criteria (e.g. "greeting: a salutation with no learning intent").
+      Uses `response_format={"type": "json_object"}` in the LLM call.
+
+**Checkpoint**: `python -c "from teaching_agent.prompts import GUARDRAIL_PROMPT; print(GUARDRAIL_PROMPT[:80])"` prints first 80 chars
+
+---
+
+### P6-B: Config (Blocking Prerequisite)
+
+**Purpose**: Add guardrail model config to `teaching_agent/config.py`. Depends on P6-A.
+
+- [ ] T066 [US8] Add `get_guardrail_config()` to `teaching_agent/config.py`:
+      - Reads `TEACHING_GUARDRAIL_ENABLED` (default `"true"`); returns `None` when disabled
+      - Reads `TEACHING_GUARDRAIL_MODEL` → fallback `TEACHING_MODEL` (raises `RuntimeError`
+        if neither set, consistent with `get_llm_config` pattern)
+      - Reads `TEACHING_GUARDRAIL_API_KEY` → fallback `TEACHING_API_KEY` (optional)
+      - Returns `LLMConfig` with `max_tokens=128`, `temperature=0.0` (classification is
+        deterministic; no temperature variation needed)
+
+**Checkpoint**: `python -c "from teaching_agent.config import get_guardrail_config"` imports cleanly
+
+---
+
+### P6-C: Guardrail Module
+
+**Purpose**: New `teaching_agent/guardrail.py` with the classifier and canned responses. Depends on P6-A + P6-B.
+
+- [ ] T067 [US8] Create `teaching_agent/guardrail.py`:
+      - `_VALID_CATEGORIES: frozenset[str] = frozenset({"greeting", "off_topic", "unclear", "valid_question"})`
+      - `_CANNED_RESPONSES: dict[str, str]` with exact canned text per category
+        (greeting / off_topic / unclear; no entry for valid_question)
+      - `get_canned_response(category: str) → str | None`:
+        returns the canned text or `None` if category is `valid_question` or unknown
+      - `GuardrailClassifier` class:
+        - `classify(topic: str, config: LLMConfig) → str`:
+          builds `[{"role": "user", "content": GUARDRAIL_PROMPT.format(topic=topic)}]`;
+          calls `call_llm(messages, config)` (the existing non-streaming call);
+          parses response as JSON; extracts `category`; validates it is in `_VALID_CATEGORIES`;
+          returns category string on success;
+          returns `"valid_question"` on any exception or if `category` key absent/invalid (fail-open)
+
+**Checkpoint**: `python -c "from teaching_agent.guardrail import GuardrailClassifier, get_canned_response; print(get_canned_response('greeting'))"` prints the greeting text
+
+---
+
+### P6-D: Agent Wiring
+
+**Purpose**: Add Step 0 to `TeachingAgent.run()`. Depends on P6-A + P6-B + P6-C.
+
+- [ ] T068 [US8] Update `teaching_agent/agent.py`:
+      - Add `from teaching_agent.guardrail import GuardrailClassifier, get_canned_response`
+      - Add `from teaching_agent.config import get_guardrail_config`
+      - In `run()`, after input validation (Step 1) and BEFORE loading the main LLM config (Step 2),
+        add Step 0 — Guardrail check:
+        ```python
+        # Step 0: Guardrail classification (skip when chat_history non-empty)
+        if not agent_input.chat_history:
+            guardrail_config = get_guardrail_config()
+            if guardrail_config is not None:
+                try:
+                    category = GuardrailClassifier().classify(topic, guardrail_config)
+                except Exception:
+                    category = "valid_question"
+                canned = get_canned_response(category)
+                if canned is not None:
+                    token_callback("explanation", canned)
+                    return TeachingAgentOutput(
+                        status="ok",
+                        output_mode=OutputMode(output_mode),
+                        content=None,
+                        metadata=TeachingMetadata(
+                            topic=topic,
+                            tokens_used=0,
+                            model=guardrail_config.model,
+                        ),
+                    ), canned
+        ```
+      - All existing steps 2–8 are unchanged.
+      - `get_guardrail_config()` returning `None` means disabled — skip the block.
+      - Any exception from `classify()` → `"valid_question"` (covered by the try/except above).
+
+**Checkpoint**: `TEACHING_MODEL=<model> PYTHONPATH=. python -c "
+from teaching_agent.agent import TeachingAgent
+result, raw = TeachingAgent().run({'topic': 'Hi', 'output_mode': 'beginner', 'context': ''}, lambda f, t: print(f, t))
+print(result.status, result.content, raw[:40])
+"` prints `ok None Hi there!...`
+
+---
+
+### P6-E: Tests
+
+**Purpose**: Full offline test coverage for guardrail feature.
+
+- [ ] T069 [US8] Create `teaching_agent/tests/test_guardrail.py`:
+      - `test_classify_greeting` — monkeypatch `teaching_agent.guardrail.call_llm` to return
+        `('{"category": "greeting", "reason": "says hi"}', 10)`;
+        assert `GuardrailClassifier().classify("Hi", config)` returns `"greeting"`
+      - `test_classify_off_topic` — same pattern, category `"off_topic"`
+      - `test_classify_unclear` — same pattern, category `"unclear"`
+      - `test_classify_valid_question` — category `"valid_question"`
+      - `test_classify_fails_open_on_exception` — monkeypatch raises `RuntimeError`;
+        assert returns `"valid_question"`
+      - `test_classify_fails_open_on_bad_json` — monkeypatch returns `("not json", 10)`;
+        assert returns `"valid_question"`
+      - `test_classify_fails_open_on_missing_category_key` — returns `('{"reason": "x"}', 10)`;
+        assert returns `"valid_question"`
+      - `test_get_canned_response_greeting` — returns non-empty string
+      - `test_get_canned_response_valid_question` — returns `None`
+
+- [ ] T070 [US8] Update `teaching_agent/tests/test_teaching_agent.py`:
+      - `test_guardrail_intercepts_greeting`:
+        monkeypatch `teaching_agent.guardrail.call_llm` to return greeting category;
+        call `TeachingAgent().run({"topic": "Hi", ...}, token_callback)`;
+        assert `result.status == "ok"`, `result.content is None`,
+        token_callback called once with `("explanation", <greeting text>)`,
+        `raw_markdown` equals greeting canned text
+      - `test_guardrail_intercepts_off_topic`:
+        same but category `"off_topic"`, assert off-topic canned text
+      - `test_guardrail_skipped_when_chat_history_non_empty`:
+        monkeypatch guardrail `call_llm` to return greeting; also monkeypatch
+        `teaching_agent.agent.call_llm_stream` to return normal markdown;
+        pass `chat_history=[{"role": "user", "content": "prev"}]`;
+        assert `result.content` is not None (full pipeline ran)
+      - `test_guardrail_fails_open_on_exception`:
+        monkeypatch guardrail `call_llm` to raise `RuntimeError`;
+        also monkeypatch main `call_llm_stream` to return normal markdown;
+        assert full pipeline ran (`result.content` not None)
+
+---
+
+### P6-F: Docs & Validation
+
+- [ ] T071 [US8] Update `CLAUDE.md` — add guardrail env vars under Teaching Agent env var table:
+      `TEACHING_GUARDRAIL_ENABLED` (default `true`) and `TEACHING_GUARDRAIL_MODEL`
+      (falls back to `TEACHING_MODEL`); brief description in the same table format
+
+- [ ] T072 [US8] Run full offline test suite and confirm all tests pass:
+      `python -m pytest teaching_agent/tests/ -q`
+      (guardrail tests use monkeypatched `call_llm` — no real LLM required)
+
+---
+
+---
+
+## Phase 7: Example Verbosity Constraint (FR-051) — Planned
+
+**Goal**: Prevent the LLM from choosing large input values in the `**Example**` section
+(e.g. `fibonacci(50)`) that produce exhaustive step-by-step computation traces consuming the
+full 4096-token ceiling and truncating the rest of the response. A single rule line added to
+each mode prompt caps example inputs at small, illustrative sizes.
+
+**All Phase 7 tasks require explicit user approval before implementation. One task at a time.**
+
+---
+
+- [ ] T073 [FR-051] Update `teaching_agent/prompts.py` — add one rule line to the Rules section
+      of all three mode prompts (`BEGINNER_PROMPT`, `INTERMEDIATE_PROMPT`, `ADVANCED_PROMPT`):
+      `"- In examples, use small, illustrative input values (e.g. n ≤ 10 for recursive algorithms,
+      short strings for string operations). Never show a full computation trace for a large input —
+      demonstrate the concept, not the arithmetic."`
+      Placement: second-to-last bullet in the Rules list for each prompt (before the
+      `"If no reference material is provided above, explain from general knowledge."` line).
+
+- [ ] T074 [FR-051] Run full offline test suite to confirm no regressions:
+      `python -m pytest teaching_agent/tests/ -q`
 
 ---
 

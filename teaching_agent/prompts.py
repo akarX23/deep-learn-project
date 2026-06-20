@@ -39,6 +39,8 @@ A concrete worked example with plain English commentary explaining each step.
 Rules:
 - Use the exact bold headers shown above. Do not add any text before the first header.
 - The diagram must contain valid Mermaid syntax starting with 'graph TD' or 'sequenceDiagram'.
+- Always wrap Mermaid node label text in double quotes, e.g. A["Label text here"]. Required when labels contain colons, parentheses, or special characters.
+- In the **Example** section, use small, illustrative input values (e.g. n ≤ 10 for recursive algorithms, short strings for string operations). Never show a full computation trace for a large input — demonstrate the concept, not the arithmetic.
 - Keep total output within the token budget — be concise but complete.
 - If no reference material is provided above, explain from general knowledge."""
 
@@ -74,6 +76,8 @@ A Python code snippet with inline comments explaining each significant line. Inc
 Rules:
 - Use the exact bold headers shown above. Do not add any text before the first header.
 - If a diagram is not applicable, omit the **Diagram** section entirely — do not include it with empty content.
+- Always wrap Mermaid node label text in double quotes, e.g. A["Label text here"]. Required when labels contain colons, parentheses, or special characters.
+- In the **Example** section, use small, illustrative input values (e.g. n ≤ 10 for recursive algorithms, short strings for string operations). Never show a full computation trace for a large input — demonstrate the concept, not the arithmetic.
 - Keep total output within the token budget — prioritise depth over breadth.
 - If no reference material is provided above, explain from general knowledge."""
 
@@ -110,6 +114,8 @@ A non-trivial usage example demonstrating an optimization, architectural pattern
 Rules:
 - Use the exact bold headers shown above. Do not add any text before the first header.
 - If a diagram is not applicable, omit the **Diagram** section entirely — do not include it with empty content.
+- Always wrap Mermaid node label text in double quotes, e.g. A["Label text here"]. Required when labels contain colons, parentheses, or special characters.
+- In the **Example** section, use small, illustrative input values (e.g. n ≤ 10 for recursive algorithms, short strings for string operations). Never show a full computation trace for a large input — demonstrate the concept, not the arithmetic.
 - Assume the reader is comfortable with complexity notation, design patterns, and low-level behaviour.
 - If no reference material is provided above, explain from general knowledge."""
 
@@ -324,3 +330,29 @@ REVISION_PROMPT_BY_MODE: dict[str, str] = {
     "intermediate": INTERMEDIATE_REVISION_PROMPT,
     "advanced": ADVANCED_REVISION_PROMPT,
 }
+
+
+# ---------------------------------------------------------------------------
+# Guardrail (Phase 6) — input classification prompt
+# ---------------------------------------------------------------------------
+#
+# Classifies the user prompt into one of four categories before the main
+# teaching pipeline runs. Used with response_format={"type": "json_object"}.
+
+GUARDRAIL_PROMPT = """You are an input classifier for an AI learning assistant that explains educational topics.
+Classify the following user message into exactly one category.
+
+User message: {topic}
+
+Categories:
+- greeting: A salutation, pleasantry, or social opener with no learning intent (e.g. "Hi", "Hello", "How are you?", "Thanks!").
+- off_topic: A request or statement that is clearly unrelated to learning an educational topic (e.g. "Tell me a joke", "What's the weather today?", "Write me a poem").
+- unclear: A message too vague or ambiguous to identify a specific topic to explain (e.g. "do it", "the thing", "explain", "yes").
+- valid_question: A genuine request to learn, understand, or get an explanation of a specific concept, topic, algorithm, data structure, technology, or subject area.
+
+Return ONLY a JSON object with exactly these two fields:
+{{"category": "<one of: greeting, off_topic, unclear, valid_question>", "reason": "<one short sentence>"}}
+
+Rules:
+- Output valid JSON only. No markdown fences. No text before or after the JSON.
+- When in doubt, prefer valid_question — it is better to attempt an explanation than to refuse."""

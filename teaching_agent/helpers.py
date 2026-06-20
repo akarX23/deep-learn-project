@@ -18,6 +18,32 @@ _SECTION_HEADER_RE = re.compile(r"^\*\*(\w+)\*\*\s*$", re.MULTILINE | re.IGNOREC
 # Opening markdown fence (```json or ```) at the very start of a fenced response.
 _JSON_FENCE_OPEN_RE = re.compile(r"^```(?:json)?\s*\n", re.MULTILINE)
 
+# Characters that break the Mermaid renderer when unquoted inside node labels.
+_SPECIAL_LABEL_CHARS: frozenset[str] = frozenset(':(){}#%÷×≤≥≠')
+
+# Matches square-bracket node labels: A[text] or A[text with spaces].
+# Does not span newlines so subgraph lines are not accidentally captured.
+_NODE_LABEL_RE = re.compile(r'\[([^\[\]\n]+)\]')
+
+
+def sanitize_mermaid_labels(diagram: str) -> str:
+    """Wrap unquoted Mermaid node labels that contain special characters in double quotes.
+
+    Fixes diagrams where the LLM emits labels like A[Start: Step] which break the
+    Mermaid renderer. Already-quoted labels (A["text"]) are left untouched.
+    Literal double-quote characters inside a label are escaped as &quot;.
+    """
+    def _quote_if_needed(match: re.Match) -> str:
+        inner = match.group(1)
+        if inner.startswith('"') and inner.endswith('"'):
+            return match.group(0)
+        if any(c in inner for c in _SPECIAL_LABEL_CHARS):
+            escaped = inner.replace('"', '&quot;')
+            return f'["{escaped}"]'
+        return match.group(0)
+
+    return _NODE_LABEL_RE.sub(_quote_if_needed, diagram)
+
 
 def build_messages(
     prompt: str, chat_history: list[dict] | None = None

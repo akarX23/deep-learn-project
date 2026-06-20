@@ -19,15 +19,18 @@ from project.schemas import (
     TeachingMetadata,
 )
 from teaching_agent.config import (
+    get_guardrail_config,
     get_llm_config,
     get_max_reflection_iterations,
     get_reflection_config,
 )
+from teaching_agent.guardrail import GuardrailClassifier, get_canned_response
 from teaching_agent.helpers import (
     build_error_output,
     build_messages,
     parse_llm_response,
     parse_markdown_response,
+    sanitize_mermaid_labels,
 )
 from teaching_agent.llm_client import call_llm, call_llm_stream
 from teaching_agent.prompts import (
@@ -83,6 +86,34 @@ class TeachingAgent:
         topic = agent_input.topic
         output_mode = agent_input.output_mode.value
         context = agent_input.context[:_MAX_CONTEXT_CHARS]
+
+        # Step 0: Guardrail classification. Skipped when chat_history is non-empty
+        # (follow-up queries always run the full pipeline). If classification fails for
+        # any reason, fall through to Step 1 (fail-open).
+        if not agent_input.chat_history:
+            try:
+                guardrail_config = get_guardrail_config()
+            except RuntimeError:
+                guardrail_config = None
+
+            if guardrail_config is not None:
+                try:
+                    category = GuardrailClassifier().classify(topic, guardrail_config)
+                except Exception:  # noqa: BLE001
+                    category = "valid_question"
+                canned = get_canned_response(category)
+                if canned is not None:
+                    token_callback("explanation", canned)
+                    return TeachingAgentOutput(
+                        status="ok",
+                        output_mode=OutputMode(output_mode),
+                        content=None,
+                        metadata=TeachingMetadata(
+                            topic=topic,
+                            tokens_used=0,
+                            model=guardrail_config.model,
+                        ),
+                    ), canned
 
         # Step 2: Load LLM config (requires TEACHING_MODEL env var).
         try:
@@ -197,8 +228,10 @@ class TeachingAgent:
         """
         if not isinstance(diagram_raw, str):
             diagram_raw = None
-        if diagram_raw and validate_mermaid(diagram_raw):
-            return diagram_raw
+        if diagram_raw:
+            diagram_raw = sanitize_mermaid_labels(diagram_raw)
+            if validate_mermaid(diagram_raw):
+                return diagram_raw
 
         if output_mode != "beginner":
             return None
@@ -209,8 +242,10 @@ class TeachingAgent:
             raw_retry, _ = call_llm(messages, config)
             parsed_retry = parse_markdown_response(raw_retry)
             diagram_retry = parsed_retry.get("diagram")
-            if diagram_retry and validate_mermaid(diagram_retry):
-                return diagram_retry
+            if diagram_retry:
+                diagram_retry = sanitize_mermaid_labels(diagram_retry)
+                if validate_mermaid(diagram_retry):
+                    return diagram_retry
         except (RuntimeError, ValueError):
             pass
 

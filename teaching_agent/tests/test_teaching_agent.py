@@ -12,9 +12,11 @@ import pytest
 from pydantic import ValidationError
 
 import teaching_agent.agent as agent_module
+import teaching_agent.guardrail as guardrail_module
 from project.schemas import OutputMode, TeachingAgentInput, TeachingAgentOutput
 from teaching_agent.agent import TeachingAgent
-from teaching_agent.helpers import build_messages, parse_markdown_response
+from teaching_agent.guardrail import get_canned_response
+from teaching_agent.helpers import build_messages, parse_markdown_response, sanitize_mermaid_labels
 from teaching_agent.validators import validate_mermaid
 
 def _noop(field, token):  # no-op token callback for all integration tests
@@ -49,6 +51,35 @@ class TestTeachingAgentInputSchema:
         for mode in ("beginner", "intermediate", "advanced"):
             inp = TeachingAgentInput(topic="Topic", output_mode=mode)
             assert inp.output_mode.value == mode
+
+
+# ---------------------------------------------------------------------------
+# Helper: sanitize_mermaid_labels
+# ---------------------------------------------------------------------------
+
+
+class TestSanitizeMermaidLabels:
+    def test_wraps_colon_in_label(self):
+        result = sanitize_mermaid_labels("graph TD\n  A[Start: Step] --> B[End]")
+        assert 'A["Start: Step"]' in result
+
+    def test_wraps_parens_in_label(self):
+        result = sanitize_mermaid_labels("graph TD\n  A[Result (2 items)] --> B[Done]")
+        assert 'A["Result (2 items)"]' in result
+
+    def test_skips_already_quoted(self):
+        original = 'graph TD\n  A["Already: Quoted"] --> B[Plain]'
+        result = sanitize_mermaid_labels(original)
+        assert 'A["Already: Quoted"]' in result
+
+    def test_no_special_chars_unchanged(self):
+        original = "graph TD\n  A[Plain label] --> B[Another]"
+        assert sanitize_mermaid_labels(original) == original
+
+    def test_escapes_inner_double_quotes(self):
+        # Colon triggers quoting; inner quotes must be escaped to keep the label valid.
+        result = sanitize_mermaid_labels('graph TD\n  A[Step: "init"] --> B[End]')
+        assert 'A["Step: &quot;init&quot;"]' in result
 
 
 # ---------------------------------------------------------------------------
@@ -510,3 +541,170 @@ class TestMultiTurnChatHistory:
         assert len(streamer.messages) == 1
         assert streamer.messages[0]["role"] == "user"
         assert "solo" in streamer.messages[0]["content"]
+
+
+# ---------------------------------------------------------------------------
+# Guardrail (Phase 6) — fully offline.
+# Guardrail classification uses call_llm (monkeypatched on guardrail_module).
+# Main pipeline uses call_llm_stream (monkeypatched on agent_module).
+# ---------------------------------------------------------------------------
+
+
+def _guardrail_response(category: str) -> tuple[str, int]:
+    return (f'{{"category": "{category}", "reason": "test"}}', 5)
+
+
+def _guardrail_env(monkeypatch):
+    """Pin model and disable reflection for guardrail tests."""
+    monkeypatch.setenv("TEACHING_MODEL", "test/model")
+    monkeypatch.setenv("TEACHING_GUARDRAIL_MODEL", "test/guardrail-model")
+    monkeypatch.setenv("TEACHING_MAX_REFLECTION_ITERATIONS", "0")
+
+
+class TestGuardrailIntegration:
+    def test_guardrail_intercepts_greeting(self, monkeypatch):
+        _guardrail_env(monkeypatch)
+        monkeypatch.setattr(
+            guardrail_module, "call_llm",
+            lambda msgs, cfg: _guardrail_response("greeting"),
+        )
+        emitted = []
+        result, raw = TeachingAgent().run(
+            {"topic": "Hi", "output_mode": "beginner", "context": ""},
+            lambda f, t: emitted.append((f, t)),
+        )
+        assert result.status == "ok"
+        assert result.content is None
+        assert len(emitted) == 1
+        field, token = emitted[0]
+        assert field == "explanation"
+        assert token == get_canned_response("greeting")
+        assert raw == get_canned_response("greeting")
+
+    def test_guardrail_intercepts_off_topic(self, monkeypatch):
+        _guardrail_env(monkeypatch)
+        monkeypatch.setattr(
+            guardrail_module, "call_llm",
+            lambda msgs, cfg: _guardrail_response("off_topic"),
+        )
+        emitted = []
+        result, raw = TeachingAgent().run(
+            {"topic": "Tell me a joke", "output_mode": "beginner", "context": ""},
+            lambda f, t: emitted.append((f, t)),
+        )
+        assert result.status == "ok"
+        assert result.content is None
+        assert emitted[0] == ("explanation", get_canned_response("off_topic"))
+        assert raw == get_canned_response("off_topic")
+
+    def test_guardrail_intercepts_unclear(self, monkeypatch):
+        _guardrail_env(monkeypatch)
+        monkeypatch.setattr(
+            guardrail_module, "call_llm",
+            lambda msgs, cfg: _guardrail_response("unclear"),
+        )
+        emitted = []
+        result, raw = TeachingAgent().run(
+            {"topic": "do it", "output_mode": "beginner", "context": ""},
+            lambda f, t: emitted.append((f, t)),
+        )
+        assert result.status == "ok"
+        assert result.content is None
+        assert emitted[0] == ("explanation", get_canned_response("unclear"))
+
+    def test_guardrail_passes_valid_question_to_pipeline(self, monkeypatch):
+        _guardrail_env(monkeypatch)
+        monkeypatch.setattr(
+            guardrail_module, "call_llm",
+            lambda msgs, cfg: _guardrail_response("valid_question"),
+        )
+        monkeypatch.setattr(agent_module, "call_llm_stream", _streamer(_GEN_MD, 100))
+        result, _ = TeachingAgent().run(
+            {"topic": "Explain recursion", "output_mode": "beginner", "context": ""}, _noop)
+        assert result.status == "ok"
+        assert result.content is not None
+        assert result.content.explanation == "gen exp"
+
+    def test_guardrail_skipped_when_chat_history_non_empty(self, monkeypatch):
+        _guardrail_env(monkeypatch)
+        # Guardrail would classify "Hi" as greeting if called — but it must be skipped
+        guardrail_called = []
+        monkeypatch.setattr(
+            guardrail_module, "call_llm",
+            lambda msgs, cfg: guardrail_called.append(1) or _guardrail_response("greeting"),
+        )
+        monkeypatch.setattr(agent_module, "call_llm_stream", _streamer(_GEN_MD, 100))
+        history = [{"role": "user", "content": "previous question"}]
+        result, _ = TeachingAgent().run(
+            {"topic": "Hi", "output_mode": "beginner", "context": "", "chat_history": history},
+            _noop,
+        )
+        assert result.status == "ok"
+        assert result.content is not None   # full pipeline ran
+        assert guardrail_called == []       # guardrail never called
+
+    def test_guardrail_fails_open_on_exception(self, monkeypatch):
+        _guardrail_env(monkeypatch)
+        def _raise(msgs, cfg):
+            raise RuntimeError("guardrail down")
+        monkeypatch.setattr(guardrail_module, "call_llm", _raise)
+        monkeypatch.setattr(agent_module, "call_llm_stream", _streamer(_GEN_MD, 100))
+        result, _ = TeachingAgent().run(
+            {"topic": "Hi", "output_mode": "beginner", "context": ""}, _noop)
+        assert result.status == "ok"
+        assert result.content is not None   # fell through to full pipeline
+
+    def test_guardrail_disabled_via_env(self, monkeypatch):
+        _guardrail_env(monkeypatch)
+        monkeypatch.setenv("TEACHING_GUARDRAIL_ENABLED", "false")
+        guardrail_called = []
+        monkeypatch.setattr(
+            guardrail_module, "call_llm",
+            lambda msgs, cfg: guardrail_called.append(1) or _guardrail_response("greeting"),
+        )
+        monkeypatch.setattr(agent_module, "call_llm_stream", _streamer(_GEN_MD, 100))
+        result, _ = TeachingAgent().run(
+            {"topic": "Hi", "output_mode": "beginner", "context": ""}, _noop)
+        assert result.status == "ok"
+        assert result.content is not None   # full pipeline ran (guardrail disabled)
+        assert guardrail_called == []
+
+
+# ---------------------------------------------------------------------------
+# Example Verbosity Constraint (Phase 7 / FR-051)
+# Test 1: offline — rule text present in all 3 prompts (no LLM call).
+# Test 2: real LLM — fibonacci topic must complete without exhausting the
+#         token ceiling (tokens_used < 4096 confirms no truncation).
+# ---------------------------------------------------------------------------
+
+
+class TestExampleVerbosityConstraint:
+    def test_verbosity_rule_present_in_all_mode_prompts(self):
+        from teaching_agent.prompts import (
+            ADVANCED_PROMPT,
+            BEGINNER_PROMPT,
+            INTERMEDIATE_PROMPT,
+        )
+        rule_key = "small, illustrative input values"
+        assert rule_key in BEGINNER_PROMPT, "FR-051 rule missing from BEGINNER_PROMPT"
+        assert rule_key in INTERMEDIATE_PROMPT, "FR-051 rule missing from INTERMEDIATE_PROMPT"
+        assert rule_key in ADVANCED_PROMPT, "FR-051 rule missing from ADVANCED_PROMPT"
+
+    def test_fibonacci_example_does_not_exhaust_token_ceiling(self):
+        """FR-051: fibonacci is the canonical topic that tempts large-input traces.
+
+        Before the fix the model would compute fibonacci(50) step-by-step, filling
+        all 4096 tokens and truncating the response. After the fix the example must
+        use a small n and the response must complete within the token ceiling.
+        tokens_used == 4096 means the LLM was cut off; tokens_used < 4096 means
+        it finished naturally.
+        """
+        result, raw_markdown = TeachingAgent().run(
+            {"topic": "fibonacci sequence", "output_mode": "beginner"}, _noop)
+        assert result.status == "ok"
+        assert result.content is not None
+        assert result.content.example is not None, "example section missing — response may be truncated"
+        assert result.metadata.tokens_used < 4096, (
+            f"Token ceiling exhausted ({result.metadata.tokens_used} tokens) — "
+            "example likely contained an exhaustive large-input trace"
+        )
