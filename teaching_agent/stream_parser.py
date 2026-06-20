@@ -28,6 +28,7 @@ class StreamingFieldExtractor:
         self._final_diagram: str | None = None
         self._raw_buffer: str = ""
         self._chunk_buffer: str = ""  # lookahead for split headers
+        self._fields_with_progress: set[str] = set()  # track which fields have emitted progress
 
     def feed(self, chunk: str) -> None:
         self._raw_buffer += chunk
@@ -62,6 +63,11 @@ class StreamingFieldExtractor:
                 self._diagram_buffer = ""
 
             if field_name in _ALL_FIELDS:
+                # Emit progress event when first encountering this field
+                if field_name not in self._fields_with_progress:
+                    progress_msg = f"Generating {field_name}."
+                    self._callback("_progress", progress_msg)
+                    self._fields_with_progress.add(field_name)
                 self._current_field = field_name
 
     def finalize(self) -> tuple[str, str | None]:

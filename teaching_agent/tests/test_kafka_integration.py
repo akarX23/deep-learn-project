@@ -426,6 +426,43 @@ def test_diagram_field_in_stream_events() -> None:
     assert "notes" in fields
 
 
+def test_progress_updates_emitted_for_teaching_steps_to_chat() -> None:
+    progress_events = []
+
+    class _FakeAgent:
+        def run(self, raw_input, token_callback):
+            token_callback("explanation", "Some explanation")
+            token_callback("notes", "Some notes")
+            token_callback("diagram", "graph TD\n  A-->B")
+            return (
+                _make_ok_output(raw_input["topic"], raw_input["output_mode"]),
+                "**Explanation**\nSome explanation\n\n**Diagram**\ngraph TD\n  A-->B\n\n**Notes**\nSome notes",
+            )
+
+    handler = TeachingRequestEventHandler(
+        agent_factory=_FakeAgent,
+        publisher=lambda p, e: None,
+        stream_publisher=lambda p, e: None,
+        progress_publisher=lambda p, e: progress_events.append(e),
+    )
+    handler.process_request(
+        {
+            "request_id": "r-progress-1",
+            "sid": "s-progress-1",
+            "user_prompt": "Trees",
+            "user_level": "beginner",
+            "rag_compiled": "",
+        },
+        producer=_FakeProducer(),
+    )
+
+    updates = [event.update for event in progress_events]
+    assert any(update == "Generating explanation." for update in updates)
+    assert any(update == "Generating notes." for update in updates)
+    assert any(update == "Generating Mermaid diagram." for update in updates)
+    assert all(event.for_page.value == "chat" for event in progress_events)
+
+
 def _make_completion_event():
     from project.schemas import TeachingCompletionEvent
 

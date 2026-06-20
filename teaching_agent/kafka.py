@@ -7,7 +7,12 @@ import logging
 from collections.abc import Iterable
 from typing import Protocol
 
-from project.schemas import StreamTokensEventBody, TeachingCompletionEvent, TopicPresenceCheckResult
+from project.schemas import (
+    StreamProgressUpdateEventBody,
+    StreamTokensEventBody,
+    TeachingCompletionEvent,
+    TopicPresenceCheckResult,
+)
 from project.topics import BackendStreamTopics, PlannerTopics, TeachingTopics
 from teaching_agent.config import KafkaRuntimeConfig
 
@@ -103,6 +108,17 @@ def publish_stream_token(
     the stream-complete sentinel is published.
     """
     producer.send(BackendStreamTopics.STREAM_TOKENS.value, event.model_dump())
+
+
+def publish_stream_progress_update(
+    producer: KafkaProducerProtocol,
+    event: StreamProgressUpdateEventBody,
+) -> None:
+    """Publish a progress update event to the stream-progress-update topic.
+
+    Does not flush — caller manages flush lifecycle.
+    """
+    producer.send(BackendStreamTopics.STREAM_PROGRESS_UPDATE.value, event.model_dump())
 
 
 def check_required_topics(

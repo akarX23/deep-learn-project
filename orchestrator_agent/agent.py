@@ -55,6 +55,7 @@ from project.schemas import (
     StreamProgressUpdateEventBody,
     TeachingRequestEvent,
     WorkflowCompleteEvent,
+    ProgressUpdatePage
 )
 from project.topics import BackendStreamTopics, PlannerAgentTopics, PlannerTopics
 
@@ -181,7 +182,7 @@ class PlannerAgent:
             )
 
     def _publish_progress_update(
-        self, request_id: str, sid: str, for_page: str, update: str
+        self, request_id: str, sid: str, for_page: ProgressUpdatePage, update: str
     ) -> None:
         """Publish a lightweight frontend progress update for one workflow stage."""
         self._publish(
@@ -271,7 +272,7 @@ class PlannerAgent:
         self._publish_progress_update(
             request_id,
             state.get("sid", ""),
-            "chat",
+            ProgressUpdatePage.CHAT,
             "Understanding user level",
         )
 
@@ -348,7 +349,7 @@ class PlannerAgent:
         self._publish_progress_update(
             request_id,
             state.get("sid", ""),
-            "chat",
+            ProgressUpdatePage.CHAT,
             "Rewriting query for better understanding"
         )
 
@@ -451,7 +452,7 @@ class PlannerAgent:
         self._publish_progress_update(
             request_id,
             state.get("sid", ""),
-            "chat",
+            ProgressUpdatePage.CHAT,
             "Compiling uploaded materials with RAG",
         )
         
@@ -525,7 +526,7 @@ class PlannerAgent:
         self._publish_progress_update(
             request_id,
             state.get("sid", ""),
-            "chat",
+            ProgressUpdatePage.CHAT,
             "Generating teaching material",
         )
 
@@ -591,7 +592,7 @@ class PlannerAgent:
             self._publish_progress_update(
                 request_id,
                 state.get("sid", ""),
-                "chat",
+                ProgressUpdatePage.CHAT,
                 f"Teaching material ready for {level}.",
             )
             if outputs.get("status") == "failed":
@@ -619,7 +620,7 @@ class PlannerAgent:
         self._publish_progress_update(
             request_id,
             state.get("sid", ""),
-            "quiz",
+            ProgressUpdatePage.QUIZ,
             "Generating quiz",
         )
         self._publish(
