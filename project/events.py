@@ -11,9 +11,18 @@ from __future__ import annotations
 
 from enum import Enum
 
-from project.schemas import ClarifyUserLevelEvent, StreamTokensEventBody
+from project.schemas import (
+    ClarifyUserLevelEvent,
+    StreamProgressUpdateEventBody,
+    StreamTokensEventBody,
+)
 
-__all__ = ["WebSocketEvents", "StreamTokensEventBody", "ClarifyUserLevelEvent"]
+__all__ = [
+    "WebSocketEvents",
+    "StreamTokensEventBody",
+    "StreamProgressUpdateEventBody",
+    "ClarifyUserLevelEvent",
+]
 
 
 class WebSocketEvents(str, Enum):
@@ -21,7 +30,9 @@ class WebSocketEvents(str, Enum):
 
     # Kafka topic names consumed by the backend.
     STREAM_TOKENS = "stream-tokens"
+    STREAM_PROGRESS_UPDATE = "stream-progress-update"
 
     # Socket.IO event names emitted to the frontend.
     CLARIFY_USER_LEVEL_SKT = "clarify-user-level-skt"
     STREAM_TOKENS_SKT = "stream-tokens-skt"
+    STREAM_PROGRESS_UPDATE_SKT = "stream-progress-update-skt"

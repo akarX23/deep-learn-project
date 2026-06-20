@@ -5,6 +5,7 @@ import type {
   Quiz,
   QuizAgentOutput,
   QuizQuestion,
+  StreamProgressUpdateEventBody,
   StreamTokensEventBody,
   SubmittedAnswer
 } from "../../schemas";
@@ -116,6 +117,20 @@ export function QuizPlaceholder({
           setError(null);
           setIsLoading(false);
         }
+      },
+      [sid]
+    )
+  );
+
+  useSocketEvent<StreamProgressUpdateEventBody>(
+    WebSocketEvents.STREAM_PROGRESS_UPDATE_SKT,
+    useCallback(
+      (payload) => {
+        if (!sid || payload.sid !== sid || payload.for_page !== "quiz") {
+          return;
+        }
+
+        console.log(payload.update);
       },
       [sid]
     )

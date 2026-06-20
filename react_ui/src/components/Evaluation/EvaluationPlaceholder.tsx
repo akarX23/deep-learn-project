@@ -7,6 +7,7 @@ import type {
   Quiz,
   QuizEvaluationStreamPayload,
   SubmittedAnswer,
+  StreamProgressUpdateEventBody,
   StreamTokensEventBody,
   SWOTAnalysis
 } from "../../schemas";
@@ -237,6 +238,20 @@ export function EvaluationPlaceholder({
         });
       },
       [onContextChange, sid]
+    )
+  );
+
+  useSocketEvent<StreamProgressUpdateEventBody>(
+    WebSocketEvents.STREAM_PROGRESS_UPDATE_SKT,
+    useCallback(
+      (payload) => {
+        if (!sid || payload.sid !== sid || payload.for_page !== "eval") {
+          return;
+        }
+
+        console.log(payload.update);
+      },
+      [sid]
     )
   );
 

@@ -257,6 +257,29 @@ class StreamTokensEventBody(BaseModel):
     data: dict[str, Any] = Field(default_factory=dict)
 
 
+class ProgressUpdatePage(str, Enum):
+    """Frontend section identifiers for stream progress updates."""
+
+    CHAT = "chat"
+    QUIZ = "quiz"
+    EVAL = "eval"
+
+
+class StreamProgressUpdateEventBody(BaseModel):
+    """Kafka payload for ``stream-progress-update``, forwarded to Socket.IO."""
+
+    sid: str
+    for_page: ProgressUpdatePage
+    update: str
+
+    @field_validator("sid", "update")
+    @classmethod
+    def validate_non_empty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value cannot be empty")
+        return value
+
+
 # ---------------------------------------------------------------------------
 # Planner Agent schemas
 # ---------------------------------------------------------------------------

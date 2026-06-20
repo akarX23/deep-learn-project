@@ -4,6 +4,14 @@ export interface StreamTokensEventBody {
   data: Record<string, unknown>;
 }
 
+export type ProgressUpdatePage = "chat" | "quiz" | "eval";
+
+export interface StreamProgressUpdateEventBody {
+  sid: string;
+  for_page: ProgressUpdatePage;
+  update: string;
+}
+
 export interface ClarifyUserLevelEvent {
   request_id: string;
   user_prompt: string;
@@ -140,5 +148,6 @@ export interface QuizEvaluationStreamPayload {
 
 export const WebSocketEvents = {
   STREAM_TOKENS_SKT: "stream-tokens-skt",
-  CLARIFY_USER_LEVEL_SKT: "clarify-user-level-skt"
+  CLARIFY_USER_LEVEL_SKT: "clarify-user-level-skt",
+  STREAM_PROGRESS_UPDATE_SKT: "stream-progress-update-skt"
 } as const;
