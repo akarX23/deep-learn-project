@@ -41,6 +41,10 @@ _DEFAULT_MAX_TOKENS = 4096
 _DEFAULT_REFLECTION_MAX_TOKENS = 512
 _DEFAULT_REFLECTION_ITERATIONS = 1
 
+# Multi-turn conversation memory (maintained inside the Teaching Agent).
+_DEFAULT_MAX_HISTORY_MESSAGES = 6
+_DEFAULT_SESSION_TTL_SECONDS = 300
+
 
 def _read_float(name: str, default: float) -> float:
     raw = os.getenv(name)
@@ -191,6 +195,42 @@ def get_max_reflection_iterations(output_mode: str) -> int:
         raise ValueError(
             "TEACHING_MAX_REFLECTION_ITERATIONS must be an integer"
         ) from exc
+
+
+# ---------------------------------------------------------------------------
+# Multi-turn conversation memory
+# ---------------------------------------------------------------------------
+
+
+def get_max_history_messages() -> int:
+    """Max chat-history messages the agent keeps per session.
+
+    Each user/assistant entry counts as one message. TEACHING_MAX_HISTORY_MESSAGES
+    -> default 6 (~3 back-and-forth exchanges). Clamped to >= 0; 0 disables memory.
+    """
+    raw = os.getenv("TEACHING_MAX_HISTORY_MESSAGES")
+    if raw is None:
+        return _DEFAULT_MAX_HISTORY_MESSAGES
+    try:
+        return max(0, int(raw))
+    except ValueError as exc:
+        raise ValueError("TEACHING_MAX_HISTORY_MESSAGES must be an integer") from exc
+
+
+def get_session_ttl_seconds() -> float:
+    """Idle lifetime of a conversation session, in seconds.
+
+    A session with no new turn within this window is dropped (history reset on
+    the next request). TEACHING_SESSION_TTL_SECONDS -> default 300 (5 minutes).
+    Clamped to >= 0.
+    """
+    raw = os.getenv("TEACHING_SESSION_TTL_SECONDS")
+    if raw is None:
+        return float(_DEFAULT_SESSION_TTL_SECONDS)
+    try:
+        return max(0.0, float(raw))
+    except ValueError as exc:
+        raise ValueError("TEACHING_SESSION_TTL_SECONDS must be a number") from exc
 
 
 # ---------------------------------------------------------------------------

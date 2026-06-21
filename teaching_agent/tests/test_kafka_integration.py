@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from project.schemas import TeachingAgentOutput, TeachingContent, TeachingMetadata
 from teaching_agent.handlers import TeachingRequestEventHandler
 from teaching_agent.kafka import publish_teaching_complete
+from teaching_agent.session_memory import ConversationStore
 from teaching_agent.worker import process_consumer_batch
 
 
@@ -461,6 +462,133 @@ def test_progress_updates_emitted_for_teaching_steps_to_chat() -> None:
     assert any(update == "Generating notes." for update in updates)
     assert any(update == "Generating Mermaid diagram." for update in updates)
     assert all(event.for_page.value == "chat" for event in progress_events)
+
+
+# ---------------------------------------------------------------------------
+# Multi-turn: handler-maintained conversation memory (ConversationStore)
+# ---------------------------------------------------------------------------
+
+
+class _RecordingAgent:
+    """Fake agent that records the chat_history it receives on each call."""
+
+    def __init__(self, seen: list[list[dict]]) -> None:
+        self._seen = seen
+
+    def run(self, raw_input, token_callback):
+        self._seen.append(list(raw_input["chat_history"]))
+        return (
+            _make_ok_output(raw_input["topic"], raw_input["output_mode"]),
+            f"**Explanation**\nAnswer to {raw_input['topic']}\n\n**Notes**\nNotes",
+        )
+
+
+def _md(topic: str) -> str:
+    return f"**Explanation**\nAnswer to {topic}\n\n**Notes**\nNotes"
+
+
+def test_handler_maintains_history_across_requests() -> None:
+    """By default (no chat_history on the event) the handler feeds the agent the
+    history it maintains for the sid: first turn sees [], the next sees turn 1."""
+    seen: list[list[dict]] = []
+    store = ConversationStore(max_messages=6, ttl_seconds=300)
+    handler = TeachingRequestEventHandler(
+        agent_factory=lambda: _RecordingAgent(seen),
+        publisher=lambda p, e: None,
+        stream_publisher=lambda p, e: None,
+        store=store,
+    )
+    base = {"sid": "sX", "user_level": "beginner", "rag_compiled": ""}
+    handler.process_request({**base, "request_id": "r1", "user_prompt": "Q1"}, producer=_FakeProducer())
+    handler.process_request({**base, "request_id": "r2", "user_prompt": "Q2"}, producer=_FakeProducer())
+
+    assert seen[0] == []
+    assert seen[1] == [
+        {"role": "user", "content": "Q1"},
+        {"role": "assistant", "content": _md("Q1")},
+    ]
+
+
+def test_handler_history_respects_message_cap() -> None:
+    """The store's size cap bounds what the agent receives across many turns."""
+    seen: list[list[dict]] = []
+    store = ConversationStore(max_messages=2, ttl_seconds=300)  # keep last 1 exchange
+    handler = TeachingRequestEventHandler(
+        agent_factory=lambda: _RecordingAgent(seen),
+        publisher=lambda p, e: None,
+        stream_publisher=lambda p, e: None,
+        store=store,
+    )
+    base = {"sid": "sCap", "user_level": "beginner", "rag_compiled": ""}
+    handler.process_request({**base, "request_id": "c1", "user_prompt": "Q1"}, producer=_FakeProducer())
+    handler.process_request({**base, "request_id": "c2", "user_prompt": "Q2"}, producer=_FakeProducer())
+    handler.process_request({**base, "request_id": "c3", "user_prompt": "Q3"}, producer=_FakeProducer())
+
+    # Third request sees only the most recent exchange (Q2/A2), not Q1.
+    assert seen[2] == [
+        {"role": "user", "content": "Q2"},
+        {"role": "assistant", "content": _md("Q2")},
+    ]
+
+
+def test_handler_history_isolated_by_sid() -> None:
+    seen: list[list[dict]] = []
+    store = ConversationStore(max_messages=6, ttl_seconds=300)
+    handler = TeachingRequestEventHandler(
+        agent_factory=lambda: _RecordingAgent(seen),
+        publisher=lambda p, e: None,
+        stream_publisher=lambda p, e: None,
+        store=store,
+    )
+    common = {"user_level": "beginner", "rag_compiled": ""}
+    handler.process_request({**common, "request_id": "a1", "sid": "A", "user_prompt": "Qa"}, producer=_FakeProducer())
+    handler.process_request({**common, "request_id": "b1", "sid": "B", "user_prompt": "Qb"}, producer=_FakeProducer())
+
+    # Session B's first (and only) turn must not see session A's history.
+    assert seen[0] == []
+    assert seen[1] == []
+
+
+def test_handler_explicit_chat_history_overrides_store() -> None:
+    """An event that carries chat_history bypasses the maintained store for that call."""
+    seen: list[list[dict]] = []
+    store = ConversationStore(max_messages=6, ttl_seconds=300)
+    handler = TeachingRequestEventHandler(
+        agent_factory=lambda: _RecordingAgent(seen),
+        publisher=lambda p, e: None,
+        stream_publisher=lambda p, e: None,
+        store=store,
+    )
+    base = {"sid": "sOver", "user_level": "beginner", "rag_compiled": ""}
+    handler.process_request({**base, "request_id": "o1", "user_prompt": "Q1"}, producer=_FakeProducer())
+    explicit = [{"role": "user", "content": "explicit"}]
+    handler.process_request(
+        {**base, "request_id": "o2", "user_prompt": "Q2", "chat_history": explicit},
+        producer=_FakeProducer(),
+    )
+
+    assert seen[1] == explicit  # store's Q1/A1 was overridden by the explicit history
+
+
+def test_handler_does_not_store_history_on_error() -> None:
+    """A failing turn must not pollute the session memory."""
+    store = ConversationStore(max_messages=6, ttl_seconds=300)
+
+    class _FailingAgent:
+        def run(self, raw_input, token_callback):
+            raise RuntimeError("boom")
+
+    handler = TeachingRequestEventHandler(
+        agent_factory=_FailingAgent,
+        publisher=lambda p, e: None,
+        stream_publisher=lambda p, e: None,
+        store=store,
+    )
+    handler.process_request(
+        {"request_id": "e1", "sid": "sErr", "user_prompt": "Q1", "user_level": "beginner", "rag_compiled": ""},
+        producer=_FakeProducer(),
+    )
+    assert store.get_history("sErr") == []
 
 
 def _make_completion_event():
