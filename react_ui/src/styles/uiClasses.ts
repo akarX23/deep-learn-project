@@ -26,7 +26,12 @@ export const uiClasses = {
     assistantBubble: `self-start ${theme.border} ${theme.assistantBubble} ${theme.textPrimary}`,
     infoBubble: `self-start border-amber-400/30 ${theme.infoBubble} text-amber-100`,
     attachmentChip: "inline-flex items-center rounded-md border border-amber-300/30 bg-amber-300/10 px-2 py-1 text-xs text-amber-100",
-    markdownBox: `rounded-lg border ${theme.border} bg-slate-950/60 p-3 leading-relaxed`,
+    markdownBox: `rounded-lg border ${theme.border} bg-slate-950/60 p-3 leading-relaxed overflow-x-auto \
+          [&::-webkit-scrollbar]:h-2 \
+          [&::-webkit-scrollbar-track]:bg-slate-800/40 \
+          [&::-webkit-scrollbar-thumb]:bg-slate-600 \
+          [&::-webkit-scrollbar-thumb]:rounded-md \
+          [&::-webkit-scrollbar-button]:hidden`,
     streamRevealBase: "transition-all duration-200 ease-out will-change-transform will-change-opacity",
     streamRevealIdle: "opacity-100 translate-y-0",
     streamRevealActive: "opacity-90 translate-y-0.5",
