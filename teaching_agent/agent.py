@@ -98,6 +98,7 @@ class TeachingAgent:
 
             if guardrail_config is not None:
                 try:
+                    token_callback("_progress", "Detecting question validity")
                     category = GuardrailClassifier().classify(topic, guardrail_config)
                 except Exception:  # noqa: BLE001
                     category = "valid_question"
