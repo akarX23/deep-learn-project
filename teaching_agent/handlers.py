@@ -14,12 +14,14 @@ from project.schemas import (
     TeachingRequestEvent,
 )
 from teaching_agent.agent import TeachingAgent
+from teaching_agent.config import get_max_history_messages, get_session_ttl_seconds
 from teaching_agent.kafka import (
     KafkaProducerProtocol,
     publish_stream_progress_update,
     publish_stream_token,
     publish_teaching_complete,
 )
+from teaching_agent.session_memory import ConversationStore
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +41,19 @@ class TeachingRequestEventHandler:
         progress_publisher: Callable[
             [KafkaProducerProtocol, StreamProgressUpdateEventBody], None
         ] = publish_stream_progress_update,
+        store: ConversationStore | None = None,
     ) -> None:
         self._agent_factory = agent_factory
         self._publisher = publisher
         self._stream_publisher = stream_publisher
         self._progress_publisher = progress_publisher
+        # One store per handler. The worker builds a single handler and reuses it
+        # for every request, so this is the per-process session memory; tests get
+        # isolation for free by constructing their own handler/store.
+        self._store = store if store is not None else ConversationStore(
+            max_messages=get_max_history_messages(),
+            ttl_seconds=get_session_ttl_seconds(),
+        )
 
     def parse_event(self, payload: dict[str, object]) -> TeachingRequestEvent:
         """Parse inbound payload into request event schema."""
@@ -119,17 +129,38 @@ class TeachingRequestEventHandler:
                     "stream_publish_failed request_id=%s error=%s", event.request_id, cb_exc,
                 )
 
+        # Multi-turn: an explicitly supplied chat_history (e.g. from a producer or
+        # test) wins; otherwise use the history this agent maintains for the sid.
+        # Bounds (size/TTL) are enforced inside the store. A non-empty history also
+        # makes the agent skip its greeting/off-topic guardrail (it's a follow-up).
+        history = (
+            list(event.chat_history)
+            if event.chat_history
+            else self._store.get_history(event.sid)
+        )
+        if history:
+            logger.info(
+                "conversation_history_loaded request_id=%s sid=%s messages=%d",
+                event.request_id, event.sid, len(history),
+            )
+
         try:
             result, raw_markdown = agent.run(
                 {
                     "topic": event.user_prompt,
                     "output_mode": event.user_level,
                     "context": event.rag_compiled,
-                    "chat_history": event.chat_history,
+                    "chat_history": history,
                 },
                 token_callback,
             )
             completion_event = self.build_completion_event(event, raw_markdown)
+            # Persist this turn so the next request in the session sees it. Only
+            # real teaching answers are stored (content is not None) — error and
+            # guardrail/canned replies (content None) never become history, so a
+            # first genuine question is still guardrail-checked.
+            if result is not None and result.content is not None and raw_markdown:
+                self._store.append_turn(event.sid, event.user_prompt, raw_markdown)
             logger.info("processing_completed request_id=%s", event.request_id)
 
         except Exception as exc:
