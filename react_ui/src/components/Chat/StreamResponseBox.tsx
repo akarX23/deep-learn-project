@@ -35,6 +35,8 @@ export function StreamResponseBox({
   const [tokensUsed, setTokensUsed] = useState<number | null>(initialTokensUsed ?? null);
   const [model, setModel] = useState<string | null>(initialModel ?? null);
   const [revealPulse, setRevealPulse] = useState(false);
+  const [chartCode, setChartCode] = useState<string>("");
+
 
   const previousFieldRef = useRef<string | null>(null);
   const revealTimerRef = useRef<number | null>(null);
@@ -82,6 +84,7 @@ export function StreamResponseBox({
         const nextContent = incomingBufferRef.current.slice(0, nextLen);
         
         displayedLengthRef.current = nextLen;
+
         setMarkdownContent(nextContent);
       } else if (isDoneRef.current && !onDoneFiredRef.current) {
         // Buffer is fully drained AND stream is marked as done
@@ -123,9 +126,20 @@ export function StreamResponseBox({
         const field = typeof payload.data.field === "string" ? payload.data.field.trim() : "";
         let sectionHeading = "";
         
+        // Handle incoming tokens
+        let token = typeof payload.data.token === "string" ? payload.data.token : "";
+
         if (field && field !== previousFieldRef.current) {
           sectionHeading = `\n\n## ${field.charAt(0).toUpperCase() + field.slice(1)}\n\n`;
           previousFieldRef.current = field;
+        }
+
+        if (isDiagramField(field)) {
+          token = `${sectionHeading}\`\`\`mermaid\n${token}\n\`\`\``;
+          console.log("Diagram: ", token)
+          setChartCode(token);
+
+          return;
         }
 
         // Handle stream completion: Flag it, but let the ticker call onDone()
@@ -136,13 +150,6 @@ export function StreamResponseBox({
           };
           isDoneRef.current = true;
           return;
-        }
-
-        // Handle incoming tokens
-        let token = typeof payload.data.token === "string" ? payload.data.token : "";
-
-        if (isDiagramField(field)) {
-          token = `\`\`\`mermaid\n${token}\n\`\`\``;
         }
 
         const tokenAppend = `${sectionHeading}${token}`;
@@ -190,10 +197,34 @@ export function StreamResponseBox({
       ) : (
         <span className="text-slate-400">{isStreaming ? "Preparing response..." : "No response yet."}</span>
       )}
-
+      {chartCode && (
+        <div
+          className={`markdown-body ${uiClasses.chat.streamRevealBase} ${
+            revealPulse ? uiClasses.chat.streamRevealActive : uiClasses.chat.streamRevealIdle
+          }`}
+        >
+          <ReactMarkdown
+          rehypePlugins={[
+            [
+              rehypeMermaid,
+              {
+                mermaidConfig: {
+                  theme: 'default',
+                  flowchart: { useMaxWidth: true },
+                },
+              },
+            ],
+          ]}
+          components={mermaidComponents} >
+            {chartCode}
+          </ReactMarkdown>
+        </div>
+        )
+      }
       {isStreaming && (
         <LoadingIndicator sid={sid} page="chat" placeholderText={progressPlaceholder} />
       )}
+      
       {!isStreaming && tokensUsed !== null && (
         <p className={uiClasses.loading.usage}>
           {model ? `Model: ${model}` : ""}
