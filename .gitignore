@@ -42,3 +42,6 @@ uploads/
 
 # claude export files
 2026*.txt
+
+node_modules/
+*.lock

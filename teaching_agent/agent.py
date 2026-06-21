@@ -104,7 +104,7 @@ class TeachingAgent:
                     category = "valid_question"
                 canned = get_canned_response(category)
                 if canned is not None:
-                    token_callback("explanation", canned)
+                    token_callback("", canned)
                     return TeachingAgentOutput(
                         status="ok",
                         output_mode=OutputMode(output_mode),
