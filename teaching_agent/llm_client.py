@@ -7,6 +7,10 @@ from typing import Any
 
 from teaching_agent.config import LLMConfig
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def call_llm(messages: list[dict[str, Any]], config: LLMConfig) -> tuple[str, int]:
     """Execute a LiteLLM chat completion and return (content, tokens_used).
@@ -85,6 +89,7 @@ def call_llm_stream(
     try:
         response = completion(**kwargs)
     except Exception as exc:
+        logger.error(f"LLM stream call failed: {exc}")
         raise RuntimeError(f"LLM stream call failed: {exc}") from exc
 
     try:

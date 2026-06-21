@@ -159,6 +159,7 @@ class TeachingRequestEventHandler:
             # real teaching answers are stored (content is not None) — error and
             # guardrail/canned replies (content None) never become history, so a
             # first genuine question is still guardrail-checked.
+            
             if result is not None and result.content is not None and raw_markdown:
                 self._store.append_turn(event.sid, event.user_prompt, raw_markdown)
             logger.info("processing_completed request_id=%s", event.request_id)

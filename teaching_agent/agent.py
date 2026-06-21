@@ -108,7 +108,12 @@ class TeachingAgent:
                     return TeachingAgentOutput(
                         status="ok",
                         output_mode=OutputMode(output_mode),
-                        content=None,
+                        content={
+                            "explanation": canned,
+                            "diagram": "",
+                            "notes": "",
+                            "example": "",
+                        },
                         metadata=TeachingMetadata(
                             topic=topic,
                             tokens_used=0,
@@ -152,6 +157,7 @@ class TeachingAgent:
         # Diagram is validated (and retried if needed) before being sent to the frontend.
         diagram = self._resolve_diagram(diagram_raw, output_mode, messages, config)
         if diagram:
+            print(f"DEBUG: resolved diagram for topic={topic}: {diagram}")
             token_callback("diagram", diagram)
 
         # Step 6: Assemble the initial (pre-reflection) content.

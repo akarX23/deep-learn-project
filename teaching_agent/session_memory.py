@@ -87,8 +87,11 @@ class ConversationStore:
             if session is None or self._is_expired(session, now):
                 session = _Session(turns=[], last_active=now)
                 self._sessions[sid] = session
-            session.turns.append({"role": "user", "content": user_content})
-            session.turns.append({"role": "assistant", "content": assistant_content})
+            
+            if user_content.strip():
+                session.turns.append({"role": "user", "content": user_content})
+            if assistant_content.strip():
+                session.turns.append({"role": "assistant", "content": assistant_content})
             if self._max_messages and len(session.turns) > self._max_messages:
                 session.turns = session.turns[-self._max_messages :]
             elif not self._max_messages:

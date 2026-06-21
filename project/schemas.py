@@ -456,13 +456,6 @@ class TeachingContent(BaseModel):
     notes: str
     example: Optional[str] = None
 
-    @field_validator("explanation", "notes")
-    @classmethod
-    def validate_non_empty(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("value cannot be empty")
-        return value
-
 
 class TeachingMetadata(BaseModel):
     """Audit record for the Teaching Agent response."""
