@@ -268,6 +268,7 @@ class PlannerAgent:
         request_id = state.get("request_id", "?")
         user_prompt: str = state.get("user_prompt", "")
         updates: dict[str, Any] = {}
+        confidence = 0.0
         
         self._publish_progress_update(
             request_id,
@@ -333,11 +334,13 @@ class PlannerAgent:
                 updates["workflow_status"] = "clarifying"
                 return updates
 
-            if result.confidence < get_confidence_threshold():
+            confidence = result.confidence
+
+            if confidence < get_confidence_threshold():
                 logger.info(
                     "[%s] infer_level: confidence=%.2f < threshold=%.2f → clarify",
                     request_id,
-                    result.confidence,
+                    confidence,
                     get_confidence_threshold(),
                 )
                 updates["workflow_status"] = "clarifying"
@@ -352,6 +355,14 @@ class PlannerAgent:
             ProgressUpdatePage.CHAT,
             "Rewriting query for better understanding"
         )
+
+        if confidence < 0.75:
+            logger.info(
+                "[%s] infer_level: confidence=%.2f < 0.75 → skipping rewrite",
+                request_id,
+                confidence,
+            )
+            return updates
 
         # ── query rewrite — Case 2: COMPLEX queries only (FR-022) ─────────
         complexity = classifier.detect_complexity(user_prompt)

@@ -29,8 +29,8 @@ practised on the topic (keywords: quiz, test, questions, practice, exam, evaluat
 
 Rules:
 - Output valid JSON only. No markdown fences. No extra text.
-- Contradictory signals → default intermediate, confidence ≤ 0.55.
-- Very short / vague queries → confidence < 0.65.
+- Contradictory signals → default intermediate, confidence ≤ 0.5.
+- Very short / vague queries → confidence > 0.5.
 - If both quiz and explanation are wanted → quiz_requested=true."""
 
 # ---------------------------------------------------------------------------
