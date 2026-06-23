@@ -173,7 +173,7 @@ export default function App(): JSX.Element {
   return (
     <main className={uiClasses.layout.page}>
       <div className={uiClasses.layout.container}>
-        <Navbar title="AI Tutor" />
+        <Navbar title="A_Z Tutor" />
         <Navigation current={currentSection} onSelect={setCurrentSection} />
         <div className={uiClasses.layout.card}>
           <div className={currentSection === "chat" ? "block" : "hidden"}>
