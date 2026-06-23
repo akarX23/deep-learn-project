@@ -15,7 +15,7 @@ import planner_agent.agent as agent_module
 import planner_agent.config as planner_config
 import planner_agent.llm_client as planner_llm_client
 from planner_agent.agent import PlannerAgent
-from project.schemas import RAGRequestEvent, TeachingRequestEvent, WorkflowCompleteEvent
+from project.schemas import RAGRequestEvent, TeachingRequestEvent, WorkflowCompleteEventBody
 
 
 class FakeProducer:
@@ -113,4 +113,4 @@ def test_teaching_and_workflow_payloads_conform_to_schema() -> None:
     teaching_payload = producer.sent[0][1]
     workflow_payload = producer.sent[1][1]
     TeachingRequestEvent(**teaching_payload)
-    WorkflowCompleteEvent(**workflow_payload)
+    WorkflowCompleteEventBody(**workflow_payload)

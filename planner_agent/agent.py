@@ -35,13 +35,13 @@ from planner_agent.kafka import make_producer
 from planner_agent.llm_client import call_llm
 from planner_agent.prompts import LEVEL_QUIZ_INFERENCE_PROMPT
 from project.schemas import (
-    ClarifyUserLevelEvent,
+    ClarifyUserLevelEventBody,
     LevelInferenceResult,
     PlannerRequestEvent,
     QuizRequestEvent,
     RAGRequestEvent,
     TeachingRequestEvent,
-    WorkflowCompleteEvent,
+    WorkflowCompleteEventBody,
 )
 from project.topics import PlannerAgentTopics, PlannerTopics
 
@@ -163,7 +163,7 @@ class PlannerAgent:
         return {"workflow_status": "clarifying"}
 
     def _clarify_and_end(self, state: PlannerState) -> dict[str, object]:
-        event = ClarifyUserLevelEvent(
+        event = ClarifyUserLevelEventBody(
             request_id=state["request_id"],
             user_prompt=state["user_prompt"],
             sid=state["sid"],
@@ -270,7 +270,7 @@ class PlannerAgent:
 
     def _finish(self, state: PlannerState) -> dict[str, object]:
         logger.info("[%s] Workflow complete", state["request_id"])
-        event = WorkflowCompleteEvent(
+        event = WorkflowCompleteEventBody(
             request_id=state["request_id"],
             sid=state["sid"],
             rag_compiled=state.get("rag_compiled", ""),

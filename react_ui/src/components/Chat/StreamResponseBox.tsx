@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import { rehypeMermaid, MermaidBlock } from 'react-markdown-mermaid';
 import { useSocketEvent } from "../../hooks/useSocketEvent";
-import type { StreamCompletionPayload, StreamTokensEventBody } from "../../schemas";
+import type { ClarifyUserLevelEventBody, StreamCompletionPayload, StreamTokensEventBody } from "../../schemas";
 import { WebSocketEvents } from "../../schemas";
 import { uiClasses } from "../../styles/uiClasses";
 import { LoadingIndicator } from "./LoadingIndicator";
@@ -37,7 +37,6 @@ export function StreamResponseBox({
   const [revealPulse, setRevealPulse] = useState(false);
   const [chartCode, setChartCode] = useState<string>("");
 
-
   const previousFieldRef = useRef<string | null>(null);
   const revealTimerRef = useRef<number | null>(null);
   
@@ -70,7 +69,6 @@ export function StreamResponseBox({
   }, [initialContent, initialTokensUsed, initialModel, isActive, messageId]);
 
   // 2. The Typewriter "Catch-up" Loop
-  // Safely bleeds the text onto the screen without deleting characters from the buffer
   useEffect(() => {
     if (!isActive) return;
 
@@ -84,7 +82,6 @@ export function StreamResponseBox({
         const nextContent = incomingBufferRef.current.slice(0, nextLen);
         
         displayedLengthRef.current = nextLen;
-
         setMarkdownContent(nextContent);
       } else if (isDoneRef.current && !onDoneFiredRef.current) {
         // Buffer is fully drained AND stream is marked as done
@@ -114,7 +111,26 @@ export function StreamResponseBox({
     };
   }, []);
 
-  // 4. WebSocket Event Handler
+  // 4. Helper function to cleanly append text and handle animations
+  const handleAppendToBuffer = useCallback((text: string, markDone: boolean = false) => {
+    if (text) {
+      setRevealPulse(true);
+      if (revealTimerRef.current !== null) {
+        window.clearTimeout(revealTimerRef.current);
+      }
+      revealTimerRef.current = window.setTimeout(() => {
+        setRevealPulse(false);
+      }, 170);
+      
+      incomingBufferRef.current += text;
+    }
+    
+    if (markDone) {
+      isDoneRef.current = true;
+    }
+  }, []);
+
+  // 5. WebSocket Event Handlers
   useSocketEvent<StreamTokensEventBody>(
     WebSocketEvents.STREAM_TOKENS_SKT,
     useCallback(
@@ -125,8 +141,6 @@ export function StreamResponseBox({
 
         const field = typeof payload.data.field === "string" ? payload.data.field.trim() : "";
         let sectionHeading = "";
-        
-        // Handle incoming tokens
         let token = typeof payload.data.token === "string" ? payload.data.token : "";
 
         if (field && field !== previousFieldRef.current) {
@@ -138,36 +152,53 @@ export function StreamResponseBox({
           token = `${sectionHeading}\`\`\`mermaid\n${token}\n\`\`\``;
           console.log("Diagram: ", token)
           setChartCode(token);
-
           return;
         }
 
-        // Handle stream completion: Flag it, but let the ticker call onDone()
+        // Flag as done, and let the interval hook catch up naturally
         if (payload.data.done === true) {
           completionDataRef.current = {
             tokens_used: typeof payload.data.tokens_used === "number" ? payload.data.tokens_used : undefined,
             model: typeof payload.data.model === "string" && payload.data.model.trim().length > 0 ? payload.data.model.trim() : undefined
           };
-          isDoneRef.current = true;
+          handleAppendToBuffer("", true);
           return;
         }
 
         const tokenAppend = `${sectionHeading}${token}`;
+        handleAppendToBuffer(tokenAppend, false);
+      },
+      [isActive, sid, handleAppendToBuffer]
+    )
+  );
+
+  useSocketEvent<ClarifyUserLevelEventBody>(
+    WebSocketEvents.CLARIFY_USER_LEVEL_SKT, 
+    useCallback(
+      (payload) => {
+        if (!isActive || !sid || payload.sid !== sid) return;
         
-        if (tokenAppend) {
-          setRevealPulse(true);
-          if (revealTimerRef.current !== null) {
-            window.clearTimeout(revealTimerRef.current);
-          }
-          revealTimerRef.current = window.setTimeout(() => {
-            setRevealPulse(false);
-          }, 170);
-          
-          // Append to the invisible full-text buffer; the ticker will naturally catch up
-          incomingBufferRef.current += tokenAppend;
+        // Append cleanly to the buffer instead of overwriting the state
+        const message = "\n\n**Notice:** As an AI Tutor, I need more information to provide a detailed response. Please clarify what you would like to learn.";
+        handleAppendToBuffer(message, true);
+      },
+      [isActive, sid, handleAppendToBuffer]
+    )
+  );
+  
+  useSocketEvent(
+    WebSocketEvents.WORKFLOW_COMPLETE_SKT, 
+    useCallback(
+      (payload) => {
+        if (!isActive || !sid || payload.sid !== sid) return;
+        
+        if (payload.status === "blocked") {
+          // Append cleanly to the buffer instead of overwriting the state
+          const message = "\n\n**Notice:** As an AI Tutor, I have detected a potentially malicious query and have blocked the workflow. Please modify your query and try again.";
+          handleAppendToBuffer(message, true);
         }
       },
-      [isActive, sid]
+      [isActive, sid, handleAppendToBuffer]
     )
   );
 

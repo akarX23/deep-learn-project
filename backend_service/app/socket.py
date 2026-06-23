@@ -21,11 +21,12 @@ from kafka import KafkaConsumer
 from backend_service.app.config import KafkaSettings
 from backend_service.app.connection_manager import ConnectionManager
 from project.events import (
-    ClarifyUserLevelEvent,
+    ClarifyUserLevelEventBody,
     StreamProgressUpdateEventBody,
     StreamTokensEventBody,
     WebSocketEvents,
 )
+from project.schemas import WorkflowCompleteEventBody
 from project.topics import (
     BackendStreamTopics,
     PlannerAgentTopics,
@@ -86,12 +87,16 @@ def _route_message(topic: str, payload: dict[str, Any]) -> tuple[WebSocketEvents
     """Validate a consumed payload and return the socket event + target sid."""
 
     if topic == PlannerAgentTopics.CLARIFY_USER_LEVEL.value:
-        event = ClarifyUserLevelEvent.model_validate(payload)
+        event = ClarifyUserLevelEventBody.model_validate(payload)
         return WebSocketEvents.CLARIFY_USER_LEVEL_SKT, event.sid
 
     if topic == BackendStreamTopics.STREAM_PROGRESS_UPDATE.value:
         event = StreamProgressUpdateEventBody.model_validate(payload)
         return WebSocketEvents.STREAM_PROGRESS_UPDATE_SKT, event.sid
+    
+    if topic == PlannerAgentTopics.WORKFLOW_COMPLETE.value:
+        event = WorkflowCompleteEventBody.model_validate(payload)
+        return WebSocketEvents.WORKFLOW_COMPLETE_SKT, event.sid
 
     body = StreamTokensEventBody.model_validate(payload)
     return WebSocketEvents.STREAM_TOKENS_SKT, body.sid

@@ -4,6 +4,21 @@ export interface StreamTokensEventBody {
   data: Record<string, unknown>;
 }
 
+export interface ClarifyUserLevelEventBody {
+  request_id: string;
+  user_prompt: string;
+  sid: string;
+  reason?: string;
+}
+
+export interface WorkflowCompleteEventBody {
+  request_id: string;
+  rag_compiled: string;
+  teaching_materials: Record<string, string>;
+  quiz_content: string;
+  status: string;
+}
+
 export type ProgressUpdatePage = "chat" | "quiz" | "eval";
 
 export interface StreamProgressUpdateEventBody {
@@ -149,5 +164,6 @@ export interface QuizEvaluationStreamPayload {
 export const WebSocketEvents = {
   STREAM_TOKENS_SKT: "stream-tokens-skt",
   CLARIFY_USER_LEVEL_SKT: "clarify-user-level-skt",
-  STREAM_PROGRESS_UPDATE_SKT: "stream-progress-update-skt"
+  STREAM_PROGRESS_UPDATE_SKT: "stream-progress-update-skt",
+  WORKFLOW_COMPLETE_SKT: "workflow-complete-skt"
 } as const;

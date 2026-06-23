@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { usePdfValidator } from "../../hooks/usePdfValidator";
-import { useSocketEvent } from "../../hooks/useSocketEvent";
 import type {
   ChatMessage,
-  ClarifyUserLevelEvent,
   StreamCompletionPayload
 } from "../../schemas";
-import { WebSocketEvents } from "../../schemas";
 import { uiClasses } from "../../styles/uiClasses";
 import { FileUploader } from "./FileUploader";
 import { InputArea } from "./InputArea";
@@ -65,18 +62,6 @@ export function ChatWindow({ sid, onSubmitRequest, onContextChange }: ChatWindow
     onContextChange,
     requestError
   ]);
-
-  useSocketEvent<ClarifyUserLevelEvent>(WebSocketEvents.CLARIFY_USER_LEVEL_SKT, useCallback((payload) => {
-    if (!sid || payload.sid !== sid) {
-      return;
-    }
-
-    const content = payload.reason?.trim() || "Please clarify your learning level so I can continue.";
-    setMessages((prev) => [
-      ...prev,
-      { id: uuid(), role: "assistant", content, isStreaming: false, info: true }
-    ]);
-  }, [sid]));
 
   const handleAssistantStreamDone = useCallback((payload: StreamCompletionPayload): void => {
     setIsSubmitting(false);

@@ -304,7 +304,7 @@ def test_flow_published_payloads_conform_to_schemas() -> None:
     from project.schemas import (
         RAGRequestEvent,
         TeachingRequestEvent,
-        WorkflowCompleteEvent,
+        WorkflowCompleteEventBody,
     )
 
     agent, producer = _make_agent()
@@ -337,7 +337,7 @@ def test_flow_published_payloads_conform_to_schemas() -> None:
     # WorkflowComplete payload must conform to WorkflowCompleteEvent
     wc_payload = producer.last("workflow-complete")
     assert wc_payload is not None
-    WorkflowCompleteEvent(**wc_payload)
+    WorkflowCompleteEventBody(**wc_payload)
 
     final = _get_state(agent, request_id)
     assert final["workflow_status"] == "complete"

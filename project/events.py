@@ -12,7 +12,7 @@ from __future__ import annotations
 from enum import Enum
 
 from project.schemas import (
-    ClarifyUserLevelEvent,
+    ClarifyUserLevelEventBody,
     StreamProgressUpdateEventBody,
     StreamTokensEventBody,
 )
@@ -21,7 +21,7 @@ __all__ = [
     "WebSocketEvents",
     "StreamTokensEventBody",
     "StreamProgressUpdateEventBody",
-    "ClarifyUserLevelEvent",
+    "ClarifyUserLevelEventBody",
 ]
 
 
@@ -36,3 +36,4 @@ class WebSocketEvents(str, Enum):
     CLARIFY_USER_LEVEL_SKT = "clarify-user-level-skt"
     STREAM_TOKENS_SKT = "stream-tokens-skt"
     STREAM_PROGRESS_UPDATE_SKT = "stream-progress-update-skt"
+    WORKFLOW_COMPLETE_SKT = "workflow-complete-skt"

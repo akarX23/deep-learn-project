@@ -47,14 +47,14 @@ from orchestrator_agent.kafka import make_producer
 from orchestrator_agent.llm_client import call_llm
 from orchestrator_agent.prompts import LEVEL_QUIZ_INFERENCE_PROMPT
 from project.schemas import (
-    ClarifyUserLevelEvent,
+    ClarifyUserLevelEventBody,
     LevelInferenceResult,
     PlannerRequestEvent,
     QuizRequestEvent,
     RAGRequestEvent,
     StreamProgressUpdateEventBody,
     TeachingRequestEvent,
-    WorkflowCompleteEvent,
+    WorkflowCompleteEventBody,
     ProgressUpdatePage
 )
 from project.topics import BackendStreamTopics, PlannerAgentTopics, PlannerTopics
@@ -409,13 +409,13 @@ class PlannerAgent:
         self._active_requests.discard(request_id)
 
         if status == "blocked":
-            logger.warning("[%s] clarify_and_end: emitting failed workflow-complete", request_id)
+            logger.warning("[%s] clarify_and_end: emitting blocked workflow-complete", request_id)
             self._publish(
                 PlannerAgentTopics.WORKFLOW_COMPLETE.value,
-                WorkflowCompleteEvent(
+                WorkflowCompleteEventBody(
                     request_id=request_id,
                     sid=state.get("sid", ""),
-                    status="failed",
+                    status=status,
                 ).model_dump(mode="json"),
                 request_id,
             )
@@ -423,7 +423,7 @@ class PlannerAgent:
             logger.info("[%s] clarify_and_end: emitting clarify-user-level", request_id)
             self._publish(
                 PlannerAgentTopics.CLARIFY_USER_LEVEL.value,
-                ClarifyUserLevelEvent(
+                ClarifyUserLevelEventBody(
                     request_id=request_id,
                     user_prompt=state.get("user_prompt", ""),
                     sid=state.get("sid", ""),
@@ -714,7 +714,7 @@ class PlannerAgent:
 
         self._publish(
             PlannerAgentTopics.WORKFLOW_COMPLETE.value,
-            WorkflowCompleteEvent(
+            WorkflowCompleteEventBody(
                 request_id=request_id,
                 sid=state.get("sid", ""),
                 rag_compiled=rag_compiled,

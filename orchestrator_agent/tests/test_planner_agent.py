@@ -25,7 +25,7 @@ from project.schemas import (
     PlannerMessage,
     PlannerRequestEvent,
     PlannerResponse,
-    WorkflowCompleteEvent,
+    WorkflowCompleteEventBody,
 )
 from orchestrator_agent.agent import PlannerAgent
 from orchestrator_agent.classifier import (
@@ -462,7 +462,7 @@ def test_pipeline_llm_failure_routes_to_clarify() -> None:
 
 
 def test_workflow_complete_event_valid() -> None:
-    evt = WorkflowCompleteEvent(
+    evt = WorkflowCompleteEventBody(
         request_id="abc123",
         sid="sess-1",
         teaching_materials={"beginner": "Some content"},

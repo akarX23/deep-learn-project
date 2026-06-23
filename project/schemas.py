@@ -353,7 +353,7 @@ class QuizRequestEvent(BaseModel):
     sid: str
 
 
-class ClarifyUserLevelEvent(BaseModel):
+class ClarifyUserLevelEventBody(BaseModel):
     """Planner -> frontend event when user level cannot be confidently inferred."""
 
     request_id: str
@@ -362,7 +362,7 @@ class ClarifyUserLevelEvent(BaseModel):
     reason: str = ""
 
 
-class WorkflowCompleteEvent(BaseModel):
+class WorkflowCompleteEventBody(BaseModel):
     """Planner -> frontend event emitted when a workflow finishes."""
 
     request_id: str
@@ -370,6 +370,7 @@ class WorkflowCompleteEvent(BaseModel):
     rag_compiled: str = ""
     teaching_materials: dict[str, str] = Field(default_factory=dict)
     quiz_content: str = ""
+    status: str = ""
 
 
 class TeachingCompletionEvent(BaseModel):

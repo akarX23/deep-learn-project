@@ -100,4 +100,5 @@ def get_backend_consumer_topic_names() -> list[str]:
         PlannerAgentTopics.CLARIFY_USER_LEVEL.value,
         BackendStreamTopics.STREAM_TOKENS.value,
         BackendStreamTopics.STREAM_PROGRESS_UPDATE.value,
+        PlannerAgentTopics.WORKFLOW_COMPLETE.value,
     ]
