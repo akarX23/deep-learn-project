@@ -18,6 +18,9 @@ _SECTION_HEADER_RE = re.compile(r"^\*\*(\w+)\*\*\s*$", re.MULTILINE | re.IGNOREC
 # Opening markdown fence (```json or ```) at the very start of a fenced response.
 _JSON_FENCE_OPEN_RE = re.compile(r"^```(?:json)?\s*\n", re.MULTILINE)
 
+# Mermaid code fence: ```mermaid or plain ``` wrapping the diagram body.
+_MERMAID_FENCE_RE = re.compile(r"^```(?:mermaid)?\s*\n(.*?)\n?```\s*$", re.DOTALL)
+
 # Characters that break the Mermaid renderer when unquoted inside node labels.
 _SPECIAL_LABEL_CHARS: frozenset[str] = frozenset(':(){}#%÷×≤≥≠')
 
@@ -29,10 +32,16 @@ _NODE_LABEL_RE = re.compile(r'\[([^\[\]\n]+)\]')
 def sanitize_mermaid_labels(diagram: str) -> str:
     """Wrap unquoted Mermaid node labels that contain special characters in double quotes.
 
+    Also strips surrounding ```mermaid / ``` code fences that LLMs frequently emit
+    even when instructed not to. Fence-stripping runs before label sanitization.
     Fixes diagrams where the LLM emits labels like A[Start: Step] which break the
     Mermaid renderer. Already-quoted labels (A["text"]) are left untouched.
     Literal double-quote characters inside a label are escaped as &quot;.
     """
+    fence_match = _MERMAID_FENCE_RE.match(diagram.strip())
+    if fence_match:
+        diagram = fence_match.group(1)
+
     def _quote_if_needed(match: re.Match) -> str:
         inner = match.group(1)
         if inner.startswith('"') and inner.endswith('"'):
