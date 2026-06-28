@@ -45,10 +45,6 @@ from teaching_agent.validators import validate_mermaid
 # Prevents an oversized prior-session summary from crowding out the completion.
 _MAX_CONTEXT_CHARS = 4000
 
-# Fallback Mermaid diagram used in beginner mode when both the initial
-# generation and the retry produce an invalid diagram.
-_BEGINNER_FALLBACK_DIAGRAM = "graph TD\n  A[Concept] --> B[Key Idea] --> C[Result]"
-
 
 class TeachingAgent:
     """Synchronous Teaching Agent.
@@ -255,7 +251,7 @@ class TeachingAgent:
         except (RuntimeError, ValueError):
             pass
 
-        return _BEGINNER_FALLBACK_DIAGRAM
+        return None
 
     def _reflect(
         self,

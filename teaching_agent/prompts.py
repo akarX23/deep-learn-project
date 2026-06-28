@@ -28,7 +28,7 @@ A clear 5-part explanation in markdown:
 5. Common mistakes beginners make
 
 **Diagram**
-A Mermaid diagram (graph TD or sequenceDiagram) that visually illustrates the concept. This section is REQUIRED — do not omit it.
+A Mermaid diagram (graph TD or sequenceDiagram) that visually illustrates the concept. This section is REQUIRED — do not omit it. Output raw Mermaid syntax only — do NOT wrap it in a code fence (no ``` or ```mermaid).
 
 **Notes**
 A jargon-free bullet list of the 3-5 most important things to remember.
@@ -38,7 +38,7 @@ A concrete worked example with plain English commentary explaining each step.
 
 Rules:
 - Use the exact bold headers shown above. Do not add any text before the first header.
-- The diagram must contain valid Mermaid syntax starting with 'graph TD' or 'sequenceDiagram'.
+- The diagram must be raw Mermaid syntax starting directly with 'graph TD', 'flowchart', or 'sequenceDiagram'. Do NOT wrap it in a code fence (no ``` or ```mermaid).
 - Always wrap Mermaid node label text in double quotes, e.g. A["Label text here"]. Required when labels contain colons, parentheses, or special characters.
 - In the **Example** section, use small, illustrative input values (e.g. n ≤ 10 for recursive algorithms, short strings for string operations). Never show a full computation trace for a large input — demonstrate the concept, not the arithmetic.
 - Keep total output within the token budget — be concise but complete.
@@ -65,7 +65,7 @@ A 4-part technical explanation in markdown:
 4. Common pitfalls and how to avoid them
 
 **Diagram**
-A Mermaid diagram illustrating structure, flow, or relationships. Omit this section entirely if the topic does not benefit from visual representation.
+A Mermaid diagram illustrating structure, flow, or relationships. Omit this section entirely if the topic does not benefit from visual representation. If included, output raw Mermaid syntax only — do NOT wrap it in a code fence (no ``` or ```mermaid).
 
 **Notes**
 Structured markdown notes with subheadings covering: key properties, complexity/performance characteristics, and important variants or alternatives.
@@ -76,6 +76,7 @@ A Python code snippet with inline comments explaining each significant line. Inc
 Rules:
 - Use the exact bold headers shown above. Do not add any text before the first header.
 - If a diagram is not applicable, omit the **Diagram** section entirely — do not include it with empty content.
+- If a diagram is included, it must be raw Mermaid syntax starting directly with the diagram type keyword. Do NOT wrap it in a code fence (no ``` or ```mermaid).
 - Always wrap Mermaid node label text in double quotes, e.g. A["Label text here"]. Required when labels contain colons, parentheses, or special characters.
 - In the **Example** section, use small, illustrative input values (e.g. n ≤ 10 for recursive algorithms, short strings for string operations). Never show a full computation trace for a large input — demonstrate the concept, not the arithmetic.
 - Keep total output within the token budget — prioritise depth over breadth.
@@ -103,7 +104,7 @@ A 5-part expert-level explanation in markdown:
 5. Relationship to related concepts or alternative approaches
 
 **Diagram**
-A Mermaid diagram only if it communicates something that prose cannot — e.g. a complex state machine, data flow, or architecture. Omit this section entirely if prose is sufficient.
+A Mermaid diagram only if it communicates something that prose cannot — e.g. a complex state machine, data flow, or architecture. Omit this section entirely if prose is sufficient. If included, output raw Mermaid syntax only — do NOT wrap it in a code fence (no ``` or ```mermaid).
 
 **Notes**
 A dense technical reference or cheat-sheet in markdown: key invariants, complexity bounds, gotchas, and non-obvious behaviour.
@@ -114,6 +115,7 @@ A non-trivial usage example demonstrating an optimization, architectural pattern
 Rules:
 - Use the exact bold headers shown above. Do not add any text before the first header.
 - If a diagram is not applicable, omit the **Diagram** section entirely — do not include it with empty content.
+- If a diagram is included, it must be raw Mermaid syntax starting directly with the diagram type keyword. Do NOT wrap it in a code fence (no ``` or ```mermaid).
 - Always wrap Mermaid node label text in double quotes, e.g. A["Label text here"]. Required when labels contain colons, parentheses, or special characters.
 - In the **Example** section, use small, illustrative input values (e.g. n ≤ 10 for recursive algorithms, short strings for string operations). Never show a full computation trace for a large input — demonstrate the concept, not the arithmetic.
 - Assume the reader is comfortable with complexity notation, design patterns, and low-level behaviour.
@@ -258,7 +260,7 @@ Return ONLY a JSON object with exactly these fields:
 
 {{
   "explanation": "The improved 5-part explanation in markdown.",
-  "diagram": "A simple, valid Mermaid diagram (graph TD or sequenceDiagram). REQUIRED — do not return null.",
+  "diagram": "A simple, valid Mermaid diagram (graph TD or sequenceDiagram). REQUIRED — do not return null. Raw Mermaid syntax only, no code fence.",
   "notes": "A jargon-free bullet list of the most important things to remember.",
   "example": "A concrete worked example with plain-English commentary on each step."
 }}
@@ -286,7 +288,7 @@ Return ONLY a JSON object with exactly these fields:
 
 {{
   "explanation": "The improved technical explanation in markdown.",
-  "diagram": "A Mermaid diagram illustrating structure/flow, or null if the topic does not benefit from one.",
+  "diagram": "A Mermaid diagram illustrating structure/flow, or null if the topic does not benefit from one. Raw Mermaid syntax only, no code fence.",
   "notes": "Structured markdown notes with subheadings (key properties, complexity, variants).",
   "example": "A Python code snippet with inline comments explaining each significant line."
 }}
@@ -314,7 +316,7 @@ Return ONLY a JSON object with exactly these fields:
 
 {{
   "explanation": "The improved expert-level explanation in markdown.",
-  "diagram": "A Mermaid diagram only if it communicates more than prose (e.g. a state machine or data flow); otherwise null.",
+  "diagram": "A Mermaid diagram only if it communicates more than prose (e.g. a state machine or data flow); otherwise null. Raw Mermaid syntax only, no code fence.",
   "notes": "A dense technical reference / cheat-sheet in markdown.",
   "example": "A non-trivial usage example (optimization, edge-case handling, or architectural pattern) with commentary."
 }}
